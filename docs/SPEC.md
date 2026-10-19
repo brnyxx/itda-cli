@@ -5,6 +5,27 @@ each one sends, what a correct answer looks like and whether it changes
 anything. itda reads it from `<data dir>/specs/<site>/spec.yaml`; `itda doctor`
 prints the data directory, and `ITDA_HOME` moves it.
 
+## Start from an OpenAPI document
+
+When the site publishes an OpenAPI 3 or Swagger 2.0 description, let itda
+draft the definition:
+
+```sh
+itda draft openapi openapi.json > spec.yaml            # print the draft
+itda draft openapi openapi.json --include orders       # only matching paths, ids or tags
+itda draft openapi openapi.json --base-url https://api.example.com --install
+```
+
+The draft keeps every operation's source in `evidence`, turns `GET` into reads
+and everything else into changes, adds response checks from the required
+fields of the success schema, and maps header API keys and bearer tokens to
+`auth`. What it cannot translate (OAuth, cookie keys, header parameters,
+multipart bodies, deprecated operations) is listed on stderr instead of being
+guessed. Review the draft before agents use it: shorten descriptions, remove
+actions agents should not call, and tighten the response checks.
+
+## Write one by hand
+
 This page covers everything version 0.1 runs. The fastest way in is to copy
 [`examples/sandbox/spec.yaml`](../examples/sandbox/spec.yaml) and change it.
 

@@ -7,6 +7,12 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `itda draft openapi`: draft a site definition from an OpenAPI 3 or
+  Swagger 2.0 document, with response checks, header auth and a list of what
+  could not be translated. `--install` puts it in the data directory.
+
 ## [0.1.0] - 2026-10-19
 
 The first release: reads and approved changes on plain HTTP sites with API
