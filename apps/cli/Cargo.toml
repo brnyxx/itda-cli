@@ -22,6 +22,7 @@ itda-net.workspace = true
 itda-vault.workspace = true
 itda-runtime.workspace = true
 itda-mcp.workspace = true
+itda-prep.workspace = true
 clap.workspace = true
 serde_json.workspace = true
 url.workspace = true

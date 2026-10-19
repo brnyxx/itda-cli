@@ -79,6 +79,11 @@ enum Command {
     Approve { id: String },
     /// Refuse a change an agent asked for
     Reject { id: String },
+    /// Draft a site definition from a description the site publishes
+    Draft {
+        #[command(subcommand)]
+        source: DraftSource,
+    },
     /// Show what agents did, newest last; --verify checks the log was not changed
     Audit {
         #[arg(long, default_value_t = 20)]
@@ -98,6 +103,29 @@ enum Command {
         /// Chosen from the number of actions when left out
         #[arg(long, value_parser = ["direct", "catalog"])]
         mode: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DraftSource {
+    /// From an OpenAPI 3 or Swagger 2.0 file (JSON or YAML)
+    Openapi {
+        file: PathBuf,
+        /// Site id; taken from the document's title when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// Use this address instead of the document's server URL
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Keep only operations whose path, operationId or tag contains this
+        #[arg(long)]
+        include: Option<String>,
+        /// Install the draft into the data directory instead of printing it
+        #[arg(long)]
+        install: bool,
+        /// Replace an installed definition with the same name
+        #[arg(long, requires = "install")]
+        force: bool,
     },
 }
 
@@ -131,6 +159,27 @@ fn main() -> ExitCode {
         Command::Approvals { json } => block_on(approvals(&home, json)),
         Command::Approve { id } => block_on(approve(&home, &id)),
         Command::Reject { id } => block_on(reject(&home, &id)),
+        Command::Draft {
+            source:
+                DraftSource::Openapi {
+                    file,
+                    name,
+                    base_url,
+                    include,
+                    install,
+                    force,
+                },
+        } => draft_openapi(
+            &home,
+            &file,
+            itda_prep::Options {
+                name,
+                base_url,
+                include,
+            },
+            install,
+            force,
+        ),
         Command::Audit {
             limit,
             verify,
@@ -408,6 +457,50 @@ async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<Exi
         net.resume(origin, account.unwrap_or_default()).await?;
     }
     eprintln!("Resumed {site}.");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The draft goes to stdout (or the data directory); what to review goes to
+/// stderr, so `itda draft openapi api.json > spec.yaml` keeps them apart.
+fn draft_openapi(
+    home: &Path,
+    file: &Path,
+    options: itda_prep::Options,
+    install: bool,
+    force: bool,
+) -> AppResult<ExitCode> {
+    let text = std::fs::read(file)?;
+    let draft = itda_prep::from_openapi(&text, &options)?;
+    for note in &draft.notes {
+        eprintln!("note: {note}");
+    }
+    for problem in &draft.problems {
+        eprintln!("problem: {problem}");
+    }
+    eprintln!(
+        "Drafted {}: {} actions ({} reads, {} changes).",
+        draft.site,
+        draft.operations,
+        draft.reads,
+        draft.operations - draft.reads
+    );
+    if !install {
+        print!("{}", draft.yaml);
+        return Ok(ExitCode::SUCCESS);
+    }
+    let path = sites::specs_dir(home).join(&draft.site).join("spec.yaml");
+    if path.exists() && !force {
+        return Err(usage(
+            format!("{} is already installed", draft.site),
+            "Pass --force to replace it, or --name to install under another name.",
+        ));
+    }
+    itda_types::util::atomic_file(&path, draft.yaml.as_bytes())?;
+    eprintln!(
+        "Installed at {}. Review it, then try `itda ls {}`.",
+        path.display(),
+        draft.site
+    );
     Ok(ExitCode::SUCCESS)
 }
 
