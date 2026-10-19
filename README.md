@@ -22,8 +22,8 @@ approve that exact change.
 <p align="center"><img src="assets/hero.svg" alt="itda drafts a site definition from an OpenAPI file, reads freely, and waits for a person to approve a change" width="860"></p>
 
 > Status: early. The runtime, CLI, MCP server, approvals, audit log and
-> drafting from OpenAPI work today against plain HTTP sites with API keys.
-> Drafting from browser recordings, browser sign-in and signed site packs are
+> drafting from OpenAPI documents or browser recordings work today against
+> plain HTTP sites with API keys. Browser sign-in and signed site packs are
 > next. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Why
