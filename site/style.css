@@ -69,6 +69,7 @@ img { display: block; max-width: 100%; }
   filter: blur(20px); pointer-events: none;
 }
 .hero-grid { position: relative; display: grid; grid-template-columns: 1.02fr 1fr; gap: 56px; align-items: center; }
+.hero-grid > *, .split > * { min-width: 0; }
 .pill {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 6px 14px 6px 10px; border-radius: 999px; font-size: 13px; color: var(--muted);
