@@ -570,6 +570,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "itda-net"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "itda-policy"
 version = "0.1.0"
 dependencies = [
