@@ -9,6 +9,8 @@ mod openapi;
 
 pub use openapi::from_openapi;
 
+use serde_norway::{Mapping, Value as Yaml};
+
 /// Choices a person makes about a draft.
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -60,6 +62,86 @@ pub fn slug(text: &str) -> String {
         id.pop();
     }
     id
+}
+
+/// Writes the definition and checks it with the rules `itda` applies at
+/// install time. `source` says what drafted it, for the header comment.
+pub(crate) fn finish(
+    site: &str,
+    title: &str,
+    base_url: &str,
+    auth: Vec<Yaml>,
+    operations: Vec<Mapping>,
+    notes: Vec<String>,
+    source: &str,
+) -> Draft {
+    let mut site_map = Mapping::new();
+    site_map.insert("name".into(), site.into());
+    if !title.is_empty() {
+        site_map.insert("title".into(), title.into());
+    }
+    site_map.insert("base_url".into(), base_url.into());
+    let mut root = Mapping::new();
+    root.insert("spec_version".into(), 1.into());
+    root.insert("site".into(), Yaml::Mapping(site_map));
+    if !auth.is_empty() {
+        root.insert("auth".into(), Yaml::Sequence(auth));
+    }
+    let reads = operations
+        .iter()
+        .filter(|op| op.get("effect").and_then(Yaml::as_str) == Some("read"))
+        .count();
+    let count = operations.len();
+    root.insert(
+        "operations".into(),
+        Yaml::Sequence(operations.into_iter().map(Yaml::Mapping).collect()),
+    );
+    let body = serde_norway::to_string(&Yaml::Mapping(root)).unwrap_or_default();
+    let yaml = format!(
+        "# Drafted by {source}. Review every operation before use:\n# check names, effects and response checks, and remove what agents should not call.\n{body}"
+    );
+    let problems = match itda_spec::parse(yaml.as_bytes()) {
+        Ok(spec) => itda_policy::spec_problems(&spec)
+            .into_iter()
+            .map(|p| format!("{}: {}", p.field, p.detail))
+            .collect(),
+        Err(error) => vec![error.msg],
+    };
+    Draft {
+        site: site.to_owned(),
+        yaml,
+        operations: count,
+        reads,
+        notes,
+        problems,
+    }
+}
+
+pub(crate) fn insert_after(map: &mut Mapping, after: &str, key: &str, value: Yaml) {
+    let mut out = Mapping::new();
+    for (k, v) in std::mem::take(map) {
+        let matched = k.as_str() == Some(after);
+        out.insert(k, v);
+        if matched {
+            out.insert(key.into(), value.clone());
+        }
+    }
+    *map = out;
+}
+
+/// `name` first and `evidence` after `effect`, as people write them.
+pub(crate) fn reorder(entry: Mapping) -> Mapping {
+    let order = [
+        "name", "desc", "method", "path", "auth", "effect", "evidence", "params", "query", "body",
+        "response",
+    ];
+    let mut out = Mapping::new();
+    for key in order {
+        if let Some(value) = entry.get(key) {
+            out.insert(key.into(), value.clone());
+        }
+    }
+    out
 }
 
 #[cfg(test)]

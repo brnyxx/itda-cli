@@ -1,5 +1,5 @@
 //! OpenAPI 3.x and Swagger 2.0 to a draft definition.
-use crate::{Draft, Options, slug};
+use crate::{Draft, Options, insert_after, reorder, slug};
 use itda_types::error::{AppResult, usage};
 use serde_json::Value;
 use serde_norway::{Mapping, Value as Yaml};
@@ -116,57 +116,20 @@ pub fn from_openapi(text: &[u8], options: &Options) -> AppResult<Draft> {
         ));
     }
 
-    let mut site_map = Mapping::new();
-    site_map.insert("name".into(), site.clone().into());
-    if !title.is_empty() {
-        site_map.insert("title".into(), title.clone().into());
-    }
-    site_map.insert("base_url".into(), base_url.into());
-    let mut root = Mapping::new();
-    root.insert("spec_version".into(), 1.into());
-    root.insert("site".into(), Yaml::Mapping(site_map));
-    if !auth.is_empty() {
-        root.insert("auth".into(), Yaml::Sequence(auth));
-    }
-    let reads = operations
-        .iter()
-        .filter(|(_, op)| op.get("effect").and_then(Yaml::as_str) == Some("read"))
-        .count();
-    let count = operations.len();
-    root.insert(
-        "operations".into(),
-        Yaml::Sequence(
-            operations
-                .into_iter()
-                .map(|(_, op)| Yaml::Mapping(op))
-                .collect(),
-        ),
-    );
-    let body = serde_norway::to_string(&Yaml::Mapping(root))
-        .map_err(|_| usage("The draft could not be written", ""))?;
-    let yaml = format!(
-        "# Drafted by `itda draft openapi` from {}. Review every operation before use:\n# check names, effects and response checks, and remove what agents should not call.\n{body}",
-        if title.is_empty() {
-            "an OpenAPI document"
-        } else {
-            &title
-        }
-    );
-    let problems = match itda_spec::parse(yaml.as_bytes()) {
-        Ok(spec) => itda_policy::spec_problems(&spec)
-            .into_iter()
-            .map(|p| format!("{}: {}", p.field, p.detail))
-            .collect(),
-        Err(error) => vec![error.msg],
+    let source = if title.is_empty() {
+        "an OpenAPI document".to_owned()
+    } else {
+        title.clone()
     };
-    Ok(Draft {
-        site,
-        yaml,
-        operations: count,
-        reads,
+    Ok(crate::finish(
+        &site,
+        &title,
+        &base_url,
+        auth,
+        operations.into_iter().map(|(_, op)| op).collect(),
         notes,
-        problems,
-    })
+        &format!("`itda draft openapi` from {source}"),
+    ))
 }
 
 fn not_openapi() -> itda_types::error::AppError {
@@ -499,31 +462,4 @@ fn resolve<'a>(doc: &'a Value, value: &'a Value) -> &'a Value {
         }
     }
     current
-}
-
-fn insert_after(map: &mut Mapping, after: &str, key: &str, value: Yaml) {
-    let mut out = Mapping::new();
-    for (k, v) in std::mem::take(map) {
-        let matched = k.as_str() == Some(after);
-        out.insert(k, v);
-        if matched {
-            out.insert(key.into(), value.clone());
-        }
-    }
-    *map = out;
-}
-
-/// `name` first and `evidence` after `effect`, as people write them.
-fn reorder(entry: Mapping) -> Mapping {
-    let order = [
-        "name", "desc", "method", "path", "auth", "effect", "evidence", "params", "query", "body",
-        "response",
-    ];
-    let mut out = Mapping::new();
-    for key in order {
-        if let Some(value) = entry.get(key) {
-            out.insert(key.into(), value.clone());
-        }
-    }
-    out
 }
