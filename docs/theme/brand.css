@@ -1,0 +1,63 @@
+/* Brand colors and type for the mdBook themes, matching the landing page. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --mono-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --content-max-width: 780px;
+}
+
+html { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.content { font-size: 1.6rem; line-height: 1.7; }
+.content h1, .content h2, .content h3 { letter-spacing: -0.02em; }
+.content h1 { font-size: 2.6em; font-weight: 700; }
+.menu-title { font-weight: 700; letter-spacing: -0.03em; }
+
+html.navy {
+  --bg: #0B0D12;
+  --fg: #D9DDE6;
+  --sidebar-bg: #0F121A;
+  --sidebar-fg: #9AA3B5;
+  --sidebar-non-existant: #4A5163;
+  --sidebar-active: #8EA6FF;
+  --sidebar-spacer: #1C212D;
+  --scrollbar: #2F3647;
+  --icons: #6B7385;
+  --icons-hover: #ECEEF3;
+  --links: #8EA6FF;
+  --inline-code-color: #ECEEF3;
+  --theme-popup-bg: #141823;
+  --theme-popup-border: #2F3647;
+  --theme-hover: #1A1F2C;
+  --quote-bg: #141823;
+  --quote-border: #2F5BEA;
+  --table-border-color: #242A38;
+  --table-header-bg: #141823;
+  --table-alternate-bg: #0F121A;
+  --searchbar-border-color: #2F3647;
+  --searchbar-bg: #141823;
+  --searchbar-fg: #ECEEF3;
+  --searchresults-header-fg: #9AA3B5;
+  --searchresults-border-color: #242A38;
+  --search-mark-bg: #2F5BEA;
+}
+
+html.light, html.rust {
+  --links: #2F5BEA;
+  --sidebar-active: #2F5BEA;
+  --quote-border: #2F5BEA;
+}
+
+.navy .content :not(pre) > code {
+  background: #1A1F2C;
+  border: 1px solid #242A38;
+  border-radius: 6px;
+  padding: 0.1em 0.35em;
+}
+.navy pre, .navy pre > .hljs {
+  background: #141823;
+  border-radius: 10px;
+}
+.navy pre { border: 1px solid #242A38; }
+.navy .menu-bar, .navy .menu-bar:hover { background: rgba(11, 13, 18, 0.85); }
+.navy .chapter li a.active { color: #ECEEF3; }
+.navy blockquote { border-radius: 0 10px 10px 0; }

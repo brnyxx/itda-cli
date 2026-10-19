@@ -11,7 +11,7 @@
   <a href="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml"><img src="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/brnyxx/itda-cli/releases"><img src="https://img.shields.io/github/v/release/brnyxx/itda-cli?include_prereleases&amp;label=release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-  <a href="https://brnyxx.github.io/itda-cli/">Docs</a>
+  <a href="https://brnyxx.github.io/itda-cli/docs/">Docs</a>
 </p>
 
 itda turns a website into a small set of verified, typed actions that an AI
