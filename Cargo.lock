@@ -1492,6 +1492,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "itda-prep"
+version = "0.1.0"
+dependencies = [
+ "itda-policy",
+ "itda-spec",
+ "itda-types",
+ "serde_json",
+ "serde_norway",
+]
+
+[[package]]
 name = "itda-runtime"
 version = "0.1.0"
 dependencies = [
