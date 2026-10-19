@@ -111,6 +111,10 @@ enum Command {
         /// Chosen from the number of actions when left out
         #[arg(long, value_parser = ["direct", "catalog"])]
         mode: Option<String>,
+        /// Ask you to approve changes in the MCP client's own form, for clients
+        /// that show elicitation requests to you (also ITDA_APPROVE_IN_CLIENT=1)
+        #[arg(long)]
+        approve_in_client: bool,
     },
 }
 
@@ -165,6 +169,9 @@ enum McpCommand {
         /// Show the change without writing it
         #[arg(long)]
         dry_run: bool,
+        /// Approve changes in the client instead of with itda approve
+        #[arg(long)]
+        approve_in_client: bool,
     },
 }
 
@@ -244,13 +251,23 @@ fn main() -> ExitCode {
         } => audit(&home, limit, verify, json),
         Command::Doctor => Ok(doctor(&home)),
         Command::Mcp {
-            command: Some(McpCommand::Install { client, dry_run }),
+            command:
+                Some(McpCommand::Install {
+                    client,
+                    dry_run,
+                    approve_in_client,
+                }),
             ..
-        } => mcp_install(&client, dry_run),
+        } => mcp_install(&client, dry_run, approve_in_client),
         Command::Mcp {
             command: None,
             mode,
-        } => block_on(mcp(&home, mode.as_deref())),
+            approve_in_client,
+        } => block_on(mcp(
+            &home,
+            mode.as_deref(),
+            approve_in_client || std::env::var("ITDA_APPROVE_IN_CLIENT").is_ok_and(|v| v == "1"),
+        )),
     });
     match result {
         Ok(code) => code,
@@ -748,7 +765,7 @@ fn audit(home: &Path, limit: usize, verify: bool, as_json: bool) -> AppResult<Ex
 
 /// Serve MCP on stdin and stdout. Stdout belongs to the protocol, so nothing
 /// else is printed there; invalid sites are reported on stderr and skipped.
-async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
+async fn mcp(home: &Path, mode: Option<&str>, approve_in_client: bool) -> AppResult<ExitCode> {
     let mut specs = Vec::new();
     for site in sites::list(home) {
         match site.spec {
@@ -761,8 +778,16 @@ async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
         Some("catalog") => Some(itda_mcp::Mode::Catalog),
         _ => None,
     };
-    let runtime = Arc::new(open(home)?.runtime());
-    let server = itda_mcp::Server::new(runtime, itda_mcp::Catalog::new(specs), mode);
+    let parts = open(home)?;
+    let (approvals, audit) = (parts.approvals.clone(), parts.audit.clone());
+    let mut server = itda_mcp::Server::new(
+        Arc::new(parts.runtime()),
+        itda_mcp::Catalog::new(specs),
+        mode,
+    );
+    if approve_in_client {
+        server = server.with_client_approval(approvals, audit);
+    }
     server
         .serve_stdio()
         .await
@@ -770,17 +795,26 @@ async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn mcp_install(client: &str, dry_run: bool) -> AppResult<ExitCode> {
+fn mcp_install(client: &str, dry_run: bool, approve_in_client: bool) -> AppResult<ExitCode> {
     let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
         .ok_or_else(|| usage("No home directory was found", "Set HOME and try again."))?;
     let exe = std::env::current_exe()?;
     // Clients start itda without this shell's environment, so the settings
     // that change where data lives or what may be reached are passed along.
-    let env = ["ITDA_HOME", "ITDA_ALLOW_LOCAL", "ITDA_SECRET_STORE"]
-        .into_iter()
-        .filter_map(|name| Some((name.to_owned(), std::env::var(name).ok()?)))
-        .collect();
+    let mut env: Vec<(String, String)> = [
+        "ITDA_HOME",
+        "ITDA_ALLOW_LOCAL",
+        "ITDA_SECRET_STORE",
+        "ITDA_APPROVE_IN_CLIENT",
+    ]
+    .into_iter()
+    .filter_map(|name| Some((name.to_owned(), std::env::var(name).ok()?)))
+    .collect();
+    if approve_in_client {
+        env.retain(|(name, _)| name != "ITDA_APPROVE_IN_CLIENT");
+        env.push(("ITDA_APPROVE_IN_CLIENT".into(), "1".into()));
+    }
     let launch = install::Launch {
         command: exe.display().to_string(),
         env,
