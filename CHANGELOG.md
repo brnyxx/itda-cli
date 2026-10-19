@@ -7,6 +7,12 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `itda draft har`: draft a site definition from a browser recording of you
+  using the site. Only the shape of each call is kept; recorded tokens,
+  cookies and values never reach the draft.
+
 ## [0.1.0] - 2026-10-19
 
 The first release: reads and approved changes on plain HTTP sites with API

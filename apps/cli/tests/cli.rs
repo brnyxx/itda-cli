@@ -353,3 +353,43 @@ async fn a_drafted_definition_runs_against_the_site() {
     assert_eq!(again.status.code(), Some(2));
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_recorded_session_becomes_actions() {
+    let home = home();
+    let base = serve().await;
+    let recording = json!({"log": {"entries": [{
+        "request": {"method": "GET", "url": format!("{base}/items"), "headers": [
+            {"name": "Authorization", "value": "Bearer recorded-token"}
+        ]},
+        "response": {"status": 200, "content": {
+            "mimeType": "application/json",
+            "text": "{\"items\": [{\"title\": \"recorded\"}]}"
+        }}
+    }]}});
+    let file = home.join("session.har");
+    std::fs::write(&file, recording.to_string()).unwrap();
+
+    let installed = itda(
+        &home,
+        &[
+            "draft",
+            "har",
+            file.to_str().unwrap(),
+            "--name",
+            "fixture",
+            "--install",
+        ],
+        &[],
+    )
+    .await;
+    assert!(installed.status.success(), "{installed:?}");
+    let spec = std::fs::read_to_string(home.join("specs/fixture/spec.yaml")).unwrap();
+    assert!(!spec.contains("recorded-token"));
+    assert!(spec.contains("name: list-items"));
+
+    let called = itda(&home, &["call", "fixture.list-items"], &[]).await;
+    assert_eq!(called.status.code(), Some(10), "{called:?}");
+    assert!(String::from_utf8_lossy(&called.stderr).contains("error[auth_required]"));
+    std::fs::remove_dir_all(home).ok();
+}

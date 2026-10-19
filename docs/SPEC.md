@@ -24,6 +24,33 @@ multipart bodies, deprecated operations) is listed on stderr instead of being
 guessed. Review the draft before agents use it: shorten descriptions, remove
 actions agents should not call, and tighten the response checks.
 
+## Start from a browser recording
+
+Most internal and older sites publish no API description, but their pages
+still call one. Record yourself using the site and let itda draft from the
+recording:
+
+1. Open the browser's developer tools on the Network tab.
+2. Use the site the way an agent should: search, open an item, submit a form.
+3. Save the recording with "Save all as HAR" (Chrome, Edge) or "Save All As
+   HAR" (Firefox).
+
+```sh
+itda draft har session.har > spec.yaml                  # print the draft
+itda draft har session.har --base-url https://intranet.example.com/api
+itda draft har session.har --name board --install
+```
+
+A recording holds real tokens, cookies and personal data, so the draft keeps
+only the shape of each call: method, path, input names and types, and the
+response fields every sample returned. Numbers and ids in paths become
+placeholders (`/notices/42` becomes `/notices/{notice_id}`). Inputs every
+sample sent are marked required. Token headers become `auth` entries whose
+values you add with `itda login`; CSRF and session fields are left out and
+listed, since they come from sign-in or a `preflight` step, never from the
+agent. Calls to other addresses, file uploads and failed calls are skipped.
+Delete the HAR file when you are done with it.
+
 ## Write one by hand
 
 This page covers everything version 0.1 runs. The fastest way in is to copy

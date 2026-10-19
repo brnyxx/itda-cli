@@ -79,7 +79,7 @@ enum Command {
     Approve { id: String },
     /// Refuse a change an agent asked for
     Reject { id: String },
-    /// Draft a site definition from a description the site publishes
+    /// Draft a site definition from an API description or a browser recording
     Draft {
         #[command(subcommand)]
         source: DraftSource,
@@ -127,6 +127,26 @@ enum DraftSource {
         #[arg(long, requires = "install")]
         force: bool,
     },
+    /// From a browser recording (HAR) of you using the site; keeps only the
+    /// shape of each call, never the recorded values
+    Har {
+        file: PathBuf,
+        /// Site id; taken from the host name when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// Only calls under this address (default: the most used one)
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Keep only calls whose path contains this
+        #[arg(long)]
+        include: Option<String>,
+        /// Install the draft into the data directory instead of printing it
+        #[arg(long)]
+        install: bool,
+        /// Replace an installed definition with the same name
+        #[arg(long, requires = "install")]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -159,8 +179,8 @@ fn main() -> ExitCode {
         Command::Approvals { json } => block_on(approvals(&home, json)),
         Command::Approve { id } => block_on(approve(&home, &id)),
         Command::Reject { id } => block_on(reject(&home, &id)),
-        Command::Draft {
-            source:
+        Command::Draft { source } => {
+            let (from, file, options, install, force): (Drafter, _, _, _, _) = match source {
                 DraftSource::Openapi {
                     file,
                     name,
@@ -168,18 +188,38 @@ fn main() -> ExitCode {
                     include,
                     install,
                     force,
-                },
-        } => draft_openapi(
-            &home,
-            &file,
-            itda_prep::Options {
-                name,
-                base_url,
-                include,
-            },
-            install,
-            force,
-        ),
+                } => (
+                    itda_prep::from_openapi,
+                    file,
+                    itda_prep::Options {
+                        name,
+                        base_url,
+                        include,
+                    },
+                    install,
+                    force,
+                ),
+                DraftSource::Har {
+                    file,
+                    name,
+                    base_url,
+                    include,
+                    install,
+                    force,
+                } => (
+                    itda_prep::from_har,
+                    file,
+                    itda_prep::Options {
+                        name,
+                        base_url,
+                        include,
+                    },
+                    install,
+                    force,
+                ),
+            };
+            draft(&home, from, &file, options, install, force)
+        }
         Command::Audit {
             limit,
             verify,
@@ -460,17 +500,20 @@ async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<Exi
     Ok(ExitCode::SUCCESS)
 }
 
+type Drafter = fn(&[u8], &itda_prep::Options) -> AppResult<itda_prep::Draft>;
+
 /// The draft goes to stdout (or the data directory); what to review goes to
 /// stderr, so `itda draft openapi api.json > spec.yaml` keeps them apart.
-fn draft_openapi(
+fn draft(
     home: &Path,
+    from: Drafter,
     file: &Path,
     options: itda_prep::Options,
     install: bool,
     force: bool,
 ) -> AppResult<ExitCode> {
     let text = std::fs::read(file)?;
-    let draft = itda_prep::from_openapi(&text, &options)?;
+    let draft = from(&text, &options)?;
     for note in &draft.notes {
         eprintln!("note: {note}");
     }
