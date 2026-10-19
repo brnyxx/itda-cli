@@ -1,13 +1,21 @@
 //! Runs one site action and returns a result envelope.
 //!
-//! This is the read path of the pipeline in the product plan: resolve the
-//! action, check its inputs, refuse anything that is not a read, attach the
-//! account's credential to its exact origin, send through the paced network,
-//! verify the response contract, shape the data and redact secrets. Changes,
-//! preflight steps and browser credentials are refused until their stages
-//! exist, so nothing here can send a write.
+//! The pipeline in the product plan: resolve the action, check its inputs,
+//! attach the account's credential to its exact origin, send through the
+//! paced network, verify the response contract, shape the data and redact
+//! secrets.
+//!
+//! Reads run directly. A change runs only with an approval the user granted
+//! for exactly this request: the first call records the request and returns
+//! `approval_required` with an id, the user reviews and grants it outside the
+//! agent (`itda approve`), and a second call with that id uses it up before
+//! anything is sent. Without an approval store, changes are refused.
+//! Preflight steps and browser credentials are refused until their stages
+//! exist.
 use itda_net::{Network, Request};
-use itda_policy::{Effect, operation_effect, validate_spec};
+use itda_policy::{
+    Approvals, Effect, ExecutionRequest, ReviewInput, operation_effect, validate_spec,
+};
 use itda_spec::{Operation, Spec};
 use itda_types::{
     error::{AppError, AppResult, usage},
@@ -25,6 +33,7 @@ pub const DEFAULT_ACCOUNT: &str = "default";
 pub struct Runtime {
     net: Arc<Network>,
     vault: Arc<Vault>,
+    approvals: Option<Arc<Approvals>>,
 }
 
 /// One action call. `account` is only needed for actions with credentials.
@@ -33,6 +42,8 @@ pub struct Call {
     pub action: String,
     pub args: BTreeMap<String, String>,
     pub account: Option<String>,
+    /// The id of an approval the user granted for this exact change.
+    pub approval: Option<String>,
 }
 
 /// What an agent receives: the shaped data and where it came from, never the
@@ -56,16 +67,29 @@ pub struct Meta {
 
 impl Runtime {
     pub fn new(net: Arc<Network>, vault: Arc<Vault>) -> Self {
-        Self { net, vault }
+        Self {
+            net,
+            vault,
+            approvals: None,
+        }
+    }
+
+    /// Allow changes that the user approves through this store.
+    pub fn with_approvals(mut self, approvals: Arc<Approvals>) -> Self {
+        self.approvals = Some(approvals);
+        self
     }
 
     pub async fn call(&self, spec: &Spec, call: Call) -> AppResult<Envelope> {
         validate_spec(spec)?;
         let op = spec.op(&call.action)?;
         check_inputs(op, &call.args)?;
-        if operation_effect(op, &call.args) != Effect::Read {
-            return Err(AppError::api("writes_disabled", 403));
-        }
+        let effect = operation_effect(op, &call.args);
+        let approvals = match (effect, &self.approvals) {
+            (Effect::Read, _) => None,
+            (_, Some(approvals)) => Some(approvals),
+            (_, None) => return Err(AppError::api("writes_disabled", 403)),
+        };
         if !matches!(op.transport.as_str(), "" | "http") || !op.preflight.is_empty() {
             return Err(usage(
                 format!("{} needs a browser or preflight steps", op.name),
@@ -101,7 +125,7 @@ impl Runtime {
             secrets.push(secret);
         }
 
-        let mut request = Request::read(url);
+        let mut request = Request::read(url.clone());
         request.method = if op.method.is_empty() {
             "GET".into()
         } else {
@@ -110,22 +134,82 @@ impl Runtime {
         request.headers = headers;
         request.body = body;
         request.account_id = account.clone().unwrap_or_default();
-        let response = self.net.fetch(request).await?;
+
+        if let Some(approvals) = approvals {
+            let execution = ExecutionRequest {
+                site_id: spec.site.name.clone(),
+                action_id: op.name.clone(),
+                account_id: request.account_id.clone(),
+                inputs: call.args.clone(),
+                spec_hash: util::hash(&serde_json::to_vec(spec)?),
+                credential_hash: secrets.first().map(Secret::fingerprint).unwrap_or_default(),
+            };
+            match &call.approval {
+                None => {
+                    let review = approvals
+                        .request_approval(
+                            execution,
+                            title(&spec.site.title, &spec.site.name),
+                            title(&op.desc, &op.name),
+                            request.account_id.clone(),
+                            review_inputs(&request.method, &url, &call.args),
+                        )
+                        .await?;
+                    let mut error = AppError::api("approval_required", 409)
+                        .with("approval", review.id.clone())
+                        .with("expires_at", review.expires_at.clone());
+                    error.msg = format!(
+                        "{}.{} changes the site and waits for the user's approval {}",
+                        spec.site.name, op.name, review.id
+                    );
+                    error.remedy = format!(
+                        "Ask the user to run `itda approve {}`, then call again with approval {}.",
+                        review.id, review.id
+                    );
+                    return Err(error);
+                }
+                Some(id) => approvals.consume(id, &execution).await?,
+            }
+            // A change is sent once: no retries and no redirects.
+            request.read_only = false;
+            request.follow_redirects = false;
+        }
+
+        let read = approvals.is_none();
+        let response = match self.net.fetch(request).await {
+            Ok(response) => response,
+            Err(error)
+                if !read
+                    && matches!(
+                        error.public_code.as_str(),
+                        "timeout" | "request_failed" | "too_large"
+                    ) =>
+            {
+                return Err(AppError::api("action_outcome_unknown", 502));
+            }
+            Err(error) => return Err(error),
+        };
 
         if !response.successful() {
             return Err(refusal(&response, account.is_some()));
         }
-        if !op.matches_response(&response) {
+        if read && !op.matches_response(&response) {
             return Err(AppError::api("response_mismatch", 502));
         }
-        let mut data = shape(spec, op, &response)?;
+        // The change has happened, so a reply that does not match the
+        // contract is reported as missing data rather than a failure.
+        let mut data = match shape(spec, op, &response) {
+            Ok(data) => data,
+            Err(_) if !read => Value::Null,
+            Err(error) => return Err(error),
+        };
         let exposed: Vec<String> = secrets.iter().map(|s| s.expose().to_owned()).collect();
         util::redact(&mut data, &exposed);
 
         Ok(Envelope {
             site: spec.site.name.clone(),
             action: op.name.clone(),
-            effect: Effect::Read.as_str(),
+            effect: effect.as_str(),
             account,
             data,
             meta: Meta {
@@ -171,6 +255,28 @@ impl Runtime {
             )),
         }
     }
+}
+
+fn title(preferred: &str, fallback: &str) -> String {
+    if preferred.is_empty() {
+        fallback
+    } else {
+        preferred
+    }
+    .to_owned()
+}
+
+/// What the user reviews: the exact request line and every input.
+fn review_inputs(method: &str, url: &str, args: &BTreeMap<String, String>) -> Vec<ReviewInput> {
+    std::iter::once(ReviewInput {
+        label: "request".into(),
+        value: format!("{method} {url}"),
+    })
+    .chain(args.iter().map(|(label, value)| ReviewInput {
+        label: label.clone(),
+        value: value.clone(),
+    }))
+    .collect()
 }
 
 /// Every input must be declared; required ones and types are checked when the

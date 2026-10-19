@@ -191,6 +191,8 @@ async fn approvals_are_single_use_and_bound_to_the_exact_request() {
             .await
             .is_err()
     );
+    // An approval the user has not granted cannot be used.
+    assert!(store.consume(&review.id, &req).await.is_err());
     store.claim(&review.id).await.unwrap();
     store.consume(&review.id, &req).await.unwrap();
     // Second use is refused.

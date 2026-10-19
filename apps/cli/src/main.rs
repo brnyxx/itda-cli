@@ -7,7 +7,7 @@ mod sites;
 
 use clap::{Parser, Subcommand};
 use itda_net::{Gate, Network};
-use itda_policy::operation_effect;
+use itda_policy::{Approvals, operation_effect};
 use itda_runtime::{Call, Runtime};
 use itda_store::Store;
 use itda_types::error::{AppError, AppResult, usage};
@@ -67,6 +67,15 @@ enum Command {
         #[arg(long)]
         account: Option<String>,
     },
+    /// List changes waiting for your approval
+    Approvals {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Review a change an agent asked for and approve it. Needs a terminal
+    Approve { id: String },
+    /// Refuse a change an agent asked for
+    Reject { id: String },
     /// Check the data directory, the keyring and the installed sites
     Doctor,
     /// Serve installed actions to an AI agent over MCP (stdio)
@@ -94,6 +103,7 @@ enum McpCommand {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let as_json = matches!(&cli.command, Command::Ls { json: true, .. })
+        || matches!(&cli.command, Command::Approvals { json: true })
         || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match cli.command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
@@ -105,6 +115,9 @@ fn main() -> ExitCode {
             label,
         } => block_on(login(&home, &site, &account, &secret, &label)),
         Command::Resume { site, account } => block_on(resume(&home, &site, account.as_deref())),
+        Command::Approvals { json } => block_on(approvals(&home, json)),
+        Command::Approve { id } => block_on(approve(&home, &id)),
+        Command::Reject { id } => block_on(reject(&home, &id)),
         Command::Doctor => Ok(doctor(&home)),
         Command::Mcp {
             command: Some(McpCommand::Install { client, dry_run }),
@@ -155,6 +168,14 @@ fn secret_store() -> Arc<dyn SecretStore> {
 struct Parts {
     net: Arc<Network>,
     vault: Arc<Vault>,
+    approvals: Arc<Approvals>,
+}
+
+impl Parts {
+    /// Reads run directly; changes wait for the user's approval.
+    fn runtime(self) -> Runtime {
+        Runtime::new(self.net, self.vault).with_approvals(self.approvals)
+    }
 }
 
 fn open(home: &Path) -> AppResult<Parts> {
@@ -162,6 +183,7 @@ fn open(home: &Path) -> AppResult<Parts> {
     let gate = Arc::new(Gate::open(store.clone())?);
     Ok(Parts {
         net: Arc::new(Network::new(gate, allow_local())),
+        approvals: Arc::new(Approvals::open(store.clone())?),
         vault: Arc::new(Vault::open(store, secret_store())?),
     })
 }
@@ -222,10 +244,18 @@ fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// `--name value` or `--name=value` inputs, plus `--account` and `--json`.
-fn parse_call(rest: Vec<String>) -> AppResult<(BTreeMap<String, String>, Option<String>, bool)> {
+struct CallFlags {
+    args: BTreeMap<String, String>,
+    account: Option<String>,
+    approval: Option<String>,
+    as_json: bool,
+}
+
+/// `--name value` or `--name=value` inputs, plus `--account`, `--approval`
+/// and `--json`.
+fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
     let mut args = BTreeMap::new();
-    let (mut account, mut as_json) = (None, false);
+    let (mut account, mut approval, mut as_json) = (None, None, false);
     let mut words = rest.into_iter();
     while let Some(word) = words.next() {
         let Some(flag) = word.strip_prefix("--") else {
@@ -250,13 +280,20 @@ fn parse_call(rest: Vec<String>) -> AppResult<(BTreeMap<String, String>, Option<
                 (flag.to_owned(), value)
             }
         };
-        if name == "account" {
-            account = Some(value);
-        } else {
-            args.insert(name, value);
+        match name.as_str() {
+            "account" => account = Some(value),
+            "approval" => approval = Some(value),
+            _ => {
+                args.insert(name, value);
+            }
         }
     }
-    Ok((args, account, as_json))
+    Ok(CallFlags {
+        args,
+        account,
+        approval,
+        as_json,
+    })
 }
 
 async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCode> {
@@ -266,16 +303,22 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
             "Run `itda ls` to see installed actions.",
         )
     })?;
-    let (args, account, as_json) = parse_call(rest)?;
+    let CallFlags {
+        args,
+        account,
+        approval,
+        as_json,
+    } = parse_call(rest)?;
     let spec = sites::load(home, site)?;
-    let parts = open(home)?;
-    let envelope = Runtime::new(parts.net, parts.vault)
+    let envelope = open(home)?
+        .runtime()
         .call(
             &spec,
             Call {
                 action: action.to_owned(),
                 args,
                 account,
+                approval,
             },
         )
         .await?;
@@ -341,6 +384,72 @@ async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<Exi
     Ok(ExitCode::SUCCESS)
 }
 
+fn approvals_store(home: &Path) -> AppResult<Approvals> {
+    Approvals::open(Store::open(&home.join("itda.db"))?)
+}
+
+async fn approvals(home: &Path, as_json: bool) -> AppResult<ExitCode> {
+    let pending = approvals_store(home)?.pending().await?;
+    if as_json {
+        println!("{}", serde_json::to_value(&pending)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    if pending.is_empty() {
+        println!("No changes are waiting for approval.");
+    }
+    for approval in &pending {
+        println!(
+            "{}  {}.{}  account {}  until {}",
+            approval.id,
+            approval.site_id,
+            approval.action_id,
+            approval.account_id,
+            approval.expires_at
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Show exactly what will be sent and ask in the terminal. An agent working
+/// through pipes cannot answer, which keeps the decision with the person.
+async fn approve(home: &Path, id: &str) -> AppResult<ExitCode> {
+    let store = approvals_store(home)?;
+    let review = store.review(id).await?;
+    println!(
+        "{} wants to change {} ({}) as account {}:",
+        review.action_title, review.site_title, review.site_id, review.account_id
+    );
+    for input in &review.inputs {
+        println!("  {:<12} {}", input.label, input.value);
+    }
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        return Err(usage(
+            "Approving needs a terminal",
+            "Run itda approve yourself in a terminal; agents cannot approve changes.",
+        ));
+    }
+    eprint!("Approve this change? [y/N] ");
+    let mut answer = String::new();
+    stdin.lock().read_line(&mut answer)?;
+    if !matches!(answer.trim(), "y" | "Y" | "yes") {
+        store.reject(id).await?;
+        println!("Rejected.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    store.claim(id).await?;
+    println!("Approved. The agent can now run it once, with exactly these inputs.");
+    Ok(ExitCode::SUCCESS)
+}
+
+async fn reject(home: &Path, id: &str) -> AppResult<ExitCode> {
+    let store = approvals_store(home)?;
+    store.review(id).await?;
+    store.reject(id).await?;
+    println!("Rejected.");
+    Ok(ExitCode::SUCCESS)
+}
+
 /// Serve MCP on stdin and stdout. Stdout belongs to the protocol, so nothing
 /// else is printed there; invalid sites are reported on stderr and skipped.
 async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
@@ -356,8 +465,7 @@ async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
         Some("catalog") => Some(itda_mcp::Mode::Catalog),
         _ => None,
     };
-    let parts = open(home)?;
-    let runtime = Arc::new(Runtime::new(parts.net, parts.vault));
+    let runtime = Arc::new(open(home)?.runtime());
     let server = itda_mcp::Server::new(runtime, itda_mcp::Catalog::new(specs), mode);
     server
         .serve_stdio()

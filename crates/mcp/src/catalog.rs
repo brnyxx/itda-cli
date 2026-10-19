@@ -33,7 +33,7 @@ impl Catalog {
                     description: describe(&spec, op),
                     effect: operation_effect(op, &BTreeMap::new()),
                     method: op.method.clone(),
-                    input_schema: input_schema(op),
+                    input_schema: input_schema(op, operation_effect(op, &BTreeMap::new())),
                 });
             }
         }
@@ -93,8 +93,9 @@ fn describe(spec: &Spec, op: &Operation) -> String {
 }
 
 /// JSON Schema for the action's inputs. Signed-in actions also take an
-/// optional `account`; the agent only ever sees account ids.
-fn input_schema(op: &Operation) -> Map<String, Value> {
+/// optional `account`; the agent only ever sees account ids. Changes take an
+/// optional `approval`, the id the user granted.
+fn input_schema(op: &Operation, effect: Effect) -> Map<String, Value> {
     let mut properties = Map::new();
     let mut required = Vec::new();
     let inputs = op
@@ -118,6 +119,12 @@ fn input_schema(op: &Operation) -> Map<String, Value> {
         properties.insert(
             "account".into(),
             json!({"type": "string", "description": "Account id to use; defaults to \"default\"."}),
+        );
+    }
+    if effect != Effect::Read {
+        properties.insert(
+            "approval".into(),
+            json!({"type": "string", "description": "Approval id the user granted for exactly these inputs. Leave out on the first call."}),
         );
     }
     let mut schema = Map::new();

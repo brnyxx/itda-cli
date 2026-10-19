@@ -115,6 +115,7 @@ fn call(action: &str, args: &[(&str, &str)]) -> Call {
             .map(|(k, v)| ((*k).into(), (*v).into()))
             .collect::<BTreeMap<_, _>>(),
         account: None,
+        approval: None,
     }
 }
 
@@ -207,4 +208,58 @@ async fn a_page_that_is_not_the_declared_response_is_reported() {
         .await
         .unwrap_err();
     assert_eq!(error.public_code, "response_mismatch");
+}
+
+#[tokio::test]
+async fn a_change_runs_once_with_the_users_approval_for_exactly_those_inputs() {
+    let site = site().await;
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let runtime =
+        Runtime::new(Arc::new(Network::new(gate, true)), vault).with_approvals(approvals.clone());
+    let spec = spec(&site.base);
+    let with = |title: &str, approval: Option<&str>| {
+        let mut call = call("create-item", &[("title", title)]);
+        call.approval = approval.map(str::to_owned);
+        call
+    };
+
+    // The first call only records the request.
+    let error = runtime.call(&spec, with("hello", None)).await.unwrap_err();
+    assert_eq!(error.public_code, "approval_required");
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    let review = approvals.review(&id).await.unwrap();
+    assert_eq!(review.inputs[0].value, format!("POST {}/items", site.base));
+    assert_eq!(review.inputs[1].label, "title");
+
+    // The agent cannot use it before the user grants it.
+    let error = runtime
+        .call(&spec, with("hello", Some(&id)))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "approval_expired");
+    let error = runtime.call(&spec, with("hello", None)).await.unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
+
+    // Other inputs do not match what the user saw.
+    let error = runtime
+        .call(&spec, with("other", Some(&id)))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "approval_expired");
+    assert_eq!(site.hits.load(Ordering::SeqCst), 0);
+
+    // A mismatch does not use the approval up; the exact call works once.
+    let envelope = runtime.call(&spec, with("hello", Some(&id))).await.unwrap();
+    assert_eq!(envelope.effect, "write");
+    assert_eq!(envelope.meta.http_status, 201);
+    let error = runtime
+        .call(&spec, with("hello", Some(&id)))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "approval_expired");
+    assert_eq!(site.hits.load(Ordering::SeqCst), 1);
 }
