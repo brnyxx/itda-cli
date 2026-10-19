@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>itda: compile websites into actions for AI agents</title>
+  <meta name="description" content="itda turns a website into a small set of verified, typed actions an AI agent can call from the command line or over MCP. Local, read-only by default, and every change waits for your approval.">
+  <meta property="og:title" content="itda: don't drive the browser, compile the site">
+  <meta property="og:description" content="Verified, typed website actions for AI agents. Local-first CLI and MCP server with approvals for every change.">
+  <meta property="og:image" content="https://brnyxx.github.io/itda-cli/assets/social.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#0B0D12">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="./" aria-label="itda home"><img src="assets/wordmark-dark.svg" alt="itda" height="28"></a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="docs/quickstart.html">Docs</a>
+        <a href="docs/SPEC.html">Site definitions</a>
+        <a href="docs/changelog.html">Changelog</a>
+        <a class="nav-gh" href="https://github.com/brnyxx/itda-cli">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="glow" aria-hidden="true"></div>
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <a class="pill" href="docs/changelog.html"><span class="pill-dot"></span>v0.1 is out: draft actions from OpenAPI or a browser recording</a>
+          <h1>Don't drive the browser.<br><span class="grad">Compile the site.</span></h1>
+          <p class="lede">itda turns a website into a small set of verified, typed actions your AI agent can call from the command line or over MCP. It runs on your machine, reads by default, and changes nothing until you approve that exact change.</p>
+
+          <div class="install" data-tabs>
+            <div class="install-tabs" role="tablist">
+              <button role="tab" aria-selected="true" data-tab="unix">macOS / Linux</button>
+              <button role="tab" aria-selected="false" data-tab="win">Windows</button>
+              <button role="tab" aria-selected="false" data-tab="cargo">Cargo</button>
+            </div>
+            <div class="install-body">
+              <code data-panel="unix">curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh</code>
+              <code data-panel="win" hidden>irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex</code>
+              <code data-panel="cargo" hidden>cargo install --git https://github.com/brnyxx/itda-cli itda-cli</code>
+              <button class="copy" type="button" aria-label="Copy install command">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="cta">
+            <a class="btn btn-primary" href="docs/quickstart.html">Get started</a>
+            <a class="btn btn-ghost" href="https://github.com/brnyxx/itda-cli">Star on GitHub</a>
+          </div>
+          <p class="meta">Single Rust binary · macOS, Linux, Windows · Apache-2.0 · no account, server or telemetry</p>
+        </div>
+
+        <div class="hero-visual" aria-label="An agent reads freely through itda and waits for a person to approve a change">
+          <div class="term">
+            <div class="term-bar"><span></span><span></span><span></span><em>agent session</em></div>
+            <pre class="term-body"><span class="l"><b class="p">$</b> itda draft har board.har <i>--install</i></span>
+<span class="l o">Drafted board: 4 actions (2 reads, 2 changes).</span>
+<span class="l"> </span>
+<span class="l"><b class="p">$</b> itda call board.list-notices <i>--q</i> maintenance <i>--json</i></span>
+<span class="l j">{ <k>"status"</k>: <s>"ok"</s>, <k>"effect"</k>: <s>"read"</s>, <k>"untrusted"</k>: <n>true</n>,</span>
+<span class="l j">  <k>"data"</k>: { <k>"total"</k>: <n>3</n>, <k>"items"</k>: [ … ] } }</span>
+<span class="l"> </span>
+<span class="l"><b class="p">$</b> itda call board.create-notice <i>--title</i> "Server maintenance"</span>
+<span class="l w">⏸ approval_required  board.create-notice changes the site</span>
+<span class="l o">  waiting for a person: itda approve 4c1a…</span>
+<span class="l"> </span>
+<span class="l"><b class="p you">you</b> itda approve 4c1a…</span>
+<span class="l g">✓ Approved once, for exactly these inputs.</span></pre>
+          </div>
+          <div class="chips" aria-hidden="true">
+            <span class="chip read">read · runs now</span>
+            <span class="chip wait">change · waits for you</span>
+            <span class="chip log">every call · audit log</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="clients wrap" aria-label="Works with">
+      <span>Works with any MCP client</span>
+      <ul>
+        <li>Claude Desktop</li><li>Claude Code</li><li>Cursor</li><li>VS Code</li><li>Codex</li><li>any shell</li>
+      </ul>
+    </section>
+
+    <section class="section wrap" id="how">
+      <p class="eyebrow">How it works</p>
+      <h2>Do the browsing once. Call typed actions forever.</h2>
+      <p class="section-lede">Browser agents re-read every page on every step. itda moves that work to an install step you review, so each call afterwards is small, typed and checked.</p>
+      <ol class="steps">
+        <li>
+          <span class="step-n">1</span>
+          <h3>Draft</h3>
+          <p>Point itda at the site's OpenAPI file, or at a recording of you using it. You get a site definition: which actions exist, what they send and what a correct answer looks like.</p>
+          <code>itda draft openapi api.json</code>
+          <code>itda draft har session.har</code>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <h3>Review</h3>
+          <p>One readable YAML file per site. Every action carries the evidence it came from, changes are marked as changes, and recorded tokens or values never reach the file.</p>
+          <code>specs/board/spec.yaml</code>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <h3>Call</h3>
+          <p>Agents call actions as MCP tools or from a shell. Reads run right away. A change returns an approval id and waits until you approve that exact request.</p>
+          <code>itda mcp install claude-desktop</code>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section wrap">
+      <p class="eyebrow">Why not a browser agent</p>
+      <h2>Same website, very different risks.</h2>
+      <div class="compare" role="table">
+        <div class="row head" role="row"><span role="columnheader"></span><span role="columnheader">Browser-driving agent</span><span role="columnheader">itda</span></div>
+        <div class="row" role="row"><span role="rowheader">What the agent sees</span><span>Whole pages, every step</span><span>One action's typed result, capped at 24 KB</span></div>
+        <div class="row" role="row"><span role="rowheader">A redesigned or signed-out page</span><span>Read as data</span><span>An error: <code>response_mismatch</code>, <code>auth_required</code></span></div>
+        <div class="row" role="row"><span role="rowheader">Changes on the site</span><span>Whatever the model decides</span><span>Single-use approval for exact inputs, given by a person</span></div>
+        <div class="row" role="row"><span role="rowheader">"Ignore previous instructions" on a page</span><span>In the prompt</span><span>Marked untrusted data, never a tool</span></div>
+        <div class="row" role="row"><span role="rowheader">Passwords and keys</span><span>Typed into the page by the model</span><span>In the OS keyring; agents see account ids</span></div>
+        <div class="row" role="row"><span role="rowheader">Being blocked</span><span>Retry, rotate, imitate a browser</span><span>Stop, tell you, wait for <code>itda resume</code></span></div>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <p class="eyebrow">Built to be trusted</p>
+      <h2>Safety is the default, not a setting.</h2>
+      <div class="features">
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          <h3>Read-only by default</h3>
+          <p>Every action is classified as a read or a change before it runs. Changes are off until a definition says otherwise, and then still need you.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <h3>Single-use approvals</h3>
+          <p>An approval covers one request with exactly the inputs you saw, expires on its own, and can only be given in your terminal. No agent tool can approve.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v4H9zM9 10h6v4H9zM9 16h6v4H9z"/><path d="M12 8v2M12 14v2"/></svg>
+          <h3>Hash-chained audit log</h3>
+          <p>Every call, approval and change is written to a local log where each entry seals the one before it. <code>itda audit --verify</code> proves nothing was edited.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+          <h3>Verified responses</h3>
+          <p>Each action declares what a correct answer looks like. A login page, a captcha or a redesign comes back as an error with a fix, never as data.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/></svg>
+          <h3>Secrets stay put</h3>
+          <p>API keys and tokens live in the OS keyring and are bound to their site's address. Agents only ever see account names.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+          <h3>Honest client</h3>
+          <p>itda says who it is, never imitates a browser, and stops when a site refuses it. No proxy rotation, no captcha solving, no escalation.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <div class="split">
+        <div>
+          <p class="eyebrow">For agents</p>
+          <h2>Small, stable tool lists.</h2>
+          <p class="section-lede">Up to 30 actions appear as one MCP tool each, with input schemas and read-only, destructive and idempotent hints. Past that, three stable tools keep the list short and prompt caches warm.</p>
+          <ul class="ticks">
+            <li>Same JSON envelope from MCP and <code>itda call --json</code></li>
+            <li>Exit codes an agent can branch on: sign in, page changed, blocked, needs approval</li>
+            <li>Results marked untrusted and capped at 24 KB</li>
+          </ul>
+        </div>
+        <pre class="code"><span class="c"># connect your agent</span>
+<b>$</b> itda mcp install claude-desktop
+<b>$</b> itda mcp install cursor
+
+<span class="c"># or call from any shell</span>
+<b>$</b> itda call board.get-notice --notice_id 42 --json
+<b>$</b> echo $?
+<n>0</n>   <span class="c">ok</span>
+<n>10</n>  <span class="c">sign in again</span>
+<n>11</n>  <span class="c">page no longer matches</span>
+<n>20</n>  <span class="c">needs your approval</span></pre>
+      </div>
+    </section>
+
+    <section class="final wrap">
+      <img src="assets/logo.svg" alt="" width="64" height="64">
+      <h2>Give your agent the website, not the browser.</h2>
+      <div class="cta center">
+        <a class="btn btn-primary" href="docs/quickstart.html">Read the quick start</a>
+        <a class="btn btn-ghost" href="https://github.com/brnyxx/itda-cli/releases/latest">Download v0.1</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <img src="assets/wordmark-dark.svg" alt="itda" height="22">
+      <nav aria-label="Footer">
+        <a href="docs/introduction.html">Docs</a>
+        <a href="docs/THREAT_MODEL.html">Threat model</a>
+        <a href="https://github.com/brnyxx/itda-cli/releases">Releases</a>
+        <a href="https://github.com/brnyxx/itda-cli/blob/main/LICENSE">Apache-2.0</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="main.js" defer></script>
+</body>
+</html>
