@@ -6,6 +6,7 @@ use itda_policy::{
     spec_problems, validate_spec,
 };
 use itda_spec::{self as spec, Spec};
+use itda_store::Store;
 use serde_json::json;
 use std::collections::BTreeMap;
 
@@ -150,15 +151,13 @@ fn request(inputs: &[(&str, &str)]) -> ExecutionRequest {
     }
 }
 
-fn approvals() -> (Approvals, std::path::PathBuf) {
-    let dir = std::env::temp_dir().join(format!("itda-policy-{}", itda_types::util::id()));
-    let store = Approvals::open(&dir.join("approvals.db")).unwrap();
-    (store, dir)
+fn approvals() -> Approvals {
+    Approvals::open(Store::in_memory().unwrap()).unwrap()
 }
 
-#[test]
-fn approvals_are_single_use_and_bound_to_the_exact_request() {
-    let (store, dir) = approvals();
+#[tokio::test]
+async fn approvals_are_single_use_and_bound_to_the_exact_request() {
+    let store = approvals();
     let req = request(&[("title", "Fixture")]);
     let review = store
         .request_approval(
@@ -171,10 +170,17 @@ fn approvals_are_single_use_and_bound_to_the_exact_request() {
                 value: "Fixture".into(),
             }],
         )
+        .await
         .unwrap();
-    assert_eq!(store.pending().unwrap().len(), 1);
+    assert_eq!(store.pending().await.unwrap().len(), 1);
     assert_eq!(
-        store.review(&review.id).unwrap().request.unwrap().inputs,
+        store
+            .review(&review.id)
+            .await
+            .unwrap()
+            .request
+            .unwrap()
+            .inputs,
         req.inputs
     );
 
@@ -182,36 +188,41 @@ fn approvals_are_single_use_and_bound_to_the_exact_request() {
     assert!(
         store
             .consume(&review.id, &request(&[("title", "Other")]))
+            .await
             .is_err()
     );
-    store.claim(&review.id).unwrap();
-    store.consume(&review.id, &req).unwrap();
+    store.claim(&review.id).await.unwrap();
+    store.consume(&review.id, &req).await.unwrap();
     // Second use is refused.
     assert_eq!(
-        store.consume(&review.id, &req).unwrap_err().public_code,
+        store
+            .consume(&review.id, &req)
+            .await
+            .unwrap_err()
+            .public_code,
         "approval_expired"
     );
-    assert!(store.pending().unwrap().is_empty());
-    std::fs::remove_dir_all(dir).ok();
+    assert!(store.pending().await.unwrap().is_empty());
 }
 
-#[test]
-fn rejected_and_invalidated_approvals_cannot_be_used() {
-    let (store, dir) = approvals();
+#[tokio::test]
+async fn rejected_and_invalidated_approvals_cannot_be_used() {
+    let store = approvals();
     let req = request(&[]);
     let first = store
         .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .await
         .unwrap();
-    store.reject(&first.id).unwrap();
-    assert!(store.consume(&first.id, &req).is_err());
+    store.reject(&first.id).await.unwrap();
+    assert!(store.consume(&first.id, &req).await.is_err());
 
     let second = store
         .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .await
         .unwrap();
-    store.invalidate(Some("fixture"), None).unwrap();
-    assert!(store.claim(&second.id).is_err());
-    assert!(store.consume(&second.id, &req).is_err());
-    std::fs::remove_dir_all(dir).ok();
+    store.invalidate(Some("fixture"), None).await.unwrap();
+    assert!(store.claim(&second.id).await.is_err());
+    assert!(store.consume(&second.id, &req).await.is_err());
 }
 
 #[test]

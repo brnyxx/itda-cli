@@ -4,14 +4,16 @@
 //!
 //! Derived from Hycli `src/policy.rs` (`ExecutionRequest`, `Approval`, approval
 //! methods of `Policy`), Apache-2.0. Changes: request pacing moved to the network
-//! layer (`itda_net::Gate`), so this store only holds approvals.
+//! layer (`itda_net::Gate`), so this store only holds approvals, and it runs on
+//! the shared `itda-store` thread.
+use itda_store::{Migration, Store};
 use itda_types::{
     error::{AppError, AppResult},
     util,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::Path, sync::Mutex, time::Duration};
+use std::collections::BTreeMap;
 
 const APPROVAL_TTL_MS: i64 = 5 * 60 * 1000;
 
@@ -53,23 +55,22 @@ pub struct Approval {
     pub request: Option<ExecutionRequest>,
 }
 
+static SCHEMA: Migration = Migration {
+    component: "approvals",
+    steps: &[
+        "CREATE TABLE approvals(id TEXT PRIMARY KEY, digest TEXT NOT NULL, request TEXT NOT NULL, review TEXT NOT NULL, state TEXT NOT NULL, expires_ms INTEGER NOT NULL);",
+    ],
+};
+
 pub struct Approvals {
-    conn: Mutex<Connection>,
+    store: Store,
 }
 impl Approvals {
-    pub fn open(path: &Path) -> AppResult<Self> {
-        if let Some(parent) = path.parent() {
-            util::private_dir(parent)?;
-        }
-        let conn = Connection::open(path)?;
-        conn.busy_timeout(Duration::from_secs(5))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;
-            CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, digest TEXT NOT NULL, request TEXT NOT NULL, review TEXT NOT NULL, state TEXT NOT NULL, expires_ms INTEGER NOT NULL);")?;
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
+    pub fn open(store: Store) -> AppResult<Self> {
+        store.migrate(&SCHEMA)?;
+        Ok(Self { store })
     }
-    pub fn request_approval(
+    pub async fn request_approval(
         &self,
         request: ExecutionRequest,
         site_title: String,
@@ -93,40 +94,49 @@ impl Approvals {
             status: "pending".into(),
             request: Some(request.clone()),
         };
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| AppError::api("internal", 500))?;
-        conn.execute("INSERT INTO approvals(id,digest,request,review,state,expires_ms) VALUES(?1,?2,?3,?4,'pending',?5)", params![review.id, request.digest()?, serde_json::to_string(&request)?, serde_json::to_string(&review)?, expires_ms])?;
+        let row = (
+            review.id.clone(),
+            request.digest()?,
+            serde_json::to_string(&request)?,
+            serde_json::to_string(&review)?,
+        );
+        self.store
+            .call(move |conn| {
+                conn.execute("INSERT INTO approvals(id,digest,request,review,state,expires_ms) VALUES(?1,?2,?3,?4,'pending',?5)", params![row.0, row.1, row.2, row.3, expires_ms])?;
+                Ok(())
+            })
+            .await?;
         Ok(review)
     }
-    pub fn pending(&self) -> AppResult<Vec<Approval>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| AppError::api("internal", 500))?;
-        let mut statement = conn.prepare(
-            "SELECT review FROM approvals WHERE state='pending' AND expires_ms>?1 ORDER BY rowid",
-        )?;
-        let rows = statement.query_map([util::unix_ms()], |r| r.get::<_, String>(0))?;
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(serde_json::from_str(&row?)?);
-        }
-        Ok(result)
+    pub async fn pending(&self) -> AppResult<Vec<Approval>> {
+        self.store
+            .call(|conn| {
+                let mut statement = conn.prepare(
+                    "SELECT review FROM approvals WHERE state='pending' AND expires_ms>?1 ORDER BY rowid",
+                )?;
+                let rows = statement.query_map([util::unix_ms()], |r| r.get::<_, String>(0))?;
+                let mut result = Vec::new();
+                for row in rows {
+                    result.push(serde_json::from_str(&row?)?);
+                }
+                Ok(result)
+            })
+            .await
     }
-    pub fn review(&self, id: &str) -> AppResult<Approval> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| AppError::api("internal", 500))?;
-        let row: Option<(String, String, String, i64)> = conn
-            .query_row(
-                "SELECT review, request, state, expires_ms FROM approvals WHERE id=?1",
-                [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            )
-            .optional()?;
+    pub async fn review(&self, id: &str) -> AppResult<Approval> {
+        let id = id.to_owned();
+        let row: Option<(String, String, String, i64)> = self
+            .store
+            .call(move |conn| {
+                Ok(conn
+                    .query_row(
+                        "SELECT review, request, state, expires_ms FROM approvals WHERE id=?1",
+                        [id],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                    )
+                    .optional()?)
+            })
+            .await?;
         let (review, request, state, expires) =
             row.ok_or_else(|| AppError::api("not_found", 404))?;
         if state != "pending" || expires <= util::unix_ms() {
@@ -138,36 +148,50 @@ impl Approvals {
     }
     /// Call only from the handler that authenticated the approving user.
     /// Consumption happens before any network request, including failed writes.
-    pub fn consume(&self, id: &str, request: &ExecutionRequest) -> AppResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| AppError::api("internal", 500))?;
-        let affected = conn.execute("UPDATE approvals SET state='consumed' WHERE id=?1 AND digest=?2 AND state IN ('pending','approved') AND expires_ms>?3", params![id, request.digest()?, util::unix_ms()])?;
-        if affected != 1 {
+    pub async fn consume(&self, id: &str, request: &ExecutionRequest) -> AppResult<()> {
+        let (id, digest) = (id.to_owned(), request.digest()?);
+        self.changed_once(move |conn| {
+            Ok(conn.execute("UPDATE approvals SET state='consumed' WHERE id=?1 AND digest=?2 AND state IN ('pending','approved') AND expires_ms>?3", params![id, digest, util::unix_ms()])?)
+        })
+        .await
+    }
+    pub async fn reject(&self, id: &str) -> AppResult<()> {
+        let id = id.to_owned();
+        self.store
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE approvals SET state='rejected' WHERE id=?1 AND state='pending'",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+    pub async fn claim(&self, id: &str) -> AppResult<()> {
+        let id = id.to_owned();
+        self.changed_once(move |conn| {
+            Ok(conn.execute("UPDATE approvals SET state='approved' WHERE id=?1 AND state='pending' AND expires_ms>?2", params![id, util::unix_ms()])?)
+        })
+        .await
+    }
+    pub async fn invalidate(&self, site: Option<&str>, account: Option<&str>) -> AppResult<()> {
+        let (site, account) = (site.map(str::to_owned), account.map(str::to_owned));
+        self.store
+            .call(move |conn| {
+                conn.execute("UPDATE approvals SET state='rejected' WHERE state IN ('pending','approved') AND ((?1 IS NOT NULL AND json_extract(request,'$.site_id')=?1) OR (?2 IS NOT NULL AND json_extract(request,'$.account_id')=?2))", params![site, account])?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Run an update that must change exactly one pending approval.
+    async fn changed_once<F>(&self, update: F) -> AppResult<()>
+    where
+        F: FnOnce(&mut Connection) -> AppResult<usize> + Send + 'static,
+    {
+        if self.store.call(update).await? != 1 {
             return Err(AppError::api("approval_expired", 409));
         }
-        Ok(())
-    }
-    pub fn reject(&self, id: &str) -> AppResult<()> {
-        self.conn
-            .lock()
-            .map_err(|_| AppError::api("internal", 500))?
-            .execute(
-                "UPDATE approvals SET state='rejected' WHERE id=?1 AND state='pending'",
-                [id],
-            )?;
-        Ok(())
-    }
-    pub fn claim(&self, id: &str) -> AppResult<()> {
-        let changed=self.conn.lock().map_err(|_|AppError::api("internal",500))?.execute("UPDATE approvals SET state='approved' WHERE id=?1 AND state='pending' AND expires_ms>?2",params![id,util::unix_ms()])?;
-        if changed != 1 {
-            return Err(AppError::api("approval_expired", 409));
-        }
-        Ok(())
-    }
-    pub fn invalidate(&self, site: Option<&str>, account: Option<&str>) -> AppResult<()> {
-        self.conn.lock().map_err(|_|AppError::api("internal",500))?.execute("UPDATE approvals SET state='rejected' WHERE state IN ('pending','approved') AND ((?1 IS NOT NULL AND json_extract(request,'$.site_id')=?1) OR (?2 IS NOT NULL AND json_extract(request,'$.account_id')=?2))",params![site,account])?;
         Ok(())
     }
 }
