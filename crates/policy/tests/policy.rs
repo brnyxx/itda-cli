@@ -1,7 +1,10 @@
 //! Classification cases are derived from Hycli `src/integration_tests.rs`
 //! (Apache-2.0); approval and validation cases are new.
 #![allow(clippy::unwrap_used)]
-use itda_policy::{Effect, operation_effect, safe_read_url, validate_spec};
+use itda_policy::{
+    Approvals, Effect, ExecutionRequest, ReviewInput, operation_effect, safe_read_url,
+    validate_spec,
+};
 use itda_spec::{self as spec, Spec};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -131,6 +134,84 @@ fn path_arguments_and_nested_controls_keep_changes_behind_review() {
         ),
         Effect::Write
     );
+}
+
+fn request(inputs: &[(&str, &str)]) -> ExecutionRequest {
+    ExecutionRequest {
+        site_id: "fixture".into(),
+        action_id: "create-item".into(),
+        account_id: "acct".into(),
+        inputs: inputs
+            .iter()
+            .map(|(k, v)| ((*k).into(), (*v).into()))
+            .collect(),
+        spec_hash: "spec-hash".into(),
+        credential_hash: "cred-hash".into(),
+    }
+}
+
+fn approvals() -> (Approvals, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("itda-policy-{}", itda_types::util::id()));
+    let store = Approvals::open(&dir.join("approvals.db")).unwrap();
+    (store, dir)
+}
+
+#[test]
+fn approvals_are_single_use_and_bound_to_the_exact_request() {
+    let (store, dir) = approvals();
+    let req = request(&[("title", "Fixture")]);
+    let review = store
+        .request_approval(
+            req.clone(),
+            "Fixture".into(),
+            "Create item".into(),
+            "Account".into(),
+            vec![ReviewInput {
+                label: "title".into(),
+                value: "Fixture".into(),
+            }],
+        )
+        .unwrap();
+    assert_eq!(store.pending().unwrap().len(), 1);
+    assert_eq!(
+        store.review(&review.id).unwrap().request.unwrap().inputs,
+        req.inputs
+    );
+
+    // A different input does not match the approved digest.
+    assert!(
+        store
+            .consume(&review.id, &request(&[("title", "Other")]))
+            .is_err()
+    );
+    store.claim(&review.id).unwrap();
+    store.consume(&review.id, &req).unwrap();
+    // Second use is refused.
+    assert_eq!(
+        store.consume(&review.id, &req).unwrap_err().public_code,
+        "approval_expired"
+    );
+    assert!(store.pending().unwrap().is_empty());
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn rejected_and_invalidated_approvals_cannot_be_used() {
+    let (store, dir) = approvals();
+    let req = request(&[]);
+    let first = store
+        .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .unwrap();
+    store.reject(&first.id).unwrap();
+    assert!(store.consume(&first.id, &req).is_err());
+
+    let second = store
+        .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .unwrap();
+    store.invalidate(Some("fixture"), None).unwrap();
+    assert!(store.claim(&second.id).is_err());
+    assert!(store.consume(&second.id, &req).is_err());
+    std::fs::remove_dir_all(dir).ok();
 }
 
 #[test]

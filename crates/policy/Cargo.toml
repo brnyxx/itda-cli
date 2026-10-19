@@ -8,11 +8,14 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-itda-types.workspace = true
+itda-types = { workspace = true, features = ["sqlite"] }
 itda-html.workspace = true
 itda-spec.workspace = true
+chrono.workspace = true
 graphql-parser.workspace = true
 regex.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 url.workspace = true
 
