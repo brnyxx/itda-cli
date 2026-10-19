@@ -176,3 +176,61 @@ fn the_sandbox_definition_is_valid() {
     let spec = itda_spec::parse(&std::fs::read(path).unwrap()).unwrap();
     itda_policy::validate_spec(&spec).unwrap();
 }
+
+#[tokio::test]
+async fn mcp_serves_installed_actions_over_stdio() {
+    use std::io::Write;
+    let home = home();
+    install(&home, "http://127.0.0.1:9");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_itda"))
+        .arg("mcp")
+        .env("ITDA_HOME", &home)
+        .env("ITDA_SECRET_STORE", "env")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let messages = [
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}}}),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+    ];
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        for message in messages {
+            writeln!(stdin, "{message}").unwrap();
+        }
+    }
+    let stdout = child.stdout.take().unwrap();
+    let lines = tokio::task::spawn_blocking(move || {
+        use std::io::BufRead;
+        std::io::BufReader::new(stdout)
+            .lines()
+            .take(2)
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+    })
+    .await
+    .unwrap();
+    drop(child.stdin.take());
+    child.wait().unwrap();
+
+    // Every line on stdout is protocol.
+    let replies: Vec<Value> = lines
+        .iter()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies[0]["result"]["serverInfo"]["name"], "itda");
+    let names: Vec<&str> = replies[1]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        ["fixture.create-item", "fixture.list-items", "fixture.me"]
+    );
+    std::fs::remove_dir_all(home).ok();
+}

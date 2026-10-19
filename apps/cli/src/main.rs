@@ -68,6 +68,13 @@ enum Command {
     },
     /// Check the data directory, the keyring and the installed sites
     Doctor,
+    /// Serve installed actions to an AI agent over MCP (stdio)
+    Mcp {
+        /// direct: one tool per action. catalog: search, describe and call.
+        /// Chosen from the number of actions when left out
+        #[arg(long, value_parser = ["direct", "catalog"])]
+        mode: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -85,6 +92,7 @@ fn main() -> ExitCode {
         } => block_on(login(&home, &site, &account, &secret, &label)),
         Command::Resume { site, account } => block_on(resume(&home, &site, account.as_deref())),
         Command::Doctor => Ok(doctor(&home)),
+        Command::Mcp { mode } => block_on(mcp(&home, mode.as_deref())),
     });
     match result {
         Ok(code) => code,
@@ -309,6 +317,31 @@ async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<Exi
         net.resume(origin, account.unwrap_or_default()).await?;
     }
     eprintln!("Resumed {site}.");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Serve MCP on stdin and stdout. Stdout belongs to the protocol, so nothing
+/// else is printed there; invalid sites are reported on stderr and skipped.
+async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
+    let mut specs = Vec::new();
+    for site in sites::list(home) {
+        match site.spec {
+            Ok(spec) => specs.push(spec),
+            Err(error) => eprintln!("itda: skipping {}: {}", site.name, error.msg),
+        }
+    }
+    let mode = match mode {
+        Some("direct") => Some(itda_mcp::Mode::Direct),
+        Some("catalog") => Some(itda_mcp::Mode::Catalog),
+        _ => None,
+    };
+    let parts = open(home)?;
+    let runtime = Arc::new(Runtime::new(parts.net, parts.vault));
+    let server = itda_mcp::Server::new(runtime, itda_mcp::Catalog::new(specs), mode);
+    server
+        .serve_stdio()
+        .await
+        .map_err(|e| usage(format!("MCP session ended: {e}"), "Restart the MCP client."))?;
     Ok(ExitCode::SUCCESS)
 }
 

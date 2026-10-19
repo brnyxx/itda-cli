@@ -1412,6 +1412,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "itda-mcp",
  "itda-net",
  "itda-policy",
  "itda-runtime",
