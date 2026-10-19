@@ -7,16 +7,10 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
-### Added
-
-- `itda draft har`: draft a site definition from a browser recording of you
-  using the site. Only the shape of each call is kept; recorded tokens,
-  cookies and values never reach the draft.
-
 ## [0.1.0] - 2026-10-19
 
 The first release: reads and approved changes on plain HTTP sites with API
-keys, from the command line or over MCP, and definitions drafted from OpenAPI.
+keys, from the command line or over MCP, and definitions drafted from OpenAPI documents or browser recordings.
 
 ### Added
 
@@ -30,6 +24,9 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI.
 - `itda draft openapi`: draft a site definition from an OpenAPI 3 or
   Swagger 2.0 document, with response checks, header auth and a list of what
   could not be translated. `--install` puts it in the data directory.
+- `itda draft har`: draft a site definition from a browser recording of you
+  using the site. Only the shape of each call is kept; recorded tokens,
+  cookies and values never reach the draft.
 - `itda mcp install` for Claude Desktop, Cursor, VS Code and Codex, and the
   `claude mcp add` command for Claude Code. Existing settings are kept and
   backed up.
