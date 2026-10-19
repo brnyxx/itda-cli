@@ -1,0 +1,19 @@
+[package]
+name = "itda-spec"
+description = "SiteSpec: the portable, declarative definition of a website's typed actions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types.workspace = true
+itda-html.workspace = true
+graphql-parser.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+
+[lints]
+workspace = true

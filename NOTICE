@@ -1,0 +1,10 @@
+itda-cli
+Copyright 2026 the itda contributors
+
+This product includes software derived from Hycli
+(https://github.com/Hybirdss/Hycli), licensed under the Apache License,
+Version 2.0. Copyright the Hycli contributors.
+
+Files that contain code derived from Hycli say so in their header comment and
+describe how they were changed. "Hycli" and its marks are not used by this
+project and are not covered by this notice.
