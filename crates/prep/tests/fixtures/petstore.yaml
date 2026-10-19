@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: Pet Store
+  version: 1.2.0
+servers:
+  - url: https://{region}.pets.example/v1
+    variables:
+      region: {default: api}
+security:
+  - apiKey: []
+components:
+  securitySchemes:
+    apiKey: {type: apiKey, in: header, name: X-Api-Key}
+    oauth: {type: oauth2, flows: {}}
+  parameters:
+    PetId: {name: petId, in: path, required: true, schema: {type: integer}}
+  schemas:
+    Pet:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: integer, readOnly: true}
+        name: {type: string}
+        tag: {type: string}
+        vaccinated: {type: boolean, default: false}
+    PetList:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Pet'}}
+        total: {type: integer}
+  requestBodies:
+    NewPet:
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Pet'}
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List pets, newest first
+      tags: [pets]
+      security: []
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, default: 20}}
+        - {name: X-Trace, in: header, schema: {type: string}}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PetList'}
+    post:
+      operationId: createPet
+      summary: Add a pet
+      tags: [pets]
+      requestBody: {$ref: '#/components/requestBodies/NewPet'}
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+  /pets/{petId}:
+    parameters:
+      - $ref: '#/components/parameters/PetId'
+    get:
+      operationId: showPetById
+      summary: Show one pet
+      tags: [pets]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+    delete:
+      operationId: deletePet
+      tags: [admin]
+      security:
+        - oauth: []
+      responses:
+        '204': {description: gone}
+  /pets/{petId}/photo:
+    parameters:
+      - $ref: '#/components/parameters/PetId'
+    put:
+      operationId: uploadPhoto
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: {type: object}
+      responses:
+        '200': {description: ok}
+  /legacy:
+    get:
+      operationId: legacy
+      deprecated: true
+      responses:
+        '200': {description: ok}
