@@ -130,7 +130,7 @@ async fn exit_codes_follow_the_contract() {
 
     let write = itda(&home, &["call", "fixture.create-item", "--json"], &[]).await;
     assert_eq!(write.status.code(), Some(20));
-    assert_eq!(stdout_json(&write)["status"], "writes_disabled");
+    assert_eq!(stdout_json(&write)["status"], "approval_required");
 
     let signed_out = itda(&home, &["call", "fixture.me"], &[]).await;
     assert_eq!(signed_out.status.code(), Some(10));
@@ -252,5 +252,34 @@ async fn mcp_install_dry_run_shows_the_change() {
 
     let unknown = itda(&home, &["mcp", "install", "notepad"], &[]).await;
     assert_eq!(unknown.status.code(), Some(2));
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn changes_wait_for_a_person_to_approve_them() {
+    let home = home();
+    install(&home, &serve().await);
+    let write = itda(&home, &["call", "fixture.create-item", "--json"], &[]).await;
+    let id = stdout_json(&write)["approval"].as_str().unwrap().to_owned();
+
+    let pending = stdout_json(&itda(&home, &["approvals", "--json"], &[]).await);
+    assert_eq!(pending[0]["id"], id.as_str());
+    assert_eq!(pending[0]["action_id"], "create-item");
+
+    // Without a terminal nobody can answer the question, so nothing is approved.
+    let piped = itda(&home, &["approve", &id], &[]).await;
+    assert_eq!(piped.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&piped.stdout).contains("POST"));
+    let early = itda(
+        &home,
+        &["call", "fixture.create-item", "--approval", &id, "--json"],
+        &[],
+    )
+    .await;
+    assert_eq!(early.status.code(), Some(21));
+
+    assert!(itda(&home, &["reject", &id], &[]).await.status.success());
+    let none = itda(&home, &["approvals"], &[]).await;
+    assert!(String::from_utf8_lossy(&none.stdout).contains("No changes"));
     std::fs::remove_dir_all(home).ok();
 }

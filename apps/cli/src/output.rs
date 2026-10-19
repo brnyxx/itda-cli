@@ -14,6 +14,7 @@ pub fn exit_code(public_code: &str) -> u8 {
         "rate_limited" | "site_rate_limited" => 13,
         "approval_required" | "writes_disabled" => 20,
         "approval_expired" => 21,
+        "action_outcome_unknown" => 22,
         "request_failed" | "timeout" | "too_large" => 30,
         _ => 1,
     }
@@ -22,12 +23,11 @@ pub fn exit_code(public_code: &str) -> u8 {
 /// Report an error on stdout as a JSON envelope, or on stderr for people.
 pub fn fail(error: &AppError, as_json: bool) -> ExitCode {
     if as_json {
-        let envelope = json!({
-            "status": error.public_code,
-            "message": error.msg,
-            "remedy": error.remedy,
-        });
-        println!("{envelope}");
+        let mut envelope = error.extra.clone();
+        envelope.insert("status".into(), json!(error.public_code));
+        envelope.insert("message".into(), json!(error.msg));
+        envelope.insert("remedy".into(), json!(error.remedy));
+        println!("{}", serde_json::Value::Object(envelope));
     } else {
         if error.msg == error.public_code {
             eprintln!("error[{}]", error.public_code);
