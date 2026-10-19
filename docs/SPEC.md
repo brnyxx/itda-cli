@@ -46,7 +46,9 @@ only the shape of each call: method, path, input names and types, and the
 response fields every sample returned. Numbers and ids in paths become
 placeholders (`/notices/42` becomes `/notices/{notice_id}`). Inputs every
 sample sent are marked required. Token headers become `auth` entries whose
-values you add with `itda login`; CSRF and session fields are left out and
+values you add with `itda login`. Calls that sent a sign-in cookie (by name,
+such as `JSESSIONID` or `SID`) and no token get a `kind: browser` entry, so
+`itda login <site> --browser` signs them in. CSRF and session fields are left out and
 listed, since they come from sign-in or a `preflight` step, never from the
 agent. Calls to other addresses, file uploads and failed calls are skipped.
 Delete the HAR file when you are done with it.
