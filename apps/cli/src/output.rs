@@ -29,7 +29,11 @@ pub fn fail(error: &AppError, as_json: bool) -> ExitCode {
         });
         println!("{envelope}");
     } else {
-        eprintln!("error[{}]: {}", error.public_code, error.msg);
+        if error.msg == error.public_code {
+            eprintln!("error[{}]", error.public_code);
+        } else {
+            eprintln!("error[{}]: {}", error.public_code, error.msg);
+        }
         if !error.remedy.is_empty() {
             eprintln!("  fix: {}", error.remedy);
         }

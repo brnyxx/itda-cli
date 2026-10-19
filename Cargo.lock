@@ -1455,6 +1455,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itda-sandbox"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "itda-spec"
 version = "0.1.0"
 dependencies = [
