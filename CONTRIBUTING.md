@@ -64,3 +64,12 @@ CI runs the same checks on Linux, macOS and Windows.
 A file that contains code derived from Hycli says so in its header comment,
 names the original file and describes what changed. Keep that header when you
 edit the file.
+
+## Releasing
+
+1. Move the `Unreleased` notes in CHANGELOG.md under the new version and bump
+   `version` in the root Cargo.toml.
+2. On GitHub, open Actions → Release → Run workflow, and enter the tag, such as
+   `v0.2.0`. The workflow builds every platform, creates the tag and publishes
+   the release with the installers. Leave the default `dry-run` to build
+   without publishing.
