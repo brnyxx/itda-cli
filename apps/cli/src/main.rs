@@ -1,6 +1,7 @@
 //! The `itda` command. This is the composition root: it picks the data
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
+mod install;
 mod output;
 mod sites;
 
@@ -70,10 +71,23 @@ enum Command {
     Doctor,
     /// Serve installed actions to an AI agent over MCP (stdio)
     Mcp {
+        #[command(subcommand)]
+        command: Option<McpCommand>,
         /// direct: one tool per action. catalog: search, describe and call.
         /// Chosen from the number of actions when left out
         #[arg(long, value_parser = ["direct", "catalog"])]
         mode: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpCommand {
+    /// Add itda to an MCP client: claude-desktop, claude-code, cursor, vscode or codex
+    Install {
+        client: String,
+        /// Show the change without writing it
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -92,7 +106,14 @@ fn main() -> ExitCode {
         } => block_on(login(&home, &site, &account, &secret, &label)),
         Command::Resume { site, account } => block_on(resume(&home, &site, account.as_deref())),
         Command::Doctor => Ok(doctor(&home)),
-        Command::Mcp { mode } => block_on(mcp(&home, mode.as_deref())),
+        Command::Mcp {
+            command: Some(McpCommand::Install { client, dry_run }),
+            ..
+        } => mcp_install(&client, dry_run),
+        Command::Mcp {
+            command: None,
+            mode,
+        } => block_on(mcp(&home, mode.as_deref())),
     });
     match result {
         Ok(code) => code,
@@ -342,6 +363,42 @@ async fn mcp(home: &Path, mode: Option<&str>) -> AppResult<ExitCode> {
         .serve_stdio()
         .await
         .map_err(|e| usage(format!("MCP session ended: {e}"), "Restart the MCP client."))?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn mcp_install(client: &str, dry_run: bool) -> AppResult<ExitCode> {
+    let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from)
+        .ok_or_else(|| usage("No home directory was found", "Set HOME and try again."))?;
+    let exe = std::env::current_exe()?;
+    // Clients start itda without this shell's environment, so the settings
+    // that change where data lives or what may be reached are passed along.
+    let env = ["ITDA_HOME", "ITDA_ALLOW_LOCAL", "ITDA_SECRET_STORE"]
+        .into_iter()
+        .filter_map(|name| Some((name.to_owned(), std::env::var(name).ok()?)))
+        .collect();
+    let launch = install::Launch {
+        command: exe.display().to_string(),
+        env,
+    };
+    match install::plan(client, &user_home, &std::env::current_dir()?, &launch)? {
+        install::Plan::Run(command) => {
+            println!("{client} keeps its own configuration. Run:\n\n  {command}");
+        }
+        install::Plan::Write { path, content } if dry_run => {
+            println!("Would write {}:\n\n{content}", path.display());
+        }
+        install::Plan::Write { path, content } => {
+            if install::apply(&path, &content)? {
+                println!(
+                    "Added itda to {client} ({}). Restart {client} to load it.",
+                    path.display()
+                );
+            } else {
+                println!("{client} already runs itda ({}).", path.display());
+            }
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
