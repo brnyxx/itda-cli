@@ -1,27 +1,30 @@
-# itda
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
+    <img src="assets/wordmark-light.svg" alt="itda" width="240">
+  </picture>
+</p>
 
-**Don't drive the browser. Compile the site.**
+<p align="center"><strong>Don't drive the browser. Compile the site.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml"><img src="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/brnyxx/itda-cli/releases"><img src="https://img.shields.io/github/v/release/brnyxx/itda-cli?include_prereleases&amp;label=release" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+  <a href="https://brnyxx.github.io/itda-cli/">Docs</a>
+</p>
 
 itda turns a website into a small set of verified, typed actions that an AI
 agent can call from the command line or over MCP. It runs on your own
 machine, reads by default, and never changes anything on a site until you
 approve that exact change.
 
-```console
-$ itda call sandbox.list-notices --q 점검 --json
-{"action":"list-notices","data":{"items":[{"author":"운영팀","date":"2026-10-01","id":1,
-"title":"10월 정기 점검 안내"}],"total":1},"effect":"read","meta":{…},"site":"sandbox",
-"status":"ok","untrusted":true}
+<p align="center"><img src="assets/hero.svg" alt="itda drafts a site definition from an OpenAPI file, reads freely, and waits for a person to approve a change" width="860"></p>
 
-$ itda call sandbox.create-notice --title "점검 공지"
-error[approval_required]: sandbox.create-notice changes the site and waits for the user's approval 9e96…
-  fix: Ask the user to run `itda approve 9e96…`, then call again with approval 9e96….
-```
-
-> Status: early. The runtime, CLI, MCP server, approvals and audit log work
-> today against plain HTTP sites with API keys. Browser sign-in, automatic
-> definition drafting and signed site packs are next. See
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> Status: early. The runtime, CLI, MCP server, approvals, audit log and
+> drafting from OpenAPI work today against plain HTTP sites with API keys.
+> Drafting from browser recordings, browser sign-in and signed site packs are
+> next. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Why
 
