@@ -47,7 +47,9 @@ pub struct Defaults {
     pub headers: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub timeout: String,
-    #[serde(default)]
+    /// Ignored. Kept so v1 specs that set it still parse; requests never imitate
+    /// another client's TLS fingerprint.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tls_profile: String,
 }
 
@@ -226,9 +228,6 @@ pub fn parse(data: &[u8]) -> AppResult<Spec> {
     }
     if s.defaults.timeout.is_empty() {
         s.defaults.timeout = "15s".into();
-    }
-    if s.defaults.tls_profile.is_empty() {
-        s.defaults.tls_profile = "go".into();
     }
     if s.auth.is_empty() {
         s.auth.push(AuthStrategy {
