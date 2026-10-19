@@ -1,0 +1,42 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "book.toml", "CHANGELOG.md", ".github/workflows/docs.yml"]
+  pull_request:
+    paths: ["docs/**", "book.toml", "CHANGELOG.md", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
+      - name: Install mdBook
+        run: cargo install mdbook --version 0.5.4 --locked
+      - name: Build
+        run: mdbook build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: book
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
