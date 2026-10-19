@@ -8,7 +8,10 @@ mod sites;
 use clap::{Parser, Subcommand};
 use itda_net::{Gate, Network};
 use itda_policy::{Approvals, operation_effect};
-use itda_runtime::{Call, Runtime};
+use itda_runtime::{
+    Call, Runtime,
+    audit::{AuditLog, Event},
+};
 use itda_store::Store;
 use itda_types::error::{AppError, AppResult, usage};
 use itda_vault::{EnvStore, KeyringStore, Secret, SecretStore, Vault};
@@ -76,6 +79,15 @@ enum Command {
     Approve { id: String },
     /// Refuse a change an agent asked for
     Reject { id: String },
+    /// Show what agents did, newest last; --verify checks the log was not changed
+    Audit {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[arg(long)]
+        verify: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// Check the data directory, the keyring and the installed sites
     Doctor,
     /// Serve installed actions to an AI agent over MCP (stdio)
@@ -104,6 +116,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let as_json = matches!(&cli.command, Command::Ls { json: true, .. })
         || matches!(&cli.command, Command::Approvals { json: true })
+        || matches!(&cli.command, Command::Audit { json: true, .. })
         || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match cli.command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
@@ -118,6 +131,11 @@ fn main() -> ExitCode {
         Command::Approvals { json } => block_on(approvals(&home, json)),
         Command::Approve { id } => block_on(approve(&home, &id)),
         Command::Reject { id } => block_on(reject(&home, &id)),
+        Command::Audit {
+            limit,
+            verify,
+            json,
+        } => audit(&home, limit, verify, json),
         Command::Doctor => Ok(doctor(&home)),
         Command::Mcp {
             command: Some(McpCommand::Install { client, dry_run }),
@@ -169,13 +187,21 @@ struct Parts {
     net: Arc<Network>,
     vault: Arc<Vault>,
     approvals: Arc<Approvals>,
+    audit: Arc<AuditLog>,
 }
 
 impl Parts {
-    /// Reads run directly; changes wait for the user's approval.
+    /// Reads run directly; changes wait for the user's approval. Everything
+    /// is recorded in the audit log.
     fn runtime(self) -> Runtime {
-        Runtime::new(self.net, self.vault).with_approvals(self.approvals)
+        Runtime::new(self.net, self.vault)
+            .with_approvals(self.approvals)
+            .with_audit(self.audit)
     }
+}
+
+fn audit_log(home: &Path) -> AuditLog {
+    AuditLog::new(home.join("audit.jsonl"))
 }
 
 fn open(home: &Path) -> AppResult<Parts> {
@@ -184,6 +210,7 @@ fn open(home: &Path) -> AppResult<Parts> {
     Ok(Parts {
         net: Arc::new(Network::new(gate, allow_local())),
         approvals: Arc::new(Approvals::open(store.clone())?),
+        audit: Arc::new(audit_log(home)),
         vault: Arc::new(Vault::open(store, secret_store())?),
     })
 }
@@ -434,19 +461,86 @@ async fn approve(home: &Path, id: &str) -> AppResult<ExitCode> {
     stdin.lock().read_line(&mut answer)?;
     if !matches!(answer.trim(), "y" | "Y" | "yes") {
         store.reject(id).await?;
+        record_decision(home, &review, "rejected")?;
         println!("Rejected.");
         return Ok(ExitCode::SUCCESS);
     }
     store.claim(id).await?;
+    record_decision(home, &review, "approved")?;
     println!("Approved. The agent can now run it once, with exactly these inputs.");
     Ok(ExitCode::SUCCESS)
 }
 
 async fn reject(home: &Path, id: &str) -> AppResult<ExitCode> {
     let store = approvals_store(home)?;
-    store.review(id).await?;
+    let review = store.review(id).await?;
     store.reject(id).await?;
+    record_decision(home, &review, "rejected")?;
     println!("Rejected.");
+    Ok(ExitCode::SUCCESS)
+}
+
+fn record_decision(
+    home: &Path,
+    review: &itda_policy::Approval,
+    kind: &'static str,
+) -> AppResult<()> {
+    audit_log(home).append(Event {
+        kind,
+        site: review.site_id.clone(),
+        action: review.action_id.clone(),
+        account: review.account_id.clone(),
+        approval: review.id.clone(),
+        inputs: review
+            .request
+            .as_ref()
+            .map(|r| r.inputs.clone())
+            .unwrap_or_default(),
+        outcome: "ok".into(),
+        ..Event::default()
+    })?;
+    Ok(())
+}
+
+fn audit(home: &Path, limit: usize, verify: bool, as_json: bool) -> AppResult<ExitCode> {
+    let log = audit_log(home);
+    if verify {
+        let count = log.verify()?;
+        if as_json {
+            println!("{}", json!({"status": "ok", "records": count}));
+        } else {
+            println!(
+                "The audit log is intact: {count} records in {}.",
+                log.path().display()
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let records = log.records()?;
+    let recent = &records[records.len().saturating_sub(limit)..];
+    if as_json {
+        println!("{}", serde_json::to_value(recent)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    if recent.is_empty() {
+        println!("Nothing recorded yet.");
+    }
+    for r in recent {
+        println!(
+            "{:>5}  {}  {:<15} {}.{}  {}{}",
+            r.seq,
+            r.at,
+            r.kind,
+            r.site,
+            r.action,
+            r.outcome,
+            if r.approval.is_empty() {
+                String::new()
+            } else {
+                format!("  approval {}", r.approval)
+            }
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -534,6 +628,10 @@ fn doctor(home: &Path) -> ExitCode {
             "secrets",
             format!("{msg}; set ITDA_SECRET_STORE=env for headless runs"),
         ),
+    }
+    match audit_log(home).verify() {
+        Ok(count) => report(true, "audit log", format!("{count} records, chain intact")),
+        Err(error) => report(false, "audit log", error.msg),
     }
     let installed = sites::list(home);
     let invalid = installed.iter().filter(|s| s.spec.is_err()).count();
