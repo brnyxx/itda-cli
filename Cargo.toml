@@ -19,6 +19,7 @@ itda-spec = { path = "crates/spec" }
 itda-policy = { path = "crates/policy" }
 itda-net = { path = "crates/net" }
 itda-vault = { path = "crates/vault" }
+itda-browser = { path = "crates/browser" }
 itda-runtime = { path = "crates/runtime" }
 itda-mcp = { path = "crates/mcp" }
 itda-prep = { path = "crates/prep" }
@@ -41,6 +42,7 @@ serde_json = "1.0.151"
 serde_norway = "0.9.42"
 sha2 = "0.11.0"
 tokio = { version = "1.53.2", features = ["full"] }
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 url = "2.5.8"
 uuid = { version = "1.27.0", features = ["v4"] }
 
