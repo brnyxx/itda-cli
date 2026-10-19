@@ -1350,8 +1350,11 @@ dependencies = [
 name = "itda-vault"
 version = "0.1.0"
 dependencies = [
+ "itda-store",
  "itda-types",
  "keyring",
+ "rusqlite",
+ "serde",
  "serde_json",
  "tokio",
 ]

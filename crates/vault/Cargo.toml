@@ -9,7 +9,11 @@ publish.workspace = true
 
 [dependencies]
 itda-types = { workspace = true, features = ["sqlite"] }
+itda-store.workspace = true
 keyring.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
 serde_json.workspace = true
