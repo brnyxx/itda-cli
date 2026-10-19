@@ -12,6 +12,11 @@
 //! anything is sent. Without an approval store, changes are refused.
 //! Preflight steps and browser credentials are refused until their stages
 //! exist.
+//!
+//! With an audit log, every call is recorded with its outcome, and a change
+//! is recorded before it is sent: if that record cannot be written, the
+//! change is not sent.
+pub mod audit;
 use itda_net::{Network, Request};
 use itda_policy::{
     Approvals, Effect, ExecutionRequest, ReviewInput, operation_effect, validate_spec,
@@ -34,6 +39,7 @@ pub struct Runtime {
     net: Arc<Network>,
     vault: Arc<Vault>,
     approvals: Option<Arc<Approvals>>,
+    audit: Option<Arc<audit::AuditLog>>,
 }
 
 /// One action call. `account` is only needed for actions with credentials.
@@ -71,7 +77,14 @@ impl Runtime {
             net,
             vault,
             approvals: None,
+            audit: None,
         }
+    }
+
+    /// Record every call in this log.
+    pub fn with_audit(mut self, log: Arc<audit::AuditLog>) -> Self {
+        self.audit = Some(log);
+        self
     }
 
     /// Allow changes that the user approves through this store.
@@ -81,6 +94,49 @@ impl Runtime {
     }
 
     pub async fn call(&self, spec: &Spec, call: Call) -> AppResult<Envelope> {
+        let result = self.run(spec, &call).await;
+        if let Some(log) = &self.audit {
+            let mut event = self.event(spec, &call, "call");
+            match &result {
+                Ok(envelope) => {
+                    event.outcome = "ok".into();
+                    event.http_status = envelope.meta.http_status;
+                }
+                Err(error) => {
+                    event.outcome = error.public_code.clone();
+                    if let Some(id) = error.extra.get("approval").and_then(Value::as_str) {
+                        event.approval = id.to_owned();
+                    }
+                }
+            }
+            // The call already happened; a failed record must not hide its
+            // result. Changes were recorded before they were sent.
+            let _ = log.append(event);
+        }
+        result
+    }
+
+    fn event(&self, spec: &Spec, call: &Call, kind: &'static str) -> audit::Event {
+        let op = spec.op(&call.action).ok();
+        audit::Event {
+            kind,
+            site: spec.site.name.clone(),
+            action: call.action.clone(),
+            effect: op
+                .map(|op| operation_effect(op, &call.args).as_str().to_owned())
+                .unwrap_or_default(),
+            account: match (op, &call.account) {
+                (_, Some(account)) => account.clone(),
+                (Some(op), None) if !op.auth.is_empty() => DEFAULT_ACCOUNT.into(),
+                _ => String::new(),
+            },
+            approval: call.approval.clone().unwrap_or_default(),
+            inputs: call.args.clone(),
+            ..audit::Event::default()
+        }
+    }
+
+    async fn run(&self, spec: &Spec, call: &Call) -> AppResult<Envelope> {
         validate_spec(spec)?;
         let op = spec.op(&call.action)?;
         check_inputs(op, &call.args)?;
@@ -169,6 +225,11 @@ impl Runtime {
                     return Err(error);
                 }
                 Some(id) => approvals.consume(id, &execution).await?,
+            }
+            if let Some(log) = &self.audit {
+                let mut event = self.event(spec, call, "change_started");
+                event.outcome = "sending".into();
+                log.append(event)?;
             }
             // A change is sent once: no retries and no redirects.
             request.read_only = false;

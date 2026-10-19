@@ -263,3 +263,54 @@ async fn a_change_runs_once_with_the_users_approval_for_exactly_those_inputs() {
     assert_eq!(error.public_code, "approval_expired");
     assert_eq!(site.hits.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn the_audit_log_records_calls_and_changes_before_they_are_sent() {
+    use itda_runtime::audit::AuditLog;
+    let site = site().await;
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let dir = std::env::temp_dir().join(format!("itda-runtime-audit-{}", itda_types::util::id()));
+    let log = Arc::new(AuditLog::new(dir.join("audit.jsonl")));
+    let runtime = Runtime::new(Arc::new(Network::new(gate, true)), vault)
+        .with_approvals(approvals.clone())
+        .with_audit(log.clone());
+    let spec = spec(&site.base);
+
+    runtime.call(&spec, call("list-items", &[])).await.unwrap();
+    let error = runtime
+        .call(&spec, call("create-item", &[("title", "private words")]))
+        .await
+        .unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
+    let mut approved = call("create-item", &[("title", "private words")]);
+    approved.approval = Some(id.clone());
+    runtime.call(&spec, approved).await.unwrap();
+
+    let records = log.records().unwrap();
+    let summary: Vec<(&str, &str)> = records
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            ("call", "ok"),
+            ("call", "approval_required"),
+            ("change_started", "sending"),
+            ("call", "ok")
+        ]
+    );
+    assert_eq!(records[1].approval, id);
+    assert_eq!(records[3].effect, "write");
+    assert_eq!(log.verify().unwrap(), 4);
+    assert!(
+        !std::fs::read_to_string(log.path())
+            .unwrap()
+            .contains("private words")
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
