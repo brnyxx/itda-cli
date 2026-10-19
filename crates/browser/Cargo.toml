@@ -1,0 +1,23 @@
+[package]
+name = "itda-browser"
+description = "Browser sign-in: open the user's own browser in a fresh profile and keep the session cookies for one site."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tungstenite.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

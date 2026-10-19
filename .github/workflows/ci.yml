@@ -34,3 +34,6 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --locked
+        env:
+          # The hosted Linux image ships Chrome; the sign-in test opens it headless.
+          ITDA_TEST_BROWSER: ${{ runner.os == 'Linux' && '/usr/bin/google-chrome' || '' }}
