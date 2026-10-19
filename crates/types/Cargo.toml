@@ -1,0 +1,25 @@
+[package]
+name = "itda-types"
+description = "Shared error contract, URL safety checks and small utilities. No I/O beyond local files."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+sqlite = ["dep:rusqlite"]
+
+[dependencies]
+chrono.workspace = true
+psl.workspace = true
+regex.workspace = true
+rusqlite = { workspace = true, optional = true }
+serde_json.workspace = true
+sha2.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
