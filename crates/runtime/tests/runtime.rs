@@ -21,6 +21,7 @@ use std::{
 };
 
 const KEY: &str = "fixture-api-key-123";
+const SID: &str = "fixture-session-456";
 
 struct Site {
     base: String,
@@ -65,6 +66,20 @@ async fn site() -> Site {
             }),
         )
         .route(
+            "/account",
+            get(|headers: HeaderMap| async move {
+                let cookie = headers
+                    .get("cookie")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or_default();
+                if cookie.contains(&format!("sid={SID}")) {
+                    Ok(axum::Json(json!({"name": "Mina", "echo": cookie})))
+                } else {
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+            }),
+        )
+        .route(
             "/welcome",
             get(move || async move {
                 d();
@@ -81,7 +96,8 @@ fn spec(base: &str) -> Spec {
     let value = json!({
         "spec_version": 1,
         "site": {"name": "fixture", "base_url": base},
-        "auth": [{"name": "key", "kind": "header", "header": "X-Key", "value_from": "store:fixture/api-key"}],
+        "auth": [{"name": "key", "kind": "header", "header": "X-Key", "value_from": "store:fixture/api-key"},
+                 {"name": "session", "kind": "browser", "value_from": "cookie:sid"}],
         "operations": [
             {"name": "list-items", "method": "GET", "path": "/items", "effect": "read", "evidence": "doc",
              "query": {"q": {"type": "string"}},
@@ -89,6 +105,8 @@ fn spec(base: &str) -> Spec {
             {"name": "create-item", "method": "POST", "path": "/items", "effect": "write", "evidence": "doc",
              "body": {"json": {"title": {"type": "string"}}}},
             {"name": "me", "method": "GET", "path": "/me", "auth": "key", "effect": "read", "evidence": "doc",
+             "response": {"format": "json", "required_pointers": ["/name"]}},
+            {"name": "account", "method": "GET", "path": "/account", "auth": "session", "effect": "read", "evidence": "doc",
              "response": {"format": "json", "required_pointers": ["/name"]}},
             {"name": "profile", "method": "GET", "path": "/welcome", "effect": "read", "evidence": "doc",
              "response": {"format": "json", "required_pointers": ["/name"]}}
@@ -173,6 +191,40 @@ async fn credentials_come_from_the_vault_and_stay_out_of_results() {
     assert_eq!(envelope.account.as_deref(), Some("default"));
     let text = serde_json::to_string(&envelope).unwrap();
     assert!(!text.contains(KEY), "{text}");
+}
+
+#[tokio::test]
+async fn a_browser_session_goes_to_its_site_and_stays_out_of_results() {
+    let site = site().await;
+    let (runtime, vault) = runtime().await;
+    let spec = spec(&site.base);
+
+    let error = runtime.call(&spec, call("account", &[])).await.unwrap_err();
+    assert_eq!(error.public_code, "auth_required");
+
+    // A jar without the sign-in cookie is a signed-out session: nothing is sent.
+    vault.add_account("fixture", "default", "").await.unwrap();
+    vault
+        .set_secret("fixture", "default", "session", Secret::new("theme=dark"))
+        .await
+        .unwrap();
+    let error = runtime.call(&spec, call("account", &[])).await.unwrap_err();
+    assert_eq!(error.public_code, "auth_required");
+    assert_eq!(site.hits.load(Ordering::SeqCst), 0);
+
+    vault
+        .set_secret(
+            "fixture",
+            "default",
+            "session",
+            Secret::new(format!("theme=dark; sid={SID}")),
+        )
+        .await
+        .unwrap();
+    let envelope = runtime.call(&spec, call("account", &[])).await.unwrap();
+    assert_eq!(envelope.data["name"], "Mina");
+    let text = serde_json::to_string(&envelope).unwrap();
+    assert!(!text.contains(SID), "{text}");
 }
 
 #[tokio::test]

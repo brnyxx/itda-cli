@@ -10,8 +10,9 @@
 //! `approval_required` with an id, the user reviews and grants it outside the
 //! agent (`itda approve`), and a second call with that id uses it up before
 //! anything is sent. Without an approval store, changes are refused.
-//! Preflight steps and browser credentials are refused until their stages
-//! exist.
+//! A `browser` credential is the cookie jar the user's own sign-in left
+//! behind (`itda login --browser`); it is sent only to the same site. Preflight
+//! steps are refused until their stage exists.
 //!
 //! With an audit log, every call is recorded with its outcome, and a change
 //! is recorded before it is sent: if that record cannot be written, the
@@ -24,7 +25,7 @@ use itda_policy::{
 use itda_spec::{Operation, Spec};
 use itda_types::{
     error::{AppError, AppResult, usage},
-    url::validate_url,
+    url::{same_site_origin, validate_url},
     util,
 };
 use itda_vault::{Secret, Vault};
@@ -34,6 +35,9 @@ use std::{collections::BTreeMap, sync::Arc};
 
 /// The account used when a call names none.
 pub const DEFAULT_ACCOUNT: &str = "default";
+
+/// The vault secret that holds a browser sign-in: a `Cookie` header value.
+pub const SESSION_SECRET: &str = "session";
 
 pub struct Runtime {
     net: Arc<Network>,
@@ -173,12 +177,13 @@ impl Runtime {
                 .unwrap_or_else(|| DEFAULT_ACCOUNT.to_owned())
         });
         let mut secrets = Vec::new();
+        let mut exposed = Vec::new();
         if let Some(account) = &account
-            && let Some((name, value, secret)) =
-                self.credential(spec, op, account, &destination).await?
+            && let Some(credential) = self.credential(spec, op, account, &destination).await?
         {
-            headers.push((name, value));
-            secrets.push(secret);
+            headers.push((credential.header, credential.value));
+            exposed.extend(credential.redact);
+            secrets.push(credential.secret);
         }
 
         let mut request = Request::read(url.clone());
@@ -264,7 +269,7 @@ impl Runtime {
             Err(_) if !read => Value::Null,
             Err(error) => return Err(error),
         };
-        let exposed: Vec<String> = secrets.iter().map(|s| s.expose().to_owned()).collect();
+        exposed.extend(secrets.iter().map(|s| s.expose().to_owned()));
         util::redact(&mut data, &exposed);
 
         Ok(Envelope {
@@ -280,14 +285,15 @@ impl Runtime {
         })
     }
 
-    /// The header a `header` credential adds, only for the origin it belongs to.
+    /// The header a credential adds, only for the destination it belongs to:
+    /// a `header` key to its exact origin, a `browser` session to its site.
     async fn credential(
         &self,
         spec: &Spec,
         op: &Operation,
         account: &str,
         destination: &url::Url,
-    ) -> AppResult<Option<(String, String, Secret)>> {
+    ) -> AppResult<Option<Credential>> {
         let auth = spec
             .find_auth(&op.auth)
             .ok_or_else(|| AppError::api("data_invalid", 400))?;
@@ -307,15 +313,68 @@ impl Runtime {
                     .strip_prefix(&format!("store:{}/", spec.site.name))
                     .ok_or_else(|| AppError::api("data_invalid", 400))?;
                 let secret = self.vault.secret(&spec.site.name, account, name).await?;
-                let value = format!("{}{}", auth.prefix, secret.expose());
-                Ok(Some((auth.header.clone(), value, secret)))
+                Ok(Some(Credential {
+                    header: auth.header.clone(),
+                    value: format!("{}{}", auth.prefix, secret.expose()),
+                    redact: Vec::new(),
+                    secret,
+                }))
+            }
+            "browser" => {
+                let scope = validate_url(if auth.origin.is_empty() {
+                    spec.site.source_url()
+                } else {
+                    &auth.origin
+                })?;
+                if !same_site_origin(&scope, destination) {
+                    return Err(AppError::api("unsafe_target", 400));
+                }
+                let secret = self
+                    .vault
+                    .secret(&spec.site.name, account, SESSION_SECRET)
+                    .await?;
+                let cookies = cookie_pairs(secret.expose());
+                // A jar without the cookie that proves sign-in is a signed-out session.
+                if let Some(required) = auth.value_from.strip_prefix("cookie:")
+                    && !cookies.iter().any(|(name, _)| *name == required)
+                {
+                    return Err(AppError::api("auth_required", 401));
+                }
+                let redact = cookies
+                    .iter()
+                    .filter(|(_, value)| value.len() >= 8)
+                    .map(|(_, value)| (*value).to_owned())
+                    .collect();
+                Ok(Some(Credential {
+                    header: "cookie".into(),
+                    value: secret.expose().to_owned(),
+                    redact,
+                    secret,
+                }))
             }
             _ => Err(usage(
-                format!("{} signs in through the browser", op.name),
-                "This version supports API-key accounts only.",
+                format!("{} uses a credential this version cannot send", op.name),
+                "Supported kinds are header and browser.",
             )),
         }
     }
+}
+
+/// A credential ready to send, and the values to keep out of results.
+struct Credential {
+    header: String,
+    value: String,
+    redact: Vec<String>,
+    secret: Secret,
+}
+
+/// The `name=value` pairs of a `Cookie` header value.
+fn cookie_pairs(jar: &str) -> Vec<(&str, &str)> {
+    jar.split(';')
+        .filter_map(|pair| pair.trim().split_once('='))
+        .map(|(name, value)| (name.trim(), value.trim()))
+        .filter(|(name, _)| !name.is_empty())
+        .collect()
 }
 
 fn title(preferred: &str, fallback: &str) -> String {

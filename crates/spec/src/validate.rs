@@ -58,7 +58,17 @@ impl Spec {
                     );
                 }
                 match a.kind.as_str() {
-                    "none" | "browser" => {}
+                    "none" => {}
+                    "browser" => {
+                        if !a.value_from.is_empty() && !a.value_from.starts_with("cookie:") {
+                            add(
+                                &mut out,
+                                &format!("auth.{}.value_from", a.name),
+                                "must be empty or name the sign-in cookie as cookie:<name>".into(),
+                                "Example: cookie:session_id",
+                            );
+                        }
+                    }
                     "header" => {
                         if a.header.is_empty() {
                             add(
