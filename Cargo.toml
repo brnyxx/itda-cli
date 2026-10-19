@@ -13,6 +13,7 @@ publish = false
 itda-types = { path = "crates/types" }
 itda-html = { path = "crates/html" }
 itda-spec = { path = "crates/spec" }
+itda-policy = { path = "crates/policy" }
 
 chrono = { version = "0.4.45", features = ["serde"] }
 graphql-parser = "0.4.1"

@@ -1,0 +1,19 @@
+[package]
+name = "itda-policy"
+description = "Read/write classification, SiteSpec safety validation and single-use approvals."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types.workspace = true
+itda-spec.workspace = true
+graphql-parser.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

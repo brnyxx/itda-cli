@@ -570,6 +570,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "itda-policy"
+version = "0.1.0"
+dependencies = [
+ "graphql-parser",
+ "itda-spec",
+ "itda-types",
+ "regex",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "itda-spec"
 version = "0.1.0"
 dependencies = [
