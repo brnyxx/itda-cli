@@ -234,3 +234,23 @@ async fn mcp_serves_installed_actions_over_stdio() {
     );
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test]
+async fn mcp_install_dry_run_shows_the_change() {
+    let home = home();
+    let output = itda(
+        &home,
+        &["mcp", "install", "cursor", "--dry-run"],
+        &[("HOME", home.to_str().unwrap())],
+    )
+    .await;
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains(".cursor/mcp.json"));
+    assert!(text.contains("\"ITDA_ALLOW_LOCAL\": \"1\""));
+    assert!(!home.join(".cursor").exists());
+
+    let unknown = itda(&home, &["mcp", "install", "notepad"], &[]).await;
+    assert_eq!(unknown.status.code(), Some(2));
+    std::fs::remove_dir_all(home).ok();
+}
