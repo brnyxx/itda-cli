@@ -298,9 +298,10 @@ fn approving(base: &str) -> Approving {
     let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
     let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
     let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
-    let audit = Arc::new(itda_runtime::audit::AuditLog::new(
-        std::env::temp_dir().join(format!("itda-mcp-audit-{}.jsonl", itda_types::util::id())),
-    ));
+    // A directory of its own: the log's lock makes its parent private, which a
+    // shared temporary directory refuses.
+    let dir = std::env::temp_dir().join(format!("itda-mcp-audit-{}", itda_types::util::id()));
+    let audit = Arc::new(itda_runtime::audit::AuditLog::new(dir.join("audit.jsonl")));
     let runtime =
         Runtime::new(Arc::new(Network::new(gate, true)), vault).with_approvals(approvals.clone());
     let server = Server::new(Arc::new(runtime), Catalog::new(vec![spec(base)]), None)
