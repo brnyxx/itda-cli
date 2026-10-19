@@ -142,9 +142,9 @@ impl Network {
     }
 
     /// Clear pauses for one account on an origin and for the origin as a whole.
-    pub fn resume(&self, origin: &str, account_id: &str) -> AppResult<()> {
-        self.gate.resume(&format!("{origin}|{account_id}"))?;
-        self.gate.resume(&format!("{origin}|*"))
+    pub async fn resume(&self, origin: &str, account_id: &str) -> AppResult<()> {
+        self.gate.resume(&format!("{origin}|{account_id}")).await?;
+        self.gate.resume(&format!("{origin}|*")).await
     }
 
     fn pooled_client(
@@ -282,9 +282,11 @@ impl Network {
                 }
             }
             if too_large {
-                self.gate.release(&scope, &token, host_outcome)?;
+                self.gate.release(&scope, &token, host_outcome).await?;
                 lease.released = true;
-                self.gate.release(&host_scope, &host_token, host_outcome)?;
+                self.gate
+                    .release(&host_scope, &host_token, host_outcome)
+                    .await?;
                 host_lease.released = true;
                 return Err(AppError::api("too_large", 413));
             }
@@ -304,11 +306,13 @@ impl Network {
             } else {
                 host_outcome
             };
-            self.gate.release(&scope, &token, outcome)?;
+            self.gate.release(&scope, &token, outcome).await?;
             lease.released = true;
             // A site that refuses automated access refuses it for every account.
             let host_outcome = if blocked { outcome } else { host_outcome };
-            self.gate.release(&host_scope, &host_token, host_outcome)?;
+            self.gate
+                .release(&host_scope, &host_token, host_outcome)
+                .await?;
             host_lease.released = true;
             if input.follow_redirects
                 && input.read_only
@@ -411,7 +415,8 @@ struct Lease<'a> {
 impl Drop for Lease<'_> {
     fn drop(&mut self) {
         if !self.released {
-            let _ = self.gate.release(self.scope, self.token, Outcome::Done);
+            self.gate
+                .release_detached(self.scope, self.token, Outcome::Done);
         }
     }
 }
