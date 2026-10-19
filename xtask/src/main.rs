@@ -6,6 +6,7 @@ use std::process::{Command, ExitCode};
 const LAYERS: &[(&str, u8)] = &[
     ("itda-types", 0),
     ("itda-html", 1),
+    ("itda-store", 1),
     ("itda-spec", 2),
     ("itda-policy", 3),
     ("itda-net", 4),
