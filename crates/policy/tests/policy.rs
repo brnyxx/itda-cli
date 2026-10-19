@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used)]
 use itda_policy::{
     Approvals, Effect, ExecutionRequest, ReviewInput, operation_effect, safe_read_url,
-    validate_spec,
+    spec_problems, validate_spec,
 };
 use itda_spec::{self as spec, Spec};
 use serde_json::json;
@@ -288,4 +288,31 @@ fn unsafe_specs_are_refused() {
     for (name, sp) in cases {
         assert!(validate_spec(&sp).is_err(), "{name}");
     }
+}
+
+#[test]
+fn refusals_name_every_field_and_keep_their_codes() {
+    let sp = spec_from(
+        json!({"spec_version":1,"site":{"name":"fixture","base_url":"https://example.com"},"auth":[{"name":"key","kind":"header","header":"X-Key","value_from":"store:fixture/key"}],"operations":[
+            {"name":"read-items","method":"GET","path":"/items","effect":"read","evidence":"doc","headers":{"X-A":"1\r\nHost: evil"}},
+            {"name":"other-host","method":"GET","path":"/x","effect":"read","evidence":"doc","auth":"key","base_url":"https://api.example.com"}
+        ]}),
+    );
+    let problems = spec_problems(&sp);
+    let fields: Vec<&str> = problems.iter().map(|p| p.field.as_str()).collect();
+    assert!(
+        fields.contains(&"operations.read-items.headers.X-A"),
+        "{fields:?}"
+    );
+    assert!(fields.contains(&"operations.other-host.auth"), "{fields:?}");
+
+    let error = validate_spec(&sp).unwrap_err();
+    assert_eq!(error.public_code, problems[0].code);
+    assert!(error.msg.starts_with(&problems[0].field), "{}", error.msg);
+
+    let unsafe_auth = problems
+        .iter()
+        .find(|p| p.field == "operations.other-host.auth")
+        .unwrap();
+    assert_eq!(unsafe_auth.code, "unsafe_target");
 }
