@@ -3,9 +3,9 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "book.toml", "CHANGELOG.md", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "site/**", "assets/**", "book.toml", "CHANGELOG.md", ".github/workflows/docs.yml"]
   pull_request:
-    paths: ["docs/**", "book.toml", "CHANGELOG.md", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "site/**", "assets/**", "book.toml", "CHANGELOG.md", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,10 @@ jobs:
       - name: Install mdBook
         run: cargo install mdbook --version 0.5.4 --locked
       - name: Build
-        run: mdbook build
+        run: |
+          mdbook build
+          cp -r site/. book/
+          cp -r assets book/assets
       - uses: actions/upload-pages-artifact@v3
         with:
           path: book

@@ -5,8 +5,14 @@ authors = ["itda contributors"]
 language = "en"
 src = "docs"
 
+[build]
+build-dir = "book/docs"
+
 [output.html]
 git-repository-url = "https://github.com/brnyxx/itda-cli"
 edit-url-template = "https://github.com/brnyxx/itda-cli/edit/main/{path}"
-site-url = "/itda-cli/"
+site-url = "/itda-cli/docs/"
+default-theme = "navy"
+preferred-dark-theme = "navy"
+additional-css = ["docs/theme/brand.css"]
 theme = "docs/theme"
