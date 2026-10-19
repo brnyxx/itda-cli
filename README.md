@@ -19,7 +19,7 @@ agent can call from the command line or over MCP. It runs on your own
 machine, reads by default, and never changes anything on a site until you
 approve that exact change.
 
-<p align="center"><img src="assets/hero.svg" alt="itda drafts a site definition from an OpenAPI file, reads freely, and waits for a person to approve a change" width="860"></p>
+<p align="center"><img src="assets/hero.png" alt="itda drafts actions from a browser recording, reads freely, and waits for a person to approve a change" width="860"></p>
 
 > Status: early. The runtime, CLI, MCP server, approvals, audit log and
 > drafting from OpenAPI documents or browser recordings work today against
