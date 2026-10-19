@@ -5,8 +5,10 @@
 //! changes, and whatever could not be translated is listed as a note instead of
 //! guessed. The draft is checked with the same rules `itda` applies at install
 //! time, so problems show up before anyone runs it.
+mod har;
 mod openapi;
 
+pub use har::from_har;
 pub use openapi::from_openapi;
 
 use serde_norway::{Mapping, Value as Yaml};
