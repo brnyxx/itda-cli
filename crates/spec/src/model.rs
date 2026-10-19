@@ -215,7 +215,7 @@ pub struct Issue {
 }
 
 pub fn parse(data: &[u8]) -> AppResult<Spec> {
-    let mut s: Spec = serde_yaml::from_slice(data).map_err(|e| {
+    let mut s: Spec = serde_norway::from_slice(data).map_err(|e| {
         apperr::spec(
             format!("Failed to parse SiteSpec YAML ({e})"),
             "Check YAML syntax.",
