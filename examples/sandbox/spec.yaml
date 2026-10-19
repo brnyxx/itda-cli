@@ -1,0 +1,70 @@
+spec_version: 1
+site:
+  name: sandbox
+  title: Sandbox intranet
+  base_url: http://127.0.0.1:8787
+auth:
+  - name: key
+    kind: header
+    header: X-Api-Key
+    value_from: store:sandbox/api-key
+operations:
+  - name: list-notices
+    desc: Search notices by title
+    method: GET
+    path: /api/notices
+    effect: read
+    evidence: GET /api/notices returns {total, items}
+    query:
+      q: {type: string}
+    response:
+      format: json
+      required_pointers: [/items, /total]
+  - name: notice-board
+    desc: Read the notice board page
+    method: GET
+    path: /notices
+    effect: read
+    evidence: GET /notices renders one tr.notice per notice
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+      html:
+        items: tr.notice
+        fields:
+          id: {selector: td.id, required: true}
+          title: {selector: td.title a, required: true}
+          link: {selector: td.title a, attribute: href, absolute_url: true}
+          author: {selector: td.author}
+          date: {selector: td.date}
+  - name: me
+    desc: Show the signed-in user
+    method: GET
+    path: /api/me
+    auth: key
+    effect: read
+    evidence: GET /api/me needs X-Api-Key
+    response:
+      format: json
+      required_pointers: [/name]
+  - name: create-notice
+    desc: Post a notice
+    method: POST
+    path: /api/notices
+    auth: key
+    effect: write
+    evidence: POST /api/notices creates a notice
+    body:
+      json:
+        title: {type: string, required: true}
+  - name: reports
+    desc: Read the reports page, which refuses automated access
+    method: GET
+    path: /reports
+    effect: read
+    evidence: GET /reports answers 403
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1"}

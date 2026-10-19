@@ -18,6 +18,7 @@ const LAYERS: &[(&str, u8)] = &[
     ("itda-server", 9),
     ("itda-cli", 10),
     ("itda-desktop", 10),
+    ("itda-sandbox", 255),
     ("xtask", 255),
 ];
 

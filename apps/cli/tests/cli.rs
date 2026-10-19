@@ -169,3 +169,10 @@ async fn doctor_reports_the_setup() {
     assert!(text.contains("ITDA_SECRET__"));
     std::fs::remove_dir_all(home).ok();
 }
+
+#[test]
+fn the_sandbox_definition_is_valid() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sandbox/spec.yaml");
+    let spec = itda_spec::parse(&std::fs::read(path).unwrap()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+}
