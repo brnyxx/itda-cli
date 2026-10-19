@@ -540,3 +540,40 @@ fn site_name(host: &str) -> String {
     let name = slug(&kept.join("-"));
     if name.is_empty() { "site".into() } else { name }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paths_become_templates() {
+        assert_eq!(
+            template("/api/notices/42/comments/9"),
+            (
+                "/api/notices/{notice_id}/comments/{comment_id}".into(),
+                vec!["notice_id".into(), "comment_id".into()]
+            )
+        );
+        assert_eq!(
+            template("/files/3f2a9c1e-7b4d-4e1a-9c2b-5d6e7f8a9b0c").0,
+            "/files/{file_id}"
+        );
+        assert_eq!(template("/v2/status").0, "/v2/status");
+        assert_eq!(template("/42").0, "/{id}");
+    }
+
+    #[test]
+    fn names_read_like_actions() {
+        assert_eq!(action_name("GET", "/api/v1/notices"), "list-notices");
+        assert_eq!(action_name("GET", "/api/notices/{notice_id}"), "get-notice");
+        assert_eq!(action_name("POST", "/api/notices"), "create-notice");
+        assert_eq!(action_name("POST", "/board/write.do"), "post-write");
+        assert_eq!(
+            action_name("DELETE", "/api/notices/{notice_id}"),
+            "delete-notice"
+        );
+        assert_eq!(action_name("GET", "/api/me"), "get-me");
+        assert_eq!(site_name("intranet.example.co.kr"), "intranet-example");
+        assert_eq!(site_name("www.example.com"), "example");
+    }
+}
