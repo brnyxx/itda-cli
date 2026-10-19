@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "itda"
@@ -31,3 +33,8 @@ tokio.workspace = true
 
 [lints]
 workspace = true
+
+[package.metadata.dist]
+dist = true
+# Apache-2.0 requires the NOTICE file to travel with the binary.
+include = ["../../NOTICE"]
