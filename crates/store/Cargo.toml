@@ -1,0 +1,19 @@
+[package]
+name = "itda-store"
+description = "One local SQLite database owned by a dedicated thread, with versioned migrations."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types = { workspace = true, features = ["sqlite"] }
+rusqlite.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

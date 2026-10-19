@@ -984,6 +984,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itda-store"
+version = "0.1.0"
+dependencies = [
+ "itda-types",
+ "rusqlite",
+ "tokio",
+]
+
+[[package]]
 name = "itda-types"
 version = "0.1.0"
 dependencies = [
