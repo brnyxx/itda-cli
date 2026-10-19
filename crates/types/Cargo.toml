@@ -13,10 +13,12 @@ sqlite = ["dep:rusqlite"]
 
 [dependencies]
 chrono.workspace = true
+psl.workspace = true
 regex.workspace = true
 rusqlite = { workspace = true, optional = true }
 serde_json.workspace = true
 sha2.workspace = true
+url.workspace = true
 uuid.workspace = true
 
 [lints]
