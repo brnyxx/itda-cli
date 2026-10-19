@@ -7,6 +7,13 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- Browser sign-in for sites without API keys: `itda login <site> --browser`
+  opens your own browser in a fresh profile, keeps only that site's session
+  cookies in the system keyring, and `kind: browser` actions send them only to
+  the same site.
+
 ## [0.1.0] - 2026-10-19
 
 The first release: reads and approved changes on plain HTTP sites with API

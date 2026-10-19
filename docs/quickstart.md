@@ -84,6 +84,7 @@ real website, so consecutive calls take a moment.
 | `itda ls [site] [--json]` | Installed sites and their actions |
 | `itda call <site>.<action> [--input value]… [--account id] [--approval id] [--json]` | Run one action |
 | `itda login <site> [--account id] [--secret name]` | Store a secret read from stdin |
+| `itda login <site> --browser [--url page]` | Sign in in your own browser and keep that site's session |
 | `itda resume <site>` | Resume after a block or an expired sign-in |
 | `itda approvals` · `approve <id>` · `reject <id>` | Review changes agents asked for |
 | `itda audit [--limit n] [--verify] [--json]` | What agents did |
