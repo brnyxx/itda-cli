@@ -8,6 +8,8 @@ edition = "2024"
 rust-version = "1.98"
 license = "Apache-2.0"
 publish = false
+repository = "https://github.com/brnyxx/itda-cli"
+homepage = "https://github.com/brnyxx/itda-cli"
 
 [workspace.dependencies]
 itda-types = { path = "crates/types" }
@@ -46,3 +48,8 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 unwrap_used = "warn"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
