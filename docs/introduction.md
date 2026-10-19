@@ -2,6 +2,8 @@
 
 **Don't drive the browser. Compile the site.**
 
+<img src="https://raw.githubusercontent.com/brnyxx/itda-cli/main/assets/hero.svg" alt="itda drafts a site definition from an OpenAPI file, reads freely, and waits for a person to approve a change" width="100%">
+
 itda turns a website into a small set of verified, typed actions that an AI
 agent can call from the command line or over MCP. It runs on your own machine,
 reads by default, and never changes anything on a site until you approve that
