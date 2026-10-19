@@ -45,6 +45,12 @@ cargo xtask check-layers
 
 Rust 1.98 (edition 2024) is pinned in `rust-toolchain.toml`.
 
+## Security
+
+[docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md) lists the rules itda keeps with
+websites and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) what it defends
+against. Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
 ## Credits and license
 
 Licensed under [Apache-2.0](LICENSE). Parts of this project are derived from
