@@ -6,7 +6,7 @@ anything. itda reads it from `<data dir>/specs/<site>/spec.yaml`; `itda doctor`
 prints the data directory, and `ITDA_HOME` moves it.
 
 This page covers everything version 0.1 runs. The fastest way in is to copy
-[`examples/sandbox/spec.yaml`](../examples/sandbox/spec.yaml) and change it.
+[`examples/sandbox/spec.yaml`](https://github.com/brnyxx/itda-cli/blob/main/examples/sandbox/spec.yaml) and change it.
 
 ## A complete example
 

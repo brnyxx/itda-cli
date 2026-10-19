@@ -38,4 +38,4 @@ from the roadmap that are not built yet.
 - Websites' own vulnerabilities.
 
 See [HONEST_CLIENT.md](HONEST_CLIENT.md) for the rules on how itda treats
-websites, and [SECURITY.md](../SECURITY.md) to report a problem.
+websites, and [SECURITY.md](https://github.com/brnyxx/itda-cli/blob/main/SECURITY.md) to report a problem.
