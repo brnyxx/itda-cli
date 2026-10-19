@@ -100,3 +100,17 @@ fn the_database_survives_reopening() {
     drop(store);
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn submitted_jobs_run_before_later_calls() {
+    let store = Store::in_memory().unwrap();
+    store.migrate(&NOTES).unwrap();
+    store.submit(|conn| {
+        conn.execute("INSERT INTO note(body) VALUES('queued')", [])?;
+        Ok(())
+    });
+    let count: i64 = store
+        .call_blocking(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM note", [], |r| r.get(0))?))
+        .unwrap();
+    assert_eq!(count, 1);
+}
