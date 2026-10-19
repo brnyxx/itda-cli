@@ -19,6 +19,7 @@ itda-net = { path = "crates/net" }
 itda-vault = { path = "crates/vault" }
 itda-runtime = { path = "crates/runtime" }
 itda-mcp = { path = "crates/mcp" }
+itda-prep = { path = "crates/prep" }
 
 axum = "0.8.9"
 clap = { version = "4.6.7", features = ["derive"] }

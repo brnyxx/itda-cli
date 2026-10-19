@@ -1,0 +1,19 @@
+[package]
+name = "itda-prep"
+description = "Draft site definitions from API descriptions, for a person to review."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types.workspace = true
+itda-spec.workspace = true
+itda-policy.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+
+
+[lints]
+workspace = true
