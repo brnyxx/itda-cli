@@ -1,7 +1,7 @@
 //! Classification cases are derived from Hycli `src/integration_tests.rs`
 //! (Apache-2.0); approval and validation cases are new.
 #![allow(clippy::unwrap_used)]
-use itda_policy::{Effect, operation_effect, safe_read_url};
+use itda_policy::{Effect, operation_effect, safe_read_url, validate_spec};
 use itda_spec::{self as spec, Spec};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -131,4 +131,80 @@ fn path_arguments_and_nested_controls_keep_changes_behind_review() {
         ),
         Effect::Write
     );
+}
+
+#[test]
+fn valid_fixture_passes_validation() {
+    validate_spec(&fixture("https://example.com")).unwrap();
+}
+
+#[test]
+fn unsafe_specs_are_refused() {
+    let base = json!({"spec_version":1,"site":{"name":"fixture","base_url":"https://example.com"},"operations":[{"name":"read-items","method":"GET","path":"/items","effect":"read","evidence":"doc"}]});
+    let mutate = |f: &dyn Fn(&mut serde_json::Value)| {
+        let mut value = base.clone();
+        f(&mut value);
+        spec_from(value)
+    };
+    let cases: Vec<(&str, Spec)> = vec![
+        (
+            "base url with query",
+            mutate(&|v| v["site"]["base_url"] = json!("https://example.com/?a=1")),
+        ),
+        (
+            "embedded credentials",
+            mutate(&|v| v["site"]["base_url"] = json!("https://u:p@example.com")),
+        ),
+        (
+            "secret default",
+            mutate(&|v| {
+                v["operations"][0]["query"] =
+                    json!({"q":{"type":"string","default":"Bearer abcdefghijklmnop"}})
+            }),
+        ),
+        (
+            "credential-named input",
+            mutate(&|v| v["operations"][0]["query"] = json!({"api_key":{"type":"string"}})),
+        ),
+        (
+            "header auth from another site",
+            mutate(&|v| {
+                v["auth"] = json!([{"name":"key","kind":"header","header":"X-Key","value_from":"store:other/key"}]);
+                v["operations"][0]["auth"] = json!("key");
+            }),
+        ),
+        (
+            "header auth to another origin",
+            mutate(&|v| {
+                v["auth"] = json!([{"name":"key","kind":"header","header":"X-Key","value_from":"store:fixture/key"}]);
+                v["operations"][0]["auth"] = json!("key");
+                v["operations"][0]["base_url"] = json!("https://api.example.com");
+            }),
+        ),
+        (
+            "derived auth sets a forbidden header",
+            mutate(&|v| {
+                v["auth"] = json!([{"name":"d","kind":"derived","header":"Cookie","value_from":"cookie:sid"}]);
+                v["operations"][0]["auth"] = json!("d");
+            }),
+        ),
+        (
+            "rendered browser read that is not html",
+            mutate(&|v| v["operations"][0]["transport"] = json!("browser")),
+        ),
+        (
+            "invalid html selector",
+            mutate(&|v| {
+                v["operations"][0]["response"] =
+                    json!({"format":"html","required_html_fields":[{"selector":"div[["}]})
+            }),
+        ),
+        (
+            "header injection",
+            mutate(&|v| v["operations"][0]["headers"] = json!({"X-A":"1\r\nHost: evil"})),
+        ),
+    ];
+    for (name, sp) in cases {
+        assert!(validate_spec(&sp).is_err(), "{name}");
+    }
 }

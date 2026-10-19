@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 itda-types.workspace = true
+itda-html.workspace = true
 itda-spec.workspace = true
 graphql-parser.workspace = true
 regex.workspace = true
