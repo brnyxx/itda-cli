@@ -68,6 +68,10 @@ struct Client {
 
 impl Client {
     async fn start(server: Server) -> Self {
+        Self::start_with(server, json!({})).await
+    }
+
+    async fn start_with(server: Server, capabilities: Value) -> Self {
         let (ours, theirs) = tokio::io::duplex(1 << 20);
         tokio::spawn(async move {
             let running = server.serve(tokio::io::split(theirs)).await.unwrap();
@@ -82,7 +86,7 @@ impl Client {
         client
             .request(
                 "initialize",
-                json!({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}}),
+                json!({"protocolVersion": "2025-06-18", "capabilities": capabilities, "clientInfo": {"name": "test", "version": "0"}}),
             )
             .await;
         client
@@ -107,6 +111,32 @@ impl Client {
             let message: Value = serde_json::from_str(&line).unwrap();
             if message["id"] == id {
                 return message["result"].clone();
+            }
+        }
+    }
+
+    /// Call a tool, answering the form the server shows the person with
+    /// `answer`. Returns the form and the tool result.
+    async fn call_answering(
+        &mut self,
+        name: &str,
+        arguments: Value,
+        answer: Value,
+    ) -> (Value, Value) {
+        let id = self.next;
+        self.next += 1;
+        self.send(json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": {"name": name, "arguments": arguments}}))
+            .await;
+        let mut form = Value::Null;
+        loop {
+            let line = self.lines.next_line().await.unwrap().unwrap();
+            let message: Value = serde_json::from_str(&line).unwrap();
+            if message["method"] == "elicitation/create" {
+                form = message["params"].clone();
+                self.send(json!({"jsonrpc": "2.0", "id": message["id"], "result": answer}))
+                    .await;
+            } else if message["id"] == id {
+                return (form, message["result"].clone());
             }
         }
     }
@@ -256,4 +286,84 @@ async fn changes_hand_the_agent_an_approval_id_and_run_once_granted() {
         .call("fixture.delete-item", json!({"id": 3, "approval": id}))
         .await;
     assert_eq!(again["structuredContent"]["status"], "approval_expired");
+}
+
+struct Approving {
+    server: Server,
+    audit: Arc<itda_runtime::audit::AuditLog>,
+}
+
+fn approving(base: &str) -> Approving {
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let audit = Arc::new(itda_runtime::audit::AuditLog::new(
+        std::env::temp_dir().join(format!("itda-mcp-audit-{}.jsonl", itda_types::util::id())),
+    ));
+    let runtime =
+        Runtime::new(Arc::new(Network::new(gate, true)), vault).with_approvals(approvals.clone());
+    let server = Server::new(Arc::new(runtime), Catalog::new(vec![spec(base)]), None)
+        .with_client_approval(approvals, audit.clone());
+    Approving { server, audit }
+}
+
+#[tokio::test]
+async fn the_person_approves_a_change_in_the_client() {
+    let base = site().await;
+    let Approving { server, audit } = approving(&base);
+    let mut client = Client::start_with(server, json!({"elicitation": {}})).await;
+
+    let (form, done) = client
+        .call_answering(
+            "fixture.delete-item",
+            json!({"id": 3}),
+            json!({"action": "accept", "content": {"approve": true}}),
+        )
+        .await;
+    let message = form["message"].as_str().unwrap();
+    assert!(message.contains("delete-item"), "{message}");
+    assert!(message.contains("/items/3"), "{message}");
+    assert_eq!(form["requestedSchema"]["required"], json!(["approve"]));
+    assert_eq!(done["isError"], false, "{done}");
+    assert_eq!(done["structuredContent"]["effect"], "write");
+
+    let kinds: Vec<String> = audit
+        .records()
+        .unwrap()
+        .into_iter()
+        .map(|r| r.kind)
+        .collect();
+    assert!(kinds.contains(&"approved".to_owned()), "{kinds:?}");
+}
+
+#[tokio::test]
+async fn a_declined_form_rejects_the_change() {
+    let base = site().await;
+    let Approving { server, .. } = approving(&base);
+    let mut client = Client::start_with(server, json!({"elicitation": {}})).await;
+
+    let (_, refused) = client
+        .call_answering(
+            "fixture.delete-item",
+            json!({"id": 3}),
+            json!({"action": "decline"}),
+        )
+        .await;
+    assert_eq!(refused["isError"], true);
+    assert_eq!(refused["structuredContent"]["status"], "approval_rejected");
+    let id = refused["structuredContent"]["approval"].as_str().unwrap();
+    let again = client
+        .call("fixture.delete-item", json!({"id": 3, "approval": id}))
+        .await;
+    assert_eq!(again["structuredContent"]["status"], "approval_expired");
+}
+
+#[tokio::test]
+async fn clients_without_forms_get_an_approval_id() {
+    let base = site().await;
+    let Approving { server, .. } = approving(&base);
+    let mut client = Client::start(server).await;
+    let first = client.call("fixture.delete-item", json!({"id": 3})).await;
+    assert_eq!(first["structuredContent"]["status"], "approval_required");
 }

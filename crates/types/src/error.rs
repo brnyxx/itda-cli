@@ -106,6 +106,9 @@ fn remedy(public_code: &str) -> &'static str {
         "approval_required" => {
             "Ask the user to review and approve it with `itda approve <id>`, then call again with the approval id."
         }
+        "approval_rejected" => {
+            "The user rejected this change. Do not retry it unless they ask you to."
+        }
         "approval_expired" => {
             "The approval was used, rejected, expired or no longer matches these inputs. Call again to request a new one."
         }
