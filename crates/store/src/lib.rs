@@ -107,6 +107,17 @@ impl Store {
         rx.recv().map_err(|_| closed())?
     }
 
+    /// Queue `f` on the database thread without waiting for it. For cleanup
+    /// that must happen from synchronous code such as `Drop`.
+    pub fn submit<F>(&self, f: F)
+    where
+        F: FnOnce(&mut Connection) -> AppResult<()> + Send + 'static,
+    {
+        let _ = self.send(Box::new(move |conn| {
+            let _ = f(conn);
+        }));
+    }
+
     /// Apply the steps of `migration` that have not run yet, each in its own
     /// transaction. Returns the component's schema version afterwards.
     pub fn migrate(&self, migration: &'static Migration) -> AppResult<usize> {

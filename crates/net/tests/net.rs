@@ -8,6 +8,7 @@ use axum::{
 };
 use itda_net::{Gate, Network, Request, USER_AGENT, gate};
 use itda_spec::ResponseLike;
+use itda_store::Store;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -23,11 +24,9 @@ async fn host(router: Router) -> String {
 }
 
 fn network(allow_local: bool) -> Network {
-    let path = std::env::temp_dir()
-        .join(format!("itda-net-{}", itda_types::util::id()))
-        .join("gate.db");
+    let store = Store::in_memory().unwrap();
     Network::new(
-        Arc::new(Gate::with_limits(&path, 0, 1000).unwrap()),
+        Arc::new(Gate::with_limits(store, 0, 1000).unwrap()),
         allow_local,
     )
 }
@@ -170,7 +169,7 @@ async fn a_challenge_pauses_the_site_until_the_user_resumes() {
         .unwrap()
         .origin()
         .ascii_serialization();
-    net.resume(&origin, "").unwrap();
+    net.resume(&origin, "").await.unwrap();
     let again = net
         .fetch(Request::read(format!("{base}/page")))
         .await
@@ -232,13 +231,11 @@ async fn rate_limits_set_a_cooldown() {
 
 #[tokio::test]
 async fn the_budget_caps_requests_per_scope() {
-    let path = std::env::temp_dir()
-        .join(format!("itda-gate-{}", itda_types::util::id()))
-        .join("gate.db");
-    let gate = Gate::with_limits(&path, 0, 2).unwrap();
+    let gate = Gate::with_limits(Store::in_memory().unwrap(), 0, 2).unwrap();
     for _ in 0..2 {
         let token = gate.acquire("https://example.test|").await.unwrap();
         gate.release("https://example.test|", &token, itda_net::Outcome::Done)
+            .await
             .unwrap();
     }
     assert_eq!(

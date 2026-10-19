@@ -946,6 +946,7 @@ dependencies = [
  "httpdate",
  "itda-policy",
  "itda-spec",
+ "itda-store",
  "itda-types",
  "reqwest",
  "rusqlite",
