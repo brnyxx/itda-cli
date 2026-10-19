@@ -49,7 +49,8 @@ cargo install --git https://github.com/brnyxx/itda-cli itda-cli   # installs `it
 Try it on the bundled sandbox, a fake intranet that only listens on
 127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site
 definition is one YAML file at `<data dir>/specs/<site>/spec.yaml`;
-`itda doctor` prints where the data directory is.
+`itda doctor` prints where the data directory is, and
+[docs/SPEC.md](docs/SPEC.md) explains how to write one.
 
 ```sh
 itda ls                                  # installed sites and their actions
