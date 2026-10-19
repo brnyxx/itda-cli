@@ -30,8 +30,30 @@ Changes are never retried and never follow redirects. When the answer is lost
 after sending, the call fails with `action_outcome_unknown` (exit 22): check
 the site before trying again.
 
+### Approving in your MCP client
+
+Clients that show MCP elicitation forms to you can ask for the approval
+themselves, so you do not have to switch to a terminal:
+
+```sh
+itda mcp install claude-code --approve-in-client   # or set ITDA_APPROVE_IN_CLIENT=1
+```
+
+When an agent asks for a change, the client shows you the same review
+`itda approve` prints, with an "Approve this change" box. Ticking it and
+accepting grants that one request, and the call goes on and runs it.
+Declining or closing the form rejects it, and the agent gets
+`approval_rejected`. Both decisions go into the audit log. When the client
+cannot show forms, or you do not answer within five minutes, nothing changes:
+the agent gets the approval id and you can still use `itda approve`.
+
+Turn this on only for clients that put elicitation forms in front of you.
+The form goes to the client application, never to the model, but a client
+that answered forms on its own would approve on its own.
+
 ### Why a terminal
 
+Without the client option above, approvals come only from a terminal.
 `itda approve` refuses to run when its input is not a terminal, and there is
 no MCP tool that approves. An agent working through a pipe or an MCP
 connection therefore cannot answer the question for you. This keeps honest
