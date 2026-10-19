@@ -119,3 +119,12 @@ fn environment_secrets_are_read_only() {
     let other = SecretKey::new("intranet", "me", "api-key").unwrap();
     assert!(env.get(&other).unwrap().is_none());
 }
+
+#[tokio::test]
+async fn environment_secrets_need_no_registered_account() {
+    let key = SecretKey::new("intranet", "ci-bot", "api-key").unwrap();
+    let env = EnvStore::from_vars([(key.env_var(), "from-env".to_string())]);
+    let vault = Vault::open(Store::in_memory().unwrap(), Arc::new(env)).unwrap();
+    let secret = vault.secret("intranet", "ci-bot", "api-key").await.unwrap();
+    assert_eq!(secret.expose(), "from-env");
+}

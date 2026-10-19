@@ -120,13 +120,11 @@ impl Vault {
             .await
     }
 
-    /// Read a secret. A missing account or secret is `auth_required`, so the
-    /// caller asks the user to reconnect instead of retrying.
+    /// Read a secret. A missing secret is `auth_required`, so the caller asks
+    /// the user to reconnect instead of retrying. The account need not be
+    /// registered: environment secrets for headless runs have no login step.
     pub async fn secret(&self, site: &str, account: &str, name: &str) -> AppResult<Secret> {
         let key = SecretKey::new(site, account, name)?;
-        if !self.has_account(&key).await? {
-            return Err(AppError::api("auth_required", 401));
-        }
         let secrets = self.secrets.clone();
         blocking(move || secrets.get(&key))
             .await?
