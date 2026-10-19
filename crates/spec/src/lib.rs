@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 mod model;
 mod request;
+mod validate;
 
 pub use model::*;
 pub use request::{FormEncoder, interpolate_template_str, render_json_template};
