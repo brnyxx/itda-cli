@@ -22,7 +22,11 @@ itda call sandbox.notice-board --json       # HTML table extracted into records
 itda call sandbox.me                        # exit 10: no API key yet
 echo sandbox-key | itda login sandbox       # stores the key in the system keyring
 itda call sandbox.me                        # signed in
-itda call sandbox.create-notice --title hi  # exit 20: changes are refused
+itda call sandbox.create-notice --title hi  # exit 20: waits for approval <id>
+itda approvals                              # what is waiting
+itda approve <id>                           # shows the exact request, asks y/N
+itda call sandbox.create-notice --title hi --approval <id>   # runs once
+itda audit                                  # everything above, hash-chained
 itda call sandbox.reports                   # exit 12: the site refused, so it is paused
 itda call sandbox.list-notices              # still paused, nothing is sent
 itda resume sandbox
