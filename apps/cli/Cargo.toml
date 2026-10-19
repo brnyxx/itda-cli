@@ -1,0 +1,32 @@
+[package]
+name = "itda-cli"
+description = "The itda command: list sites, call actions, manage accounts and check the setup."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "itda"
+path = "src/main.rs"
+
+[dependencies]
+itda-types = { workspace = true }
+itda-spec.workspace = true
+itda-policy.workspace = true
+itda-store.workspace = true
+itda-net.workspace = true
+itda-vault.workspace = true
+itda-runtime.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+url.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+
+[dev-dependencies]
+axum.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

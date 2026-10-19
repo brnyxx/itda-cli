@@ -97,9 +97,11 @@ impl KeyringStore {
 
     /// Whether the platform credential store could be opened.
     pub fn available() -> AppResult<()> {
+        // Any failure to open the store means it is unavailable, whatever the
+        // platform reported.
         keyring::Entry::store_status()
             .as_ref()
-            .map_err(keyring_error)
+            .map_err(|_| keyring_error(&keyring::Error::NoDefaultStore))
             .copied()
     }
 
