@@ -302,3 +302,54 @@ async fn changes_wait_for_a_person_to_approve_them() {
     assert_eq!(verified["records"], 3);
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_drafted_definition_runs_against_the_site() {
+    let home = home();
+    let base = serve().await;
+    let document = json!({
+        "openapi": "3.0.3",
+        "info": {"title": "Fixture API", "version": "1"},
+        "servers": [{"url": "https://fixture.example"}],
+        "paths": {"/items": {"get": {
+            "operationId": "listItems",
+            "summary": "List items",
+            "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object", "required": ["items"], "properties": {"items": {"type": "array"}}
+            }}}}}
+        }}}
+    });
+    let file = home.join("openapi.json");
+    std::fs::write(&file, document.to_string()).unwrap();
+
+    let printed = itda(&home, &["draft", "openapi", file.to_str().unwrap()], &[]).await;
+    assert!(printed.status.success(), "{printed:?}");
+    assert!(String::from_utf8_lossy(&printed.stdout).contains("name: list-items"));
+    assert!(String::from_utf8_lossy(&printed.stderr).contains("1 actions (1 reads, 0 changes)"));
+
+    let installed = itda(
+        &home,
+        &[
+            "draft",
+            "openapi",
+            file.to_str().unwrap(),
+            "--base-url",
+            &base,
+            "--install",
+        ],
+        &[],
+    )
+    .await;
+    assert!(installed.status.success(), "{installed:?}");
+    let called = itda(&home, &["call", "fixture-api.list-items", "--json"], &[]).await;
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "first");
+
+    let again = itda(
+        &home,
+        &["draft", "openapi", file.to_str().unwrap(), "--install"],
+        &[],
+    )
+    .await;
+    assert_eq!(again.status.code(), Some(2));
+    std::fs::remove_dir_all(home).ok();
+}

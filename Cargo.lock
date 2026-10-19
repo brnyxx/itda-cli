@@ -1415,6 +1415,7 @@ dependencies = [
  "itda-mcp",
  "itda-net",
  "itda-policy",
+ "itda-prep",
  "itda-runtime",
  "itda-spec",
  "itda-store",
