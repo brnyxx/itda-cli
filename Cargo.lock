@@ -964,11 +964,13 @@ dependencies = [
  "graphql-parser",
  "itda-html",
  "itda-spec",
+ "itda-store",
  "itda-types",
  "regex",
  "rusqlite",
  "serde",
  "serde_json",
+ "tokio",
  "url",
 ]
 
