@@ -11,11 +11,14 @@ publish = false
 
 [workspace.dependencies]
 itda-types = { path = "crates/types" }
+itda-html = { path = "crates/html" }
 
 chrono = { version = "0.4.45", features = ["serde"] }
 psl = "2"
 regex = "1.13.1"
 rusqlite = { version = "0.40.2", features = ["bundled-full"] }
+scraper = "0.27.0"
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
 url = "2.5.8"

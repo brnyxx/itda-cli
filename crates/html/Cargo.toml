@@ -1,0 +1,18 @@
+[package]
+name = "itda-html"
+description = "Declarative, script-free HTML and embedded-JSON extraction."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types.workspace = true
+scraper.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true
