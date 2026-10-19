@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="404" viewBox="0 0 960 404" role="img" aria-label="itda drafts a site definition, reads freely, and waits for a person to approve a change">
+<rect width="960" height="404" rx="14" fill="#15171A"/>
+<circle cx="24" cy="22" r="6" fill="#3A3D44"/><circle cx="44" cy="22" r="6" fill="#3A3D44"/><circle cx="64" cy="22" r="6" fill="#3A3D44"/>
+<g transform="translate(906 8) scale(0.30)"><rect x="4" y="4" width="88" height="88" rx="22" fill="#F4F2EC"/><path d="M26 32 L44 48 L26 64" fill="none" stroke="#15171A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="62" cy="62" r="9" fill="#2F5BEA"/></g>
+<g font-family="'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" style="white-space:pre">
+<text x="24" y="64"><tspan fill="#7C9BFF">$ </tspan><tspan fill="#F4F2EC">itda draft openapi petstore.yaml --install</tspan></text>
+<text x="24" y="88" fill="#B9BCC2">Drafted pet-store: 4 actions (2 reads, 2 changes).</text>
+<text x="24" y="112" fill="#B9BCC2">Installed at ~/.local/share/itda/specs/pet-store/spec.yaml. Review it, then try `itda ls pet-store`.</text>
+<text x="24" y="160"><tspan fill="#7C9BFF">$ </tspan><tspan fill="#F4F2EC">itda call pet-store.list-pets --limit 1 --json</tspan></text>
+<text x="24" y="184" fill="#E8E6DF">{&quot;action&quot;:&quot;list-pets&quot;,&quot;data&quot;:{&quot;items&quot;:[{&quot;id&quot;:1,&quot;name&quot;:&quot;Mochi&quot;}],&quot;total&quot;:1},</text>
+<text x="24" y="208" fill="#E8E6DF"> &quot;effect&quot;:&quot;read&quot;,&quot;site&quot;:&quot;pet-store&quot;,&quot;status&quot;:&quot;ok&quot;,&quot;untrusted&quot;:true}</text>
+<text x="24" y="256"><tspan fill="#7C9BFF">$ </tspan><tspan fill="#F4F2EC">itda call pet-store.create-pet --name Bori</tspan></text>
+<text x="24" y="280" fill="#FF8A7A">error[approval_required]: pet-store.create-pet changes the site and waits for the user&#x27;s approval 4c1a…</text>
+<text x="24" y="328"><tspan fill="#7C9BFF">$ </tspan><tspan fill="#F4F2EC">itda approve 4c1a…          </tspan><tspan fill="#6E737C"># a person, in their own terminal</tspan></text>
+<text x="24" y="352" fill="#B9BCC2">Approved. The agent can now run it once, with exactly these inputs.</text>
+</g></svg>
