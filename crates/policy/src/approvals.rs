@@ -1,6 +1,7 @@
 //! Single-use approvals for changes. An approval is bound to the digest of the
 //! exact request (site, action, account, inputs, spec hash, credential hash),
-//! expires after five minutes and is consumed before any network request.
+//! expires after five minutes, must be granted by the user, and is consumed
+//! before any network request.
 //!
 //! Derived from Hycli `src/policy.rs` (`ExecutionRequest`, `Approval`, approval
 //! methods of `Policy`), Apache-2.0. Changes: request pacing moved to the network
@@ -146,12 +147,13 @@ impl Approvals {
         review.request = Some(serde_json::from_str(&request)?);
         Ok(review)
     }
-    /// Call only from the handler that authenticated the approving user.
-    /// Consumption happens before any network request, including failed writes.
+    /// Use an approval the user granted with [`Approvals::claim`]. The request
+    /// must match the approved one exactly, it works once, and it is used up
+    /// before any network request, so a failed change cannot be replayed.
     pub async fn consume(&self, id: &str, request: &ExecutionRequest) -> AppResult<()> {
         let (id, digest) = (id.to_owned(), request.digest()?);
         self.changed_once(move |conn| {
-            Ok(conn.execute("UPDATE approvals SET state='consumed' WHERE id=?1 AND digest=?2 AND state IN ('pending','approved') AND expires_ms>?3", params![id, digest, util::unix_ms()])?)
+            Ok(conn.execute("UPDATE approvals SET state='consumed' WHERE id=?1 AND digest=?2 AND state='approved' AND expires_ms>?3", params![id, digest, util::unix_ms()])?)
         })
         .await
     }
@@ -167,10 +169,13 @@ impl Approvals {
             })
             .await
     }
+    /// Grant a pending approval. It stays usable for five more minutes, so the
+    /// agent has time to call again.
     pub async fn claim(&self, id: &str) -> AppResult<()> {
         let id = id.to_owned();
         self.changed_once(move |conn| {
-            Ok(conn.execute("UPDATE approvals SET state='approved' WHERE id=?1 AND state='pending' AND expires_ms>?2", params![id, util::unix_ms()])?)
+            let now = util::unix_ms();
+            Ok(conn.execute("UPDATE approvals SET state='approved', expires_ms=?3 WHERE id=?1 AND state='pending' AND expires_ms>?2", params![id, now, now + APPROVAL_TTL_MS])?)
         })
         .await
     }

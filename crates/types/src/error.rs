@@ -35,6 +35,9 @@ pub struct AppError {
     pub remedy: String,
     pub public_code: String,
     pub http_status: u16,
+    /// Machine-readable details added to the error envelope, such as the
+    /// approval id an agent must hand to the user.
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl AppError {
@@ -53,7 +56,14 @@ impl AppError {
             remedy: remedy.into(),
             public_code: public_code.into(),
             http_status,
+            extra: serde_json::Map::new(),
         }
+    }
+
+    /// Add a detail to the error envelope.
+    pub fn with(mut self, key: &str, value: impl Into<serde_json::Value>) -> Self {
+        self.extra.insert(key.into(), value.into());
+        self
     }
 
     /// An error with a stable public code. The remedy is chosen from the code.
@@ -70,6 +80,7 @@ impl AppError {
             remedy: remedy(public_code).into(),
             public_code: public_code.into(),
             http_status,
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -92,8 +103,11 @@ fn remedy(public_code: &str) -> &'static str {
             "The website refused this request. Open it in your browser and check whether access is allowed; requests stay paused until you resume them."
         }
         "writes_disabled" => "Changes are off for this website. Only the user can allow them.",
-        "approval_required" | "approval_expired" => {
-            "Run the action again and review its exact inputs before approving."
+        "approval_required" => {
+            "Ask the user to review and approve it with `itda approve <id>`, then call again with the approval id."
+        }
+        "approval_expired" => {
+            "The approval was used, rejected, expired or no longer matches these inputs. Call again to request a new one."
         }
         "action_outcome_unknown" => {
             "Check the website before trying again; the change may already have happened."
