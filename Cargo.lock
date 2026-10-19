@@ -520,6 +520,7 @@ name = "itda-html"
 version = "0.1.0"
 dependencies = [
  "itda-types",
+ "regex",
  "scraper",
  "serde",
  "serde_json",
