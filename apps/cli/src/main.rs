@@ -2,6 +2,7 @@
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
 mod install;
+mod login;
 mod output;
 mod sites;
 
@@ -52,11 +53,18 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
         rest: Vec<String>,
     },
-    /// Store a secret for a site account. The value is read from stdin
+    /// Sign a site account in: store an API key read from stdin, or with
+    /// --browser sign in in your own browser and keep that site's session
     Login {
         site: String,
         #[arg(long, default_value = itda_runtime::DEFAULT_ACCOUNT)]
         account: String,
+        /// Sign in in a browser window instead of pasting a secret
+        #[arg(long)]
+        browser: bool,
+        /// The page to open for --browser; defaults to the site's address
+        #[arg(long, requires = "browser")]
+        url: Option<String>,
         /// The secret name the site definition refers to (store:<site>/<name>)
         #[arg(long, default_value = "api-key")]
         secret: String,
@@ -172,8 +180,17 @@ fn main() -> ExitCode {
         Command::Login {
             site,
             account,
+            browser: true,
+            url,
+            label,
+            ..
+        } => block_on(login_browser(&home, &site, &account, url, &label)),
+        Command::Login {
+            site,
+            account,
             secret,
             label,
+            ..
         } => block_on(login(&home, &site, &account, &secret, &label)),
         Command::Resume { site, account } => block_on(resume(&home, &site, account.as_deref())),
         Command::Approvals { json } => block_on(approvals(&home, json)),
@@ -482,9 +499,59 @@ async fn login(
     Ok(ExitCode::SUCCESS)
 }
 
-async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<ExitCode> {
+async fn login_browser(
+    home: &Path,
+    site: &str,
+    account: &str,
+    url: Option<String>,
+    label: &str,
+) -> AppResult<ExitCode> {
     let spec = sites::load(home, site)?;
-    let net = open(home)?.net;
+    // Check where the session will be kept before the person signs in.
+    if std::env::var("ITDA_SECRET_STORE").is_ok_and(|v| v == "env") {
+        return Err(usage(
+            "Environment secrets are read-only",
+            "Sign in where the system keyring is available, or set the session in an ITDA_SECRET__ variable.",
+        ));
+    }
+    KeyringStore::available()?;
+    let parts = open(home)?;
+    let session = tokio::task::spawn_blocking(move || login::browser(&spec, url.as_deref()))
+        .await
+        .map_err(|_| AppError::api("internal", 500))??;
+    parts.vault.add_account(site, account, label).await?;
+    parts
+        .vault
+        .set_secret(
+            site,
+            account,
+            itda_runtime::SESSION_SECRET,
+            Secret::new(session.cookies),
+        )
+        .await?;
+    // A new sign-in replaces an expired one, so the account may run again.
+    resume_scopes(home, &parts.net, site, Some(account)).await?;
+    eprintln!(
+        "Saved the session for {site}/{account} ({} cookies) in the system keyring. Agents only see the account id.",
+        session.count
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<ExitCode> {
+    resume_scopes(home, &open(home)?.net, site, account).await?;
+    eprintln!("Resumed {site}.");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Lift pauses on every origin the site's actions use.
+async fn resume_scopes(
+    home: &Path,
+    net: &Network,
+    site: &str,
+    account: Option<&str>,
+) -> AppResult<()> {
+    let spec = sites::load(home, site)?;
     let mut origins: Vec<String> = spec
         .operations
         .iter()
@@ -496,8 +563,7 @@ async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<Exi
     for origin in &origins {
         net.resume(origin, account.unwrap_or_default()).await?;
     }
-    eprintln!("Resumed {site}.");
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 type Drafter = fn(&[u8], &itda_prep::Options) -> AppResult<itda_prep::Draft>;
