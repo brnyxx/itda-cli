@@ -43,8 +43,18 @@ install step:
 ## Quick start
 
 ```sh
-cargo install --git https://github.com/brnyxx/itda-cli itda-cli   # installs `itda`
+# macOS and Linux
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh
 ```
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex"
+```
+
+Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releases),
+or build from source with
+`cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
 Try it on the bundled sandbox, a fake intranet that only listens on
 127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site
