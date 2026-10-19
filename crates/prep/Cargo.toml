@@ -1,6 +1,6 @@
 [package]
 name = "itda-prep"
-description = "Draft site definitions from API descriptions, for a person to review."
+description = "Draft site definitions from API descriptions and browser recordings, for a person to review."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,6 +13,7 @@ itda-spec.workspace = true
 itda-policy.workspace = true
 serde_json.workspace = true
 serde_norway.workspace = true
+url.workspace = true
 
 
 [lints]

@@ -1501,6 +1501,7 @@ dependencies = [
  "itda-types",
  "serde_json",
  "serde_norway",
+ "url",
 ]
 
 [[package]]
