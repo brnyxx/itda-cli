@@ -281,5 +281,24 @@ async fn changes_wait_for_a_person_to_approve_them() {
     assert!(itda(&home, &["reject", &id], &[]).await.status.success());
     let none = itda(&home, &["approvals"], &[]).await;
     assert!(String::from_utf8_lossy(&none.stdout).contains("No changes"));
+
+    // Every step is in the audit log, and the chain is intact.
+    let records = stdout_json(&itda(&home, &["audit", "--json"], &[]).await);
+    let kinds: Vec<(&str, &str)> = records
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["kind"].as_str().unwrap(), r["outcome"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("call", "approval_required"),
+            ("call", "approval_expired"),
+            ("rejected", "ok")
+        ]
+    );
+    let verified = stdout_json(&itda(&home, &["audit", "--verify", "--json"], &[]).await);
+    assert_eq!(verified["records"], 3);
     std::fs::remove_dir_all(home).ok();
 }
