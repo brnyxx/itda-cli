@@ -18,6 +18,7 @@ itda-policy = { path = "crates/policy" }
 itda-net = { path = "crates/net" }
 itda-vault = { path = "crates/vault" }
 itda-runtime = { path = "crates/runtime" }
+itda-mcp = { path = "crates/mcp" }
 
 axum = "0.8.9"
 clap = { version = "4.6.7", features = ["derive"] }
@@ -28,6 +29,7 @@ httpdate = "1.0.3"
 keyring = "4.2.0"
 psl = "2"
 regex = "1.13.1"
+rmcp = { version = "3.5.1", default-features = false, features = ["server", "transport-io"] }
 reqwest = { version = "0.13.5", features = ["json", "stream"] }
 rusqlite = { version = "0.40.2", features = ["bundled-full"] }
 scraper = "0.27.0"
