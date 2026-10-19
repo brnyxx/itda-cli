@@ -16,12 +16,14 @@ itda-store = { path = "crates/store" }
 itda-spec = { path = "crates/spec" }
 itda-policy = { path = "crates/policy" }
 itda-net = { path = "crates/net" }
+itda-vault = { path = "crates/vault" }
 
 axum = "0.8.9"
 chrono = { version = "0.4.45", features = ["serde"] }
 futures-util = "0.3.34"
 graphql-parser = "0.4.1"
 httpdate = "1.0.3"
+keyring = "4.2.0"
 psl = "2"
 regex = "1.13.1"
 reqwest = { version = "0.13.5", features = ["json", "stream"] }
