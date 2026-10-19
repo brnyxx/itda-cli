@@ -88,7 +88,7 @@ impl AppError {
 fn remedy(public_code: &str) -> &'static str {
     match public_code {
         "auth_required" | "identity_unavailable" => {
-            "Reconnect the website account or configure its website API key."
+            "Sign the account in again: `itda login <site> --browser`, or `itda login <site>` with its API key."
         }
         "query_failed" => {
             "The website reported query errors. Check the inputs and the action definition before retrying."

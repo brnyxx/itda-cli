@@ -46,7 +46,9 @@ only the shape of each call: method, path, input names and types, and the
 response fields every sample returned. Numbers and ids in paths become
 placeholders (`/notices/42` becomes `/notices/{notice_id}`). Inputs every
 sample sent are marked required. Token headers become `auth` entries whose
-values you add with `itda login`; CSRF and session fields are left out and
+values you add with `itda login`. Calls that sent a sign-in cookie (by name,
+such as `JSESSIONID` or `SID`) and no token get a `kind: browser` entry, so
+`itda login <site> --browser` signs them in. CSRF and session fields are left out and
 listed, since they come from sign-in or a `preflight` step, never from the
 agent. Calls to other addresses, file uploads and failed calls are skipped.
 Delete the HAR file when you are done with it.
@@ -188,7 +190,9 @@ When the answer does not match, the call fails with `response_mismatch` (exit
 
 ## `auth`
 
-Version 0.1 supports API keys and tokens sent in a header:
+### API keys and tokens
+
+A key or token sent in a header:
 
 ```yaml
 auth:
@@ -204,8 +208,39 @@ Store the value with `echo "$KEY" | itda login <site>` (OS keyring), or set
 picks among several accounts; the default account is `default`. The header is
 only ever sent to `base_url`'s origin, or to `origin` when you set it.
 
-Browser sign-in (`kind: browser`) and preflight steps are part of the format
-but refused by the 0.1 runtime.
+### Browser sign-in
+
+For sites you sign in to with a password, single sign-on or a one-time code,
+and that offer no API key:
+
+```yaml
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:JSESSIONID   # optional: the cookie that shows you are signed in
+```
+
+Then sign in once in your own browser:
+
+```console
+$ itda login intranet --browser
+Sign in to intranet in the browser window that just opened.
+itda continues when the JSESSIONID cookie appears, or press Enter once you are signed in.
+Saved the session for intranet/default (3 cookies) in the system keyring. Agents only see the account id.
+```
+
+itda opens Chrome, Edge or Chromium (or `ITDA_BROWSER`) in a fresh, empty
+profile at the site's address, or at `--url`. You sign in by hand; itda never
+clicks or types on the page. It keeps only the unexpired cookies for that
+site, closes the window and deletes the profile. The session is sent only to
+addresses on the same site, and cookie values are removed from results.
+
+When the session expires, the site answers 401 or 403, the account pauses with
+`auth_required`, and `itda login <site> --browser` signs it in again and
+resumes it. On a server without a keyring, set
+`ITDA_SECRET__<SITE>__<ACCOUNT>__SESSION` to a `Cookie` header value instead.
+
+Preflight steps are part of the format but refused by the 0.1 runtime.
 
 ## `models`
 

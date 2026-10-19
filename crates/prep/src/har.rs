@@ -93,6 +93,22 @@ impl Fields {
     }
 }
 
+/// Names of cookies in a `Cookie` header that look like a sign-in. Only names
+/// are read; values never leave this function.
+fn session_cookies(header: &str) -> BTreeSet<String> {
+    header
+        .split(';')
+        .filter_map(|pair| pair.split_once('=').map(|(name, _)| name.trim()))
+        .filter(|name| {
+            let lower = name.to_ascii_lowercase();
+            ["sess", "sid", "auth", "token", "login", "jwt", "remember"]
+                .iter()
+                .any(|hint| lower.contains(hint))
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Every recorded request with the same method and path shape.
 #[derive(Default)]
 struct Call {
@@ -109,6 +125,8 @@ struct Call {
     response_keys: Option<BTreeSet<String>>,
     response_json: bool,
     token: Option<(String, bool)>,
+    /// Sign-in cookie names every sample sent; `None` before the first sample.
+    session: Option<BTreeSet<String>>,
 }
 
 pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
@@ -180,11 +198,15 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             }
         }
         record_body(call, &request["postData"]);
+        let mut sent = BTreeSet::new();
         for header in request["headers"].as_array().into_iter().flatten() {
             let name = header["name"].as_str().unwrap_or_default();
             let lower = name.to_ascii_lowercase();
             if lower == "cookie" {
                 cookies = true;
+                sent.extend(session_cookies(
+                    header["value"].as_str().unwrap_or_default(),
+                ));
             } else if TOKEN_HEADERS.contains(&lower.as_str()) {
                 let bearer = header["value"]
                     .as_str()
@@ -192,6 +214,10 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
                 call.token = Some((name.to_owned(), bearer));
             }
         }
+        call.session = Some(match call.session.take() {
+            Some(before) => before.intersection(&sent).cloned().collect(),
+            None => sent,
+        });
         record_response(call, &entry["response"]["content"]);
     }
     if !elsewhere.is_empty() {
@@ -200,19 +226,37 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             elsewhere.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
-    if cookies {
-        notes.push(
-            "The site sends cookies; if it needs you signed in, these actions will report auth_required until browser sign-in is set up."
-                .into(),
-        );
-    }
-
     let site = options
         .name
         .as_deref()
         .map(slug)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| site_name(base.host_str().unwrap_or_default()));
+    // Calls that sent a sign-in cookie and no token use the browser session.
+    let signed_in: Vec<&BTreeSet<String>> = calls
+        .values()
+        .filter(|call| call.token.is_none())
+        .filter_map(|call| call.session.as_ref().filter(|names| !names.is_empty()))
+        .collect();
+    let sign_in_cookie = signed_in
+        .first()
+        .and_then(|first| {
+            first
+                .iter()
+                .find(|name| signed_in.iter().all(|names| names.contains(*name)))
+        })
+        .cloned();
+    if !signed_in.is_empty() {
+        notes.push(format!(
+            "Actions with auth: session use your browser sign-in; run `itda login {site} --browser` once after installing."
+        ));
+    } else if cookies {
+        notes.push(
+            "The site sends cookies, but none look like a sign-in; if actions report auth_required, add an auth entry with kind: browser."
+                .into(),
+        );
+    }
+
     let mut auth: Vec<Yaml> = Vec::new();
     let mut auth_names: BTreeMap<String, String> = BTreeMap::new();
     let mut operations = Vec::new();
@@ -259,6 +303,18 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
                 auth_name
             });
             entry.insert("auth".into(), auth_name.clone().into());
+        } else if call.session.as_ref().is_some_and(|names| !names.is_empty()) {
+            if !auth_names.contains_key("cookie") {
+                let mut strategy = Mapping::new();
+                strategy.insert("name".into(), "session".into());
+                strategy.insert("kind".into(), "browser".into());
+                if let Some(cookie) = &sign_in_cookie {
+                    strategy.insert("value_from".into(), format!("cookie:{cookie}").into());
+                }
+                auth.push(Yaml::Mapping(strategy));
+                auth_names.insert("cookie".into(), "session".into());
+            }
+            entry.insert("auth".into(), "session".into());
         }
         let read = matches!(call.method.as_str(), "GET" | "HEAD");
         entry.insert("effect".into(), if read { "read" } else { "write" }.into());

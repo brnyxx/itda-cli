@@ -50,14 +50,17 @@ fn a_recording_becomes_a_valid_draft() {
     assert_eq!(body["pinned"].kind, "bool");
     assert!(!body.contains_key("csrf_token"));
 
+    // The form post sent only the session cookie, so it uses the browser sign-in.
     let write = spec.op("post-write").unwrap();
-    assert!(write.auth.is_empty());
+    assert_eq!(write.auth, "session");
     assert!(write.body.as_ref().unwrap().form["subject"].required);
 
-    assert_eq!(spec.auth.len(), 1);
+    assert_eq!(spec.auth.len(), 2);
     assert_eq!(spec.auth[0].header, "Authorization");
     assert_eq!(spec.auth[0].prefix, "Bearer ");
     assert_eq!(spec.auth[0].value_from, "store:intranet-example/token");
+    assert_eq!(spec.auth[1].kind, "browser");
+    assert_eq!(spec.auth[1].value_from, "cookie:SID");
 }
 
 #[test]
@@ -87,7 +90,10 @@ fn what_was_left_out_is_listed() {
         .notes
         .join("\n");
     assert!(notes.contains("analytics.example.org"), "{notes}");
-    assert!(notes.contains("cookies"), "{notes}");
+    assert!(
+        notes.contains("itda login intranet-example --browser"),
+        "{notes}"
+    );
     assert!(notes.contains("POST /api/v1/files: skipped"), "{notes}");
     assert!(notes.contains("left out csrf_token"), "{notes}");
     assert!(notes.contains("left out _csrf"), "{notes}");
