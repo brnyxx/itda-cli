@@ -1,7 +1,7 @@
 //! Request building and response model projection.
 use serde_json::{Map, Value};
 
-use crate::model::{Operation, Param, Spec};
+use crate::model::{Model, Operation, Param, Spec};
 use itda_types::error::{self as apperr, AppResult};
 
 impl Spec {
@@ -131,19 +131,29 @@ impl Spec {
                 "",
             )
         })?;
-        let mut out = Map::new();
-        for (field, f) in model {
-            let path = if f.path.is_empty() {
-                field.clone()
-            } else {
-                f.path.clone()
-            };
-            if let Some(v) = walk(&doc, path.split('.')) {
-                out.insert(field.clone(), convert_type(v, &f.kind));
+        Ok(match &doc {
+            Value::Array(items) => {
+                Value::Array(items.iter().map(|item| project(model, item)).collect())
             }
-        }
-        Ok(Value::Object(out))
+            _ => project(model, &doc),
+        })
     }
+}
+
+/// One record in the model's shape. A list answer is projected record by record.
+fn project(model: &Model, doc: &Value) -> Value {
+    let mut out = Map::new();
+    for (field, f) in model {
+        let path = if f.path.is_empty() {
+            field.clone()
+        } else {
+            f.path.clone()
+        };
+        if let Some(v) = walk(doc, path.split('.')) {
+            out.insert(field.clone(), convert_type(v, &f.kind));
+        }
+    }
+    Value::Object(out)
 }
 
 fn walk<'a>(doc: &'a Value, path: impl Iterator<Item = &'a str>) -> Option<&'a Value> {
