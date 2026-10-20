@@ -141,6 +141,7 @@ pub(crate) fn reorder(entry: Mapping) -> Mapping {
         "auth",
         "effect",
         "evidence",
+        "headers",
         "preflight",
         "params",
         "query",

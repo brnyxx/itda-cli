@@ -147,3 +147,50 @@ fn options_and_bad_input() {
     assert!(from_har(b"not json", &Options::default()).is_err());
     assert!(from_har(br#"{"log":{"entries":[]}}"#, &Options::default()).is_err());
 }
+
+#[test]
+fn a_header_token_is_read_from_the_page_meta_tag() {
+    let entry = |method: &str, url: &str, headers: serde_json::Value, mime: &str, text: &str| {
+        serde_json::json!({
+            "request": {"method": method, "url": url, "headers": headers},
+            "response": {"status": 200, "content": {"mimeType": mime, "text": text}}
+        })
+    };
+    let page = "<html><head><meta charset=utf-8><meta name=\"csrf-token\" content=\"CSRF-SECRET\"></head></html>";
+    let har = serde_json::json!({"log": {"entries": [
+        entry("GET", "https://app.example.com/posts/new?draft=PRIVATE", serde_json::json!([]), "text/html", page),
+        entry(
+            "POST",
+            "https://app.example.com/api/posts",
+            serde_json::json!([
+                {"name": "X-CSRF-Token", "value": "CSRF-SECRET"},
+                {"name": "Cookie", "value": "_app_session=SESSION-SECRET"}
+            ]),
+            "application/json",
+            "{\"id\": 1}"
+        ),
+        entry(
+            "DELETE",
+            "https://app.example.com/api/posts/1",
+            serde_json::json!([{"name": "X-XSRF-TOKEN", "value": "CSRF-SECRET"}]),
+            "application/json",
+            "{}"
+        ),
+    ]}});
+    let draft = from_har(&serde_json::to_vec(&har).unwrap(), &Options::default()).unwrap();
+    assert!(!draft.yaml.contains("SECRET") && !draft.yaml.contains("PRIVATE"));
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+    let create = spec.op("create-post").unwrap();
+    assert_eq!(create.headers["X-CSRF-Token"], "{{step.page.token}}");
+    assert_eq!(create.preflight[0].path, "/posts/new");
+    assert_eq!(
+        create.preflight[0].extract["token"],
+        "css:meta[name=\"csrf-token\"]@content"
+    );
+    let notes = draft.notes.join("\n");
+    assert!(
+        notes.contains("X-CSRF-Token comes from the csrf-token tag"),
+        "{notes}"
+    );
+}

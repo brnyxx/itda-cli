@@ -129,6 +129,8 @@ struct Call {
     session: Option<BTreeSet<String>>,
     /// Form fields that carried a token, such as `_csrf`.
     form_tokens: BTreeSet<String>,
+    /// A header that carried an anti-forgery token, such as `X-CSRF-Token`.
+    header_token: Option<String>,
     /// Position of the first sample in the recording.
     first: Option<usize>,
 }
@@ -222,6 +224,8 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
                     .as_str()
                     .is_some_and(|v| v.len() > 7 && v[..7].eq_ignore_ascii_case("bearer "));
                 call.token = Some((name.to_owned(), bearer));
+            } else if lower.contains("csrf") || lower.contains("xsrf") {
+                call.header_token = Some(name.to_owned());
             }
         }
         call.session = Some(match call.session.take() {
@@ -355,6 +359,35 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
         if !call.query.0.is_empty() {
             entry.insert("query".into(), Yaml::Mapping(call.query.yaml(call.samples)));
         }
+        if let Some(header) = &call.header_token {
+            match meta_page(entries, call, &origin) {
+                Some((page, meta)) => {
+                    let mut extract = Mapping::new();
+                    extract.insert(
+                        "token".into(),
+                        format!("css:meta[name=\"{meta}\"]@content").into(),
+                    );
+                    let mut step = Mapping::new();
+                    step.insert("name".into(), "page".into());
+                    step_path(&mut step, &page, &prefix, &origin);
+                    step.insert("extract".into(), Yaml::Mapping(extract));
+                    entry.insert(
+                        "preflight".into(),
+                        Yaml::Sequence(vec![Yaml::Mapping(step)]),
+                    );
+                    let mut headers = Mapping::new();
+                    headers.insert(header.clone().into(), "{{step.page.token}}".into());
+                    entry.insert("headers".into(), Yaml::Mapping(headers));
+                    notes.push(format!(
+                        "{label}: {header} comes from the {meta} tag on {} through a preflight step, read fresh before each call.",
+                        page.path()
+                    ));
+                }
+                None => notes.push(format!(
+                    "{label}: left out the {header} header; no page recorded before it had a csrf meta tag, so add a preflight step that reads it."
+                )),
+            }
+        }
         let mut body = Mapping::new();
         let mut left_out = call.left_out.clone();
         if !call.json.0.is_empty() {
@@ -379,19 +412,14 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
                 }
                 let mut step = Mapping::new();
                 step.insert("name".into(), "form".into());
-                // Only the path: query values, like every recorded value, stay out.
-                match page.path().strip_prefix(&prefix) {
-                    Some(rest) => step.insert("path".into(), rest.into()),
-                    None => {
-                        step.insert("base_url".into(), origin.ascii_serialization().into());
-                        step.insert("path".into(), page.path().into())
-                    }
-                };
+                step_path(&mut step, &page, &prefix, &origin);
                 step.insert("extract".into(), Yaml::Mapping(extract));
-                entry.insert(
-                    "preflight".into(),
-                    Yaml::Sequence(vec![Yaml::Mapping(step)]),
-                );
+                let mut steps = match entry.remove("preflight") {
+                    Some(Yaml::Sequence(steps)) => steps,
+                    _ => Vec::new(),
+                };
+                steps.push(Yaml::Mapping(step));
+                entry.insert("preflight".into(), Yaml::Sequence(steps));
                 notes.push(format!(
                     "{label}: {} come from {} through a preflight step, read fresh before each change{}.",
                     call.form_tokens.iter().cloned().collect::<Vec<_>>().join(", "),
@@ -458,12 +486,25 @@ fn not_har() -> itda_types::error::AppError {
     )
 }
 
-/// The page, recorded before the call, whose form holds every token field
-/// the call sent: the latest one, as the form the person filled in.
-fn token_page(entries: &[Value], call: &Call, origin: &url::Origin) -> Option<url::Url> {
-    if call.form_tokens.is_empty() {
-        return None;
-    }
+/// Only the path: query values, like every recorded value, stay out.
+fn step_path(step: &mut Mapping, page: &url::Url, prefix: &str, origin: &url::Origin) {
+    match page.path().strip_prefix(prefix) {
+        Some(rest) => step.insert("path".into(), rest.into()),
+        None => {
+            step.insert("base_url".into(), origin.ascii_serialization().into());
+            step.insert("path".into(), page.path().into())
+        }
+    };
+}
+
+/// The latest HTML page on the same origin, recorded before the call, whose
+/// text `wanted` picks something from.
+fn page_before<T>(
+    entries: &[Value],
+    call: &Call,
+    origin: &url::Origin,
+    wanted: impl Fn(&str) -> Option<T>,
+) -> Option<(url::Url, T)> {
     entries[..call.first?].iter().rev().find_map(|entry| {
         let url = url::Url::parse(entry["request"]["url"].as_str()?).ok()?;
         let content = &entry["response"]["content"];
@@ -474,17 +515,52 @@ fn token_page(entries: &[Value], call: &Call, origin: &url::Origin) -> Option<ur
             && content["mimeType"]
                 .as_str()
                 .is_some_and(|m| m.contains("html"));
-        let text = content["text"].as_str()?;
+        if !html || url.origin() != *origin {
+            return None;
+        }
+        Some((url, wanted(content["text"].as_str()?)?))
+    })
+}
+
+/// The page whose form holds every token field the call sent: the latest
+/// one, as the form the person filled in.
+fn token_page(entries: &[Value], call: &Call, origin: &url::Origin) -> Option<url::Url> {
+    if call.form_tokens.is_empty() {
+        return None;
+    }
+    let found = page_before(entries, call, origin, |text| {
         let has = |token: &str| {
             ["\"", "'", ""]
                 .iter()
                 .any(|quote| text.contains(&format!("name={quote}{token}{quote}")))
         };
-        (html && url.origin() == *origin && call.form_tokens.iter().all(|t| has(t))).then_some(url)
+        call.form_tokens.iter().all(|t| has(t)).then_some(())
+    });
+    found.map(|(url, ())| url)
+}
+
+/// The page with a meta tag such as `<meta name="csrf-token" content="…">`,
+/// which Rails, Laravel and many single-page apps send back as a header.
+fn meta_page(entries: &[Value], call: &Call, origin: &url::Origin) -> Option<(url::Url, String)> {
+    page_before(entries, call, origin, csrf_meta)
+}
+
+fn csrf_meta(text: &str) -> Option<String> {
+    text.split("<meta").skip(1).find_map(|tag| {
+        let tag = &tag[..tag.find('>')?];
+        let rest = &tag[tag.find("name=")? + 5..];
+        let name = match rest.chars().next()? {
+            quote @ ('"' | '\'') => rest[1..].split(quote).next()?,
+            _ => rest.split([' ', '/']).next()?,
+        };
+        let lower = name.to_ascii_lowercase();
+        let safe = name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        (safe && (lower.contains("csrf") || lower.contains("xsrf"))).then(|| name.to_owned())
     })
 }
 
-/// Calls a page makes to its API: JSON answers, and changes sent with a body.
 fn api_call(entry: &Value) -> bool {
     let status = entry["response"]["status"].as_u64().unwrap_or(0);
     let json = entry["response"]["content"]["mimeType"]
