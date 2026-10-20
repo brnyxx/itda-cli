@@ -1,8 +1,9 @@
 # Sandbox intranet
 
 A small notice board that behaves like an older internal system: a
-server-rendered HTML table, a JSON API behind an API key, and a page that
-refuses automated access. Use it to try itda without touching a real website.
+server-rendered HTML table, a JSON API behind an API key, a write form that
+only takes a one-time CSRF token from its own page, and a page that refuses
+automated access. Use it to try itda without touching a real website.
 It only listens on 127.0.0.1.
 
 ```sh
@@ -13,8 +14,8 @@ In another terminal, install its definition into a scratch data directory:
 
 ```sh
 export ITDA_HOME=$(mktemp -d) ITDA_ALLOW_LOCAL=1
-mkdir -p "$ITDA_HOME/specs/sandbox" && cp examples/sandbox/spec.yaml "$ITDA_HOME/specs/sandbox/"
 cargo build -p itda-cli && alias itda=target/debug/itda
+itda add examples/sandbox/spec.yaml
 
 itda ls
 itda call sandbox.list-notices --q 보안      # JSON API
@@ -26,6 +27,8 @@ itda call sandbox.create-notice --title hi  # exit 20: waits for approval <id>
 itda approvals                              # what is waiting
 itda approve <id>                           # shows the exact request, asks y/N
 itda call sandbox.create-notice --title hi --approval <id>   # runs once
+itda call sandbox.write-notice --title hi   # a form post: approve it the same way;
+                                            # itda reads a fresh CSRF token first
 itda audit                                  # everything above, hash-chained
 itda call sandbox.reports                   # exit 12: the site refused, so it is paused
 itda call sandbox.list-notices              # still paused, nothing is sent

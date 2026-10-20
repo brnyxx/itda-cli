@@ -1,11 +1,12 @@
 //! A legacy-style intranet notice board for trying itda without touching a
 //! real website. It serves server-rendered HTML, a small JSON API behind an
-//! API key, and a page that refuses automated access, so every path of the
-//! read pipeline can be seen locally.
+//! API key, a form that only accepts a one-time CSRF token from its own page,
+//! and a page that refuses automated access, so every path of the pipeline
+//! can be seen locally.
 //!
 //! `cargo run -p itda-sandbox [-- PORT]` listens on 127.0.0.1 (default 8787).
 use axum::{
-    Json, Router,
+    Form, Json, Router,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
@@ -13,7 +14,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 
@@ -23,6 +24,8 @@ const API_KEY: &str = "sandbox-key";
 #[derive(Clone)]
 struct Board {
     notices: Arc<Mutex<Vec<Value>>>,
+    /// CSRF tokens handed out with the write form, each good for one post.
+    tokens: Arc<Mutex<HashSet<String>>>,
 }
 
 impl Board {
@@ -43,6 +46,7 @@ async fn main() -> std::io::Result<()> {
             notice(2, "보안 교육 이수 요청", "보안팀", "2026-10-07"),
             notice(3, "사내 메신저 업데이트", "IT지원", "2026-10-15"),
         ])),
+        tokens: Arc::default(),
     };
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     eprintln!("sandbox listening on http://127.0.0.1:{port}");
@@ -56,7 +60,8 @@ fn notice(id: u64, title: &str, author: &str, date: &str) -> Value {
 fn router(board: Board) -> Router {
     Router::new()
         .route("/", get(home))
-        .route("/notices", get(notice_page))
+        .route("/notices", get(notice_page).post(post_notice))
+        .route("/notices/new", get(write_form))
         .route("/api/notices", get(list_notices).post(create_notice))
         .route("/api/me", get(me))
         .route("/reports", get(reports))
@@ -147,6 +152,55 @@ async fn create_notice(
         body["title"].as_str().unwrap_or("untitled"),
         "Sandbox User",
         "2026-10-19",
+    );
+    notices.push(created.clone());
+    Ok((StatusCode::CREATED, Json(created)))
+}
+
+/// The write form of an older system: a hidden one-time token that the post
+/// must send back.
+async fn write_form(State(board): State<Board>) -> Html<String> {
+    let token = format!(
+        "{:x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default()
+    );
+    if let Ok(mut tokens) = board.tokens.lock() {
+        tokens.insert(token.clone());
+    }
+    Html(format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>New notice</title></head>
+<body><form method=\"post\" action=\"/notices\"><input type=\"hidden\" name=\"_csrf\" value=\"{token}\">
+<input name=\"title\"><button>Post</button></form></body></html>"
+    ))
+}
+
+/// A form post that needs the API key and a token from the write form.
+async fn post_notice(
+    State(board): State<Board>,
+    headers: HeaderMap,
+    Form(form): Form<HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !signed_in(&headers) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let fresh = form
+        .get("_csrf")
+        .is_some_and(|token| board.tokens.lock().is_ok_and(|mut t| t.remove(token)));
+    if !fresh {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let mut notices = board
+        .notices
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let created = notice(
+        notices.len() as u64 + 1,
+        form.get("title").map_or("untitled", String::as_str),
+        "Sandbox User",
+        "2026-10-20",
     );
     notices.push(created.clone());
     Ok((StatusCode::CREATED, Json(created)))
