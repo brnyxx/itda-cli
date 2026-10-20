@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-label="How itda works: compile a site once, let the agent read, approve each change" lang="en">
-<title>How itda works: compile a site once, let the agent read, approve each change</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-label="How itda works: record a website once in your browser, itda drafts commands, the agent calls them and every change waits for your approval" lang="en">
+<title>How itda works: record a website once in your browser, itda drafts commands, the agent calls them and every change waits for your approval</title>
 <defs>
 <linearGradient id="m-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232A3B"/><stop offset="1" stop-color="#0B0D12"/></linearGradient>
 <linearGradient id="m-dot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6E8BFF"/><stop offset="1" stop-color="#2F5BEA"/></linearGradient>
@@ -13,95 +13,119 @@ text{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono'
 .cap{font-size:10.5px;letter-spacing:.12em;fill:#6B7385}
 .origin{transform-box:fill-box;transform-origin:center}
 [class^="k"]{opacity:0}
-@keyframes k1{0.00%{opacity:1} 27.69%{opacity:1} 30.00%{opacity:0} 97.69%{opacity:0} 100.00%{opacity:1}}
-.k1{animation:k1 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k2{0.00%{opacity:0} 27.69%{opacity:0} 30.00%{opacity:1} 53.85%{opacity:1} 56.15%{opacity:0} 100.00%{opacity:0}}
-.k2{animation:k2 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k3{0.00%{opacity:0} 53.85%{opacity:0} 56.15%{opacity:1} 95.38%{opacity:1} 97.69%{opacity:0} 100.00%{opacity:0}}
-.k3{animation:k3 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k4{0.00%{opacity:0;transform:translateY(6px)} 78.85%{opacity:0;transform:translateY(6px)} 81.54%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k4{animation:k4 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k5{0.00%{opacity:0;transform:translateY(0)} 3.08%{opacity:0;transform:translateY(0)} 4.62%{opacity:1;transform:translateY(0)} 8.46%{opacity:1;transform:translateY(34px)} 12.31%{opacity:1;transform:translateY(68px)} 15.38%{opacity:0;transform:translateY(68px)} 100.00%{opacity:0;transform:translateY(68px)}}
-.k5{animation:k5 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k6{0.00%{opacity:0} 40.00%{opacity:0} 41.54%{opacity:1} 50.00%{opacity:1} 53.08%{opacity:0} 100.00%{opacity:0}}
-.k6{animation:k6 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k7{0.00%{opacity:0;transform:scale(.85)} 15.38%{opacity:0;transform:scale(.85)} 16.54%{opacity:.7;transform:scale(.95)} 21.54%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
-.k7{animation:k7 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k8{0.00%{opacity:0;transform:scale(.85)} 37.31%{opacity:0;transform:scale(.85)} 38.46%{opacity:.7;transform:scale(.95)} 43.46%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
-.k8{animation:k8 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k9{0.00%{opacity:0;transform:scale(.85)} 75.00%{opacity:0;transform:scale(.85)} 76.15%{opacity:.7;transform:scale(.95)} 81.15%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
-.k9{animation:k9 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k10{0.00%{opacity:0} 62.69%{opacity:0} 64.23%{opacity:1} 73.85%{opacity:1} 75.38%{opacity:0} 100.00%{opacity:0}}
-.k10{animation:k10 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k11{0.00%{opacity:0;transform:translateY(6px)} 19.23%{opacity:0;transform:translateY(6px)} 21.92%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k11{animation:k11 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k12{0.00%{opacity:0;transform:translateY(6px)} 22.31%{opacity:0;transform:translateY(6px)} 25.00%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k12{animation:k12 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k13{0.00%{opacity:0} 36.54%{opacity:0} 38.08%{opacity:1} 47.69%{opacity:1} 50.00%{opacity:0} 100.00%{opacity:0}}
-.k13{animation:k13 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k14{0.00%{opacity:0} 60.77%{opacity:0} 62.31%{opacity:1} 79.23%{opacity:1} 81.54%{opacity:0} 100.00%{opacity:0}}
-.k14{animation:k14 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k15{0.00%{opacity:0;transform:translateY(6px)} 24.62%{opacity:0;transform:translateY(6px)} 27.31%{opacity:1;transform:translateY(0)} 83.85%{opacity:1;transform:translateY(0)} 86.15%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k15{animation:k15 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k16{0.00%{opacity:0;transform:translateY(6px)} 84.62%{opacity:0;transform:translateY(6px)} 87.31%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k16{animation:k16 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k17{0.00%{opacity:0;transform:translateY(6px)} 29.23%{opacity:0;transform:translateY(6px)} 31.92%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k17{animation:k17 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k18{0.00%{opacity:0;transform:translateY(6px)} 32.69%{opacity:0;transform:translateY(6px)} 35.38%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k18{animation:k18 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k19{0.00%{opacity:0;transform:translateY(6px)} 50.00%{opacity:0;transform:translateY(6px)} 52.69%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k19{animation:k19 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k20{0.00%{opacity:0;transform:translateY(6px)} 55.38%{opacity:0;transform:translateY(6px)} 58.08%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k20{animation:k20 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k21{0.00%{opacity:0;transform:translateY(6px)} 58.46%{opacity:0;transform:translateY(6px)} 61.15%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k21{animation:k21 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k22{0.00%{opacity:0;transform:translateY(6px)} 63.85%{opacity:0;transform:translateY(6px)} 66.54%{opacity:1;transform:translateY(0)} 82.69%{opacity:1;transform:translateY(0)} 85.00%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k22{animation:k22 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k23{0.00%{opacity:0;transform:translateY(6px)} 84.62%{opacity:0;transform:translateY(6px)} 87.31%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
-.k23{animation:k23 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k24{0.00%{opacity:0;transform:translateX(0)} 7.62%{opacity:0;transform:translateX(0)} 7.69%{opacity:1;transform:translateX(0)} 13.08%{opacity:1;transform:translateX(136px)} 14.00%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k24{animation:k24 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k25{0.00%{opacity:0;transform:translateX(0)} 9.54%{opacity:0;transform:translateX(0)} 9.62%{opacity:1;transform:translateX(0)} 15.00%{opacity:1;transform:translateX(136px)} 15.92%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k25{animation:k25 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k26{0.00%{opacity:0;transform:translateX(0)} 11.46%{opacity:0;transform:translateX(0)} 11.54%{opacity:1;transform:translateX(0)} 16.92%{opacity:1;transform:translateX(136px)} 17.85%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k26{animation:k26 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k27{0.00%{opacity:0;transform:translateX(0)} 33.38%{opacity:0;transform:translateX(0)} 33.46%{opacity:1;transform:translateX(0)} 36.92%{opacity:1;transform:translateX(-136px)} 37.85%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
-.k27{animation:k27 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k28{0.00%{opacity:0;transform:translateX(0)} 37.23%{opacity:0;transform:translateX(0)} 37.31%{opacity:1;transform:translateX(0)} 40.38%{opacity:1;transform:translateX(-136px)} 41.31%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
-.k28{animation:k28 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k29{0.00%{opacity:0;transform:translateX(0)} 43.00%{opacity:0;transform:translateX(0)} 43.08%{opacity:1;transform:translateX(0)} 46.15%{opacity:1;transform:translateX(136px)} 47.08%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k29{animation:k29 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k30{0.00%{opacity:0;transform:translateX(0)} 46.46%{opacity:0;transform:translateX(0)} 46.54%{opacity:1;transform:translateX(0)} 49.62%{opacity:1;transform:translateX(136px)} 50.54%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k30{animation:k30 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k31{0.00%{opacity:0;transform:translateX(0)} 59.15%{opacity:0;transform:translateX(0)} 59.23%{opacity:1;transform:translateX(0)} 62.69%{opacity:1;transform:translateX(-136px)} 63.62%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
-.k31{animation:k31 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k32{0.00%{opacity:0;transform:translateX(0)} 75.31%{opacity:0;transform:translateX(0)} 75.38%{opacity:1;transform:translateX(0)} 78.46%{opacity:1;transform:translateX(-136px)} 79.38%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
-.k32{animation:k32 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k33{0.00%{opacity:0;transform:translateX(0)} 79.15%{opacity:0;transform:translateX(0)} 79.23%{opacity:1;transform:translateX(0)} 81.54%{opacity:1;transform:translateX(136px)} 82.46%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k33{animation:k33 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k34{0.00%{opacity:0;transform:translateX(0)} 81.46%{opacity:0;transform:translateX(0)} 81.54%{opacity:1;transform:translateX(0)} 83.85%{opacity:1;transform:translateX(136px)} 84.77%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
-.k34{animation:k34 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k35{0.00%{opacity:0;transform:translateY(16px)} 65.77%{opacity:0;transform:translateY(16px)} 68.85%{opacity:1;transform:translateY(0)} 76.54%{opacity:1;transform:translateY(0)} 78.85%{opacity:0;transform:translateY(8px)} 100.00%{opacity:0;transform:translateY(8px)}}
-.k35{animation:k35 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k36{0.00%{opacity:0} 73.08%{opacity:0} 73.85%{opacity:1} 100.00%{opacity:1}}
-.k36{animation:k36 13.0s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes k37{0.00%{opacity:0;transform:translate(693.14px,450px) scale(1)} 68.46%{opacity:0;transform:translate(693.14px,450px) scale(1)} 69.62%{opacity:1;transform:translate(673.14px,440px) scale(1)} 72.31%{opacity:1;transform:translate(603.14px,410px) scale(1)} 72.92%{opacity:1;transform:translate(603.14px,410px) scale(.82)} 73.69%{opacity:1;transform:translate(603.14px,410px) scale(1)} 76.54%{opacity:1;transform:translate(603.14px,410px) scale(1)} 78.46%{opacity:0;transform:translate(603.14px,410px) scale(1)} 100.00%{opacity:0;transform:translate(603.14px,410px) scale(1)}}
-.k37{animation:k37 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k1{0.00%{opacity:1} 26.92%{opacity:1} 28.53%{opacity:0} 98.08%{opacity:0} 100.00%{opacity:1}}
+.k1{animation:k1 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k2{0.00%{opacity:0} 26.92%{opacity:0} 28.85%{opacity:1} 42.31%{opacity:1} 44.23%{opacity:0} 100.00%{opacity:0}}
+.k2{animation:k2 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k3{0.00%{opacity:0} 42.31%{opacity:0} 44.23%{opacity:1} 96.15%{opacity:1} 98.08%{opacity:0} 100.00%{opacity:0}}
+.k3{animation:k3 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k4{0.00%{opacity:1} 10.58%{opacity:1} 12.18%{opacity:0} 98.08%{opacity:0} 100.00%{opacity:1}}
+.k4{animation:k4 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k5{0.00%{opacity:0;transform:translateY(0px)} 11.22%{opacity:0;transform:translateY(0px)} 13.46%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k5{animation:k5 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k6{0.00%{opacity:0} 1.28%{opacity:0} 2.56%{opacity:1} 22.44%{opacity:1} 23.72%{opacity:0} 100.00%{opacity:0}}
+.k6{animation:k6 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k7{0.00%{opacity:1} 10.58%{opacity:1} 12.18%{opacity:0} 98.08%{opacity:0} 100.00%{opacity:1}}
+.k7{animation:k7 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k8{0.00%{opacity:0} 2.88%{opacity:0} 3.85%{opacity:1} 10.58%{opacity:1} 12.18%{opacity:0} 100.00%{opacity:0}}
+.k8{animation:k8 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k9{0.00%{opacity:0} 5.13%{opacity:0} 6.09%{opacity:1} 10.58%{opacity:1} 12.18%{opacity:0} 100.00%{opacity:0}}
+.k9{animation:k9 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k10{0.00%{opacity:0;transform:translate(230px,300px) scale(1)} 3.21%{opacity:0;transform:translate(230px,300px) scale(1)} 4.81%{opacity:1;transform:translate(210px,280px) scale(1)} 7.37%{opacity:1;transform:translate(168px,262px) scale(1)} 8.33%{opacity:1;transform:translate(168px,262px) scale(.82)} 8.97%{opacity:1;transform:translate(168px,262px) scale(1)} 9.62%{opacity:1;transform:translate(168px,262px) scale(1)} 11.22%{opacity:0;transform:translate(168px,262px) scale(1)} 100.00%{opacity:0;transform:translate(168px,262px) scale(1)}}
+.k10{animation:k10 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k11{0.00%{opacity:0;transform:translateY(0px)} 11.22%{opacity:0;transform:translateY(0px)} 13.46%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k11{animation:k11 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k12{0.00%{opacity:0;transform:translateY(0)} 12.82%{opacity:0;transform:translateY(0)} 13.78%{opacity:1;transform:translateY(0)} 16.03%{opacity:1;transform:translateY(34px)} 18.27%{opacity:1;transform:translateY(68px)} 19.55%{opacity:0;transform:translateY(68px)} 100.00%{opacity:0;transform:translateY(68px)}}
+.k12{animation:k12 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k13{0.00%{opacity:0;transform:translate(200px,200px) scale(1)} 18.59%{opacity:0;transform:translate(200px,200px) scale(1)} 19.55%{opacity:1;transform:translate(220px,170px) scale(1)} 20.83%{opacity:1;transform:translate(252px,140px) scale(1)} 21.47%{opacity:1;transform:translate(252px,140px) scale(.82)} 22.12%{opacity:1;transform:translate(252px,140px) scale(1)} 22.76%{opacity:1;transform:translate(252px,140px) scale(1)} 24.36%{opacity:0;transform:translate(252px,140px) scale(1)} 100.00%{opacity:0;transform:translate(252px,140px) scale(1)}}
+.k13{animation:k13 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k14{0.00%{opacity:0;transform:translateY(6px)} 84.94%{opacity:0;transform:translateY(6px)} 87.18%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k14{animation:k14 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k15{0.00%{opacity:0} 52.56%{opacity:0} 53.85%{opacity:1} 60.90%{opacity:1} 63.46%{opacity:0} 100.00%{opacity:0}}
+.k15{animation:k15 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k16{0.00%{opacity:0} 1.28%{opacity:0} 2.56%{opacity:1} 22.44%{opacity:1} 23.72%{opacity:0} 100.00%{opacity:0}}
+.k16{animation:k16 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k17{0.00%{opacity:0;transform:translateY(0px)} 24.04%{opacity:0;transform:translateY(0px)} 26.28%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k17{animation:k17 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k18{0.00%{opacity:0;transform:translateX(0)} 23.08%{opacity:0;transform:translateX(0)} 24.04%{opacity:1;transform:translateX(0)} 27.24%{opacity:1;transform:translateX(62px)} 28.21%{opacity:0;transform:translateX(62px)} 100.00%{opacity:0;transform:translateX(62px)}}
+.k18{animation:k18 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k19{0.00%{opacity:0;transform:scale(.85)} 27.56%{opacity:0;transform:scale(.85)} 28.53%{opacity:.7;transform:scale(.95)} 32.69%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
+.k19{animation:k19 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k20{0.00%{opacity:0;transform:scale(.85)} 50.32%{opacity:0;transform:scale(.85)} 51.28%{opacity:.7;transform:scale(.95)} 55.45%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
+.k20{animation:k20 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k21{0.00%{opacity:0;transform:scale(.85)} 81.73%{opacity:0;transform:scale(.85)} 82.69%{opacity:.7;transform:scale(.95)} 86.86%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
+.k21{animation:k21 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k22{0.00%{opacity:0} 71.47%{opacity:0} 72.76%{opacity:1} 80.77%{opacity:1} 82.05%{opacity:0} 100.00%{opacity:0}}
+.k22{animation:k22 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k23{0.00%{opacity:0;transform:translateY(0px)} 27.88%{opacity:0;transform:translateY(0px)} 30.13%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k23{animation:k23 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k24{0.00%{opacity:0;transform:translateY(6px)} 31.41%{opacity:0;transform:translateY(6px)} 33.65%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k24{animation:k24 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k25{0.00%{opacity:0;transform:translateY(6px)} 33.97%{opacity:0;transform:translateY(6px)} 36.22%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k25{animation:k25 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k26{0.00%{opacity:0} 49.68%{opacity:0} 50.96%{opacity:1} 58.97%{opacity:1} 60.90%{opacity:0} 100.00%{opacity:0}}
+.k26{animation:k26 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k27{0.00%{opacity:0} 69.87%{opacity:0} 71.15%{opacity:1} 85.26%{opacity:1} 87.18%{opacity:0} 100.00%{opacity:0}}
+.k27{animation:k27 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k28{0.00%{opacity:0;transform:translateY(6px)} 36.54%{opacity:0;transform:translateY(6px)} 38.78%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k28{animation:k28 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k29{0.00%{opacity:0} 81.73%{opacity:0} 82.69%{opacity:1} 85.26%{opacity:1} 87.18%{opacity:0} 100.00%{opacity:0}}
+.k29{animation:k29 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k30{0.00%{opacity:0;transform:translateY(6px)} 38.46%{opacity:0;transform:translateY(6px)} 40.71%{opacity:1;transform:translateY(0)} 88.46%{opacity:1;transform:translateY(0)} 90.38%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k30{animation:k30 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k31{0.00%{opacity:0;transform:translateY(6px)} 89.74%{opacity:0;transform:translateY(6px)} 91.99%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k31{animation:k31 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k32{0.00%{opacity:0;transform:translateY(6px)} 43.59%{opacity:0;transform:translateY(6px)} 45.83%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k32{animation:k32 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k33{0.00%{opacity:0;transform:translateY(6px)} 46.47%{opacity:0;transform:translateY(6px)} 48.72%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k33{animation:k33 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k34{0.00%{opacity:0;transform:translateY(6px)} 60.90%{opacity:0;transform:translateY(6px)} 63.14%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k34{animation:k34 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k35{0.00%{opacity:0;transform:translateY(6px)} 65.38%{opacity:0;transform:translateY(6px)} 67.63%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k35{animation:k35 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k36{0.00%{opacity:0;transform:translateY(6px)} 67.95%{opacity:0;transform:translateY(6px)} 70.19%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k36{animation:k36 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k37{0.00%{opacity:0;transform:translateY(6px)} 72.44%{opacity:0;transform:translateY(6px)} 74.68%{opacity:1;transform:translateY(0)} 88.14%{opacity:1;transform:translateY(0)} 90.06%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k37{animation:k37 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k38{0.00%{opacity:0;transform:translateY(6px)} 89.74%{opacity:0;transform:translateY(6px)} 91.99%{opacity:1;transform:translateY(0)} 96.15%{opacity:1;transform:translateY(0)} 98.08%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k38{animation:k38 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k39{0.00%{opacity:0;transform:translateX(0)} 47.05%{opacity:0;transform:translateX(0)} 47.12%{opacity:1;transform:translateX(0)} 50.00%{opacity:1;transform:translateX(-136px)} 50.77%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k39{animation:k39 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k40{0.00%{opacity:0;transform:translateX(0)} 50.26%{opacity:0;transform:translateX(0)} 50.32%{opacity:1;transform:translateX(0)} 52.88%{opacity:1;transform:translateX(-136px)} 53.65%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k40{animation:k40 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k41{0.00%{opacity:0;transform:translateX(0)} 55.06%{opacity:0;transform:translateX(0)} 55.13%{opacity:1;transform:translateX(0)} 57.69%{opacity:1;transform:translateX(136px)} 58.46%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k41{animation:k41 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k42{0.00%{opacity:0;transform:translateX(0)} 57.95%{opacity:0;transform:translateX(0)} 58.01%{opacity:1;transform:translateX(0)} 60.58%{opacity:1;transform:translateX(136px)} 61.35%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k42{animation:k42 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k43{0.00%{opacity:0;transform:translateX(0)} 68.53%{opacity:0;transform:translateX(0)} 68.59%{opacity:1;transform:translateX(0)} 71.47%{opacity:1;transform:translateX(-136px)} 72.24%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k43{animation:k43 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k44{0.00%{opacity:0;transform:translateX(0)} 81.99%{opacity:0;transform:translateX(0)} 82.05%{opacity:1;transform:translateX(0)} 84.62%{opacity:1;transform:translateX(-136px)} 85.38%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k44{animation:k44 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k45{0.00%{opacity:0;transform:translateX(0)} 85.19%{opacity:0;transform:translateX(0)} 85.26%{opacity:1;transform:translateX(0)} 87.18%{opacity:1;transform:translateX(136px)} 87.95%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k45{animation:k45 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k46{0.00%{opacity:0;transform:translateX(0)} 87.12%{opacity:0;transform:translateX(0)} 87.18%{opacity:1;transform:translateX(0)} 89.10%{opacity:1;transform:translateX(136px)} 89.87%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k46{animation:k46 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k47{0.00%{opacity:0;transform:translateY(16px)} 74.04%{opacity:0;transform:translateY(16px)} 76.60%{opacity:1;transform:translateY(0)} 83.01%{opacity:1;transform:translateY(0)} 84.94%{opacity:0;transform:translateY(8px)} 100.00%{opacity:0;transform:translateY(8px)}}
+.k47{animation:k47 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k48{0.00%{opacity:0} 80.13%{opacity:0} 80.77%{opacity:1} 100.00%{opacity:1}}
+.k48{animation:k48 15.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k49{0.00%{opacity:0;transform:translate(693.14px,450px) scale(1)} 76.28%{opacity:0;transform:translate(693.14px,450px) scale(1)} 77.24%{opacity:1;transform:translate(673.14px,440px) scale(1)} 79.49%{opacity:1;transform:translate(603.14px,410px) scale(1)} 80.00%{opacity:1;transform:translate(603.14px,410px) scale(.82)} 80.64%{opacity:1;transform:translate(603.14px,410px) scale(1)} 83.01%{opacity:1;transform:translate(603.14px,410px) scale(1)} 84.62%{opacity:0;transform:translate(603.14px,410px) scale(1)} 100.00%{opacity:0;transform:translate(603.14px,410px) scale(1)}}
+.k49{animation:k49 15.6s cubic-bezier(.4,0,.2,1) infinite}
 @media (prefers-reduced-motion: reduce){[class^="k"]{animation:none!important;transform:none!important}.still{opacity:1}}
 </style>
 <rect width="960" height="440" rx="20" fill="#0B0D12"/>
 <rect width="960" height="440" rx="20" fill="url(#bg-glow)"/>
 <rect x=".5" y=".5" width="959" height="439" rx="19.5" fill="none" stroke="#fff" stroke-opacity=".07"/>
-<rect x="189.0" y="16" width="186" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
-<text x="282.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">1  Compile once</text>
-<g class="k1"><rect x="189.0" y="16" width="186" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="282.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">1  Compile once</text></g>
-<rect x="387.0" y="16" width="186" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
-<text x="480.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">2  Agent reads freely</text>
-<g class="k2"><rect x="387.0" y="16" width="186" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="480.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">2  Agent reads freely</text></g>
-<rect x="585.0" y="16" width="186" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
-<text x="678.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">3  You approve changes</text>
-<g class="k3 still"><rect x="585.0" y="16" width="186" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="678.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">3  You approve changes</text></g>
-<text x="24" y="76" class="mono cap">WEBSITE</text>
+<rect x="147.0" y="16" width="214" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
+<text x="254.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">1  Record it once</text>
+<g class="k1"><rect x="147.0" y="16" width="214" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="254.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">1  Record it once</text></g>
+<rect x="373.0" y="16" width="214" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
+<text x="480.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">2  itda drafts commands</text>
+<g class="k2"><rect x="373.0" y="16" width="214" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="480.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">2  itda drafts commands</text></g>
+<rect x="599.0" y="16" width="214" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
+<text x="706.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">3  Agent calls, you approve</text>
+<g class="k3 still"><rect x="599.0" y="16" width="214" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="706.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">3  Agent calls, you approve</text></g>
+<text x="24" y="76" class="mono cap">YOUR WEBSITE</text>
 <text x="480" y="76" text-anchor="middle" class="mono cap">ITDA</text>
 <text x="664" y="76" class="mono cap">AI AGENT</text>
 <line x1="296" y1="144" x2="432" y2="144" stroke="#2F3647" stroke-width="1.5" stroke-dasharray="3 5"/>
@@ -110,61 +134,58 @@ text{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono'
 <circle cx="42" cy="104" r="4" fill="#2B3141"/>
 <circle cx="55" cy="104" r="4" fill="#2B3141"/>
 <circle cx="68" cy="104" r="4" fill="#2B3141"/>
-<rect x="84" y="96" width="198" height="17" rx="8.5" fill="#0B0D12"/>
-<text x="96" y="108.5" class="mono" font-size="10" fill="#6B7385">intranet.example/board</text>
-<text x="40" y="143" class="sans" font-size="14" font-weight="600" fill="#ECEEF3">Notices</text>
-<rect x="229.2" y="128" width="50.8" height="21" rx="6" fill="#2F5BEA" fill-opacity=".85"/>
-<text x="254.6" y="142.5" text-anchor="middle" class="sans" font-size="11" font-weight="600" fill="#fff">Write</text>
-<rect x="40" y="160" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/>
-<text x="52" y="177" class="mono" font-size="10" fill="#6B7385">12</text>
-<text x="76" y="177" class="sans" font-size="11.5" fill="#9AA3B5">Maintenance: mail server</text>
-<rect x="40" y="194" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/>
-<text x="52" y="211" class="mono" font-size="10" fill="#6B7385">13</text>
-<text x="76" y="211" class="sans" font-size="11.5" fill="#9AA3B5">Holiday schedule</text>
-<rect x="40" y="228" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/>
-<text x="52" y="245" class="mono" font-size="10" fill="#6B7385">14</text>
-<text x="76" y="245" class="sans" font-size="11.5" fill="#9AA3B5">Maintenance: VPN</text>
-<g class="k4 still"><rect x="40" y="262" width="240" height="26" rx="6" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".55"/><text x="52" y="279" class="mono" font-size="10" fill="#3DD68C">15</text><text x="76" y="279" class="sans" font-size="11.5" fill="#ECEEF3">Server maintenance</text></g>
-<rect class="k5" x="40" y="160" width="240" height="26" rx="6" fill="#2F5BEA" fill-opacity=".16" stroke="#6E8BFF" stroke-opacity=".8"/>
-<g class="k6" fill="none" stroke="#3DD68C" stroke-opacity=".8"><rect x="40" y="160" width="240" height="26" rx="6"/><rect x="40" y="228" width="240" height="26" rx="6"/></g>
-<text x="40" y="334" class="mono" font-size="10" fill="#6B7385">HTML · OpenAPI · HAR</text>
-<circle class="k7 origin" cx="480" cy="144" r="44" fill="none" stroke="#6E8BFF" stroke-width="2"/>
-<circle class="k8 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
-<circle class="k9 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
+<rect x="84" y="96" width="150" height="17" rx="8.5" fill="#0B0D12"/>
+<text class="k4" x="96" y="108.5" font-size="10" fill="#6B7385">intranet.example/login</text>
+<text class="k5 still" x="96" y="108.5" font-size="10" fill="#6B7385">intranet.example/board</text>
+<g class="k6"><rect x="242" y="96" width="40" height="17" rx="8.5" fill="#FF5C5C" fill-opacity=".14"/><circle cx="253" cy="104.5" r="3.5" fill="#FF5C5C"/><text x="260" y="108.5" font-size="9.5" font-weight="600" fill="#FF7A7A">REC</text></g>
+<g class="k7"><text x="40" y="146" class="sans" font-size="15" font-weight="600" fill="#ECEEF3">Sign in</text><rect x="40" y="162" width="240" height="28" rx="7" fill="#0B0D12" stroke="#2F3647"/><rect x="40" y="200" width="240" height="28" rx="7" fill="#0B0D12" stroke="#2F3647"/><rect x="40" y="244" width="240" height="30" rx="8" fill="#2F5BEA"/><text x="160" y="263.5" text-anchor="middle" class="sans" font-size="12" font-weight="600" fill="#fff">Sign in</text></g>
+<text class="k8" x="52" y="180" font-size="11.5" fill="#ECEEF3">kim</text>
+<text class="k9" x="52" y="219" font-size="11.5" letter-spacing="2" fill="#ECEEF3">••••••••</text>
+<g class="k10"><path d="M0 0v15l4-3.6 2.6 6 2.6-1.1-2.6-5.9h5.4z" fill="#fff" stroke="#0B0D12" stroke-width="1.2" stroke-linejoin="round"/></g>
+<g class="k11 still"><text x="40" y="143" class="sans" font-size="14" font-weight="600" fill="#ECEEF3">Notices</text><rect x="229.2" y="128" width="50.8" height="21" rx="6" fill="#2F5BEA" fill-opacity=".85"/><text x="254.6" y="142.5" text-anchor="middle" class="sans" font-size="11" font-weight="600" fill="#fff">Write</text><rect x="40" y="160" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/><text x="52" y="177" font-size="10" fill="#6B7385">12</text><text x="76" y="177" class="sans" font-size="11.5" fill="#9AA3B5">Maintenance: mail server</text><rect x="40" y="194" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/><text x="52" y="211" font-size="10" fill="#6B7385">13</text><text x="76" y="211" class="sans" font-size="11.5" fill="#9AA3B5">Holiday schedule</text><rect x="40" y="228" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/><text x="52" y="245" font-size="10" fill="#6B7385">14</text><text x="76" y="245" class="sans" font-size="11.5" fill="#9AA3B5">Maintenance: VPN</text></g>
+<rect class="k12" x="40" y="160" width="240" height="26" rx="6" fill="#2F5BEA" fill-opacity=".16" stroke="#6E8BFF" stroke-opacity=".8"/>
+<g class="k13"><path d="M0 0v15l4-3.6 2.6 6 2.6-1.1-2.6-5.9h5.4z" fill="#fff" stroke="#0B0D12" stroke-width="1.2" stroke-linejoin="round"/></g>
+<g class="k14 still"><rect x="40" y="262" width="240" height="26" rx="6" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".55"/><text x="52" y="279" font-size="10" fill="#3DD68C">15</text><text x="76" y="279" class="sans" font-size="11.5" fill="#ECEEF3">Server maintenance</text></g>
+<g class="k15" fill="none" stroke="#3DD68C" stroke-opacity=".8"><rect x="40" y="160" width="240" height="26" rx="6"/><rect x="40" y="228" width="240" height="26" rx="6"/></g>
+<text class="k16" x="40" y="334" font-size="10" fill="#FF7A7A">⏺ recording board.har</text>
+<text class="k17 still" x="40" y="334" font-size="10" fill="#6B7385">board.har saved · values dropped</text>
+<g class="k18"><rect x="304" y="134" width="68" height="20" rx="6" fill="#141823" stroke="#6E8BFF" stroke-opacity=".8"/><text x="338" y="148" text-anchor="middle" font-size="10" fill="#B4C3FF">board.har</text></g>
+<circle class="k19 origin" cx="480" cy="144" r="44" fill="none" stroke="#6E8BFF" stroke-width="2"/>
+<circle class="k20 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
+<circle class="k21 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
 <g transform="translate(444 108) scale(.75)"><rect x="2" y="2" width="92" height="92" rx="24" fill="url(#m-bg)"/><rect x="2.5" y="2.5" width="91" height="91" rx="23.5" fill="none" stroke="#fff" stroke-opacity=".1"/><path d="M29 31 L46 48 L29 65" fill="none" stroke="#F4F5F8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="63" cy="63" r="7.5" fill="url(#m-dot)"/></g>
-<g class="k10"><circle cx="480" cy="144" r="44" fill="#F5B041" fill-opacity=".08" stroke="#F5B041" stroke-width="2" stroke-dasharray="5 5"/><rect x="502" y="160" width="22" height="22" rx="7" fill="#F5B041"/><path d="M508.5 170v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#0B0D12" stroke-width="1.8"/><rect x="507" y="170" width="12" height="8" rx="2" fill="#0B0D12"/></g>
+<g class="k22"><circle cx="480" cy="144" r="44" fill="#F5B041" fill-opacity=".08" stroke="#F5B041" stroke-width="2" stroke-dasharray="5 5"/><rect x="502" y="160" width="22" height="22" rx="7" fill="#F5B041"/><path d="M508.5 170v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#0B0D12" stroke-width="1.8"/><rect x="507" y="170" width="12" height="8" rx="2" fill="#0B0D12"/></g>
 <rect x="372" y="196" width="216" height="152" rx="12" fill="#10131A" stroke="#242A38"/>
-<text x="386" y="217" class="mono" font-size="10.5" fill="#6B7385">board/spec.yaml</text>
-<g class="k11 still"><rect x="384" y="232" width="192" height="26" rx="7" fill="#141823" stroke="#2F3647"/><text x="396" y="249" class="mono" font-size="11.5" fill="#ECEEF3">list-notices</text><rect x="528.4" y="237" width="39.6" height="16" rx="8" fill="#3DD68C" fill-opacity=".14"/><text x="548.2" y="248.5" text-anchor="middle" class="mono" font-size="9.5" font-weight="600" fill="#3DD68C">READ</text></g>
-<g class="k12 still"><rect x="384" y="266" width="192" height="26" rx="7" fill="#141823" stroke="#2F3647"/><text x="396" y="283" class="mono" font-size="11.5" fill="#ECEEF3">create-notice</text><rect x="515.6" y="271" width="52.400000000000006" height="16" rx="8" fill="#F5B041" fill-opacity=".14"/><text x="541.8" y="282.5" text-anchor="middle" class="mono" font-size="9.5" font-weight="600" fill="#F5B041">CHANGE</text></g>
-<rect class="k13" x="384" y="232" width="192" height="26" rx="7" fill="none" stroke="#3DD68C" stroke-width="1.5"/>
-<rect class="k14" x="384" y="266" width="192" height="26" rx="7" fill="none" stroke="#F5B041" stroke-width="1.5"/>
-<text class="k15" x="386" y="322" font-size="10.5" fill="#3DD68C">✓ 2 actions compiled</text>
-<text class="k16 still" x="386" y="322" font-size="10.5" fill="#6E8BFF">✓ audit log chain verified</text>
+<text class="k23 still" x="386" y="218" font-size="10.5" fill="#9AA3B5"><tspan fill="#6E8BFF">$</tspan> itda draft har board.har</text>
+<g class="k24 still"><rect x="384" y="232" width="192" height="26" rx="7" fill="#141823" stroke="#2F3647"/><text x="396" y="249" font-size="11.5" fill="#ECEEF3">list-notices</text><rect x="528.4" y="237" width="39.6" height="16" rx="8" fill="#3DD68C" fill-opacity=".14"/><text x="548.2" y="248.5" text-anchor="middle" font-size="9.5" font-weight="600" fill="#3DD68C">READ</text></g>
+<g class="k25 still"><rect x="384" y="266" width="192" height="26" rx="7" fill="#141823" stroke="#2F3647"/><text x="396" y="283" font-size="11.5" fill="#ECEEF3">create-notice</text><rect x="515.6" y="271" width="52.400000000000006" height="16" rx="8" fill="#F5B041" fill-opacity=".14"/><text x="541.8" y="282.5" text-anchor="middle" font-size="9.5" font-weight="600" fill="#F5B041">CHANGE</text></g>
+<rect class="k26" x="384" y="232" width="192" height="26" rx="7" fill="none" stroke="#3DD68C" stroke-width="1.5"/>
+<rect class="k27" x="384" y="266" width="192" height="26" rx="7" fill="none" stroke="#F5B041" stroke-width="1.5"/>
+<text class="k28 still" x="396" y="308" font-size="10" fill="#6B7385">↳ fresh CSRF token per post</text>
+<text class="k29" x="396" y="308" font-size="10" fill="#3DD68C">↳ fresh CSRF token per post</text>
+<text class="k30" x="386" y="332" font-size="10.5" fill="#3DD68C">✓ 2 commands drafted</text>
+<text class="k31 still" x="386" y="332" font-size="10.5" fill="#6E8BFF">✓ audit log chain verified</text>
 <rect x="664" y="86" width="272" height="262" rx="14" fill="#141823" stroke="#242A38"/>
 <path d="M688 100l2.6 6.4 6.4 2.6-6.4 2.6-2.6 6.4-2.6-6.4-6.4-2.6 6.4-2.6z" fill="#6E8BFF"/>
 <text x="704" y="113" class="sans" font-size="13" font-weight="600" fill="#ECEEF3">AI agent</text>
-<rect x="884" y="100" width="36" height="17" rx="8.5" fill="none" stroke="#2F3647"/>
-<text x="902" y="112" text-anchor="middle" class="mono" font-size="9.5" fill="#9AA3B5">MCP</text>
-<g class="k17 still"><rect x="741.44" y="128" width="178.56" height="26" rx="10" fill="#2F5BEA"/><text x="908" y="145" text-anchor="end" class="sans" font-size="11.5" fill="#fff">Any maintenance notices?</text></g>
-<text class="k18 still" x="680" y="176" font-size="11" fill="#6E8BFF">→ board.list-notices</text>
-<g class="k19 still"><rect x="680" y="186" width="174.68" height="26" rx="8" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".45"/><text x="691" y="203" class="mono" font-size="11" fill="#3DD68C">✓ 2 found · read ran now</text></g>
-<g class="k20 still"><rect x="767.2" y="224" width="152.8" height="26" rx="10" fill="#2F5BEA"/><text x="908" y="241" text-anchor="end" class="sans" font-size="11.5" fill="#fff">Post a server notice</text></g>
-<text class="k21 still" x="680" y="272" font-size="11" fill="#6E8BFF">→ board.create-notice</text>
-<g class="k22"><rect x="680" y="284" width="143.88" height="26" rx="8" fill="#F5B041" fill-opacity=".1" stroke="#F5B041" stroke-opacity=".45"/><text x="691" y="301" class="mono" font-size="11" fill="#F5B041">⏸ approval_required</text></g>
-<g class="k23 still"><rect x="680" y="284" width="162.36" height="26" rx="8" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".45"/><text x="691" y="301" class="mono" font-size="11" fill="#3DD68C">✓ posted once · logged</text></g>
-<circle class="k24" cx="296" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
-<circle class="k25" cx="296" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
-<circle class="k26" cx="296" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
-<circle class="k27" cx="664" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
-<circle class="k28" cx="432" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
-<circle class="k29" cx="296" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
-<circle class="k30" cx="528" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
-<circle class="k31" cx="664" cy="144" r="4.5" fill="#F5B041" filter="url(#glow)"/>
-<circle class="k32" cx="432" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
-<circle class="k33" cx="296" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
-<circle class="k34" cx="528" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
-<g class="k35"><rect x="290" y="334" width="380" height="94" rx="14" fill="#1A1F2C" stroke="#F5B041" stroke-opacity=".55" filter="url(#shadow)"/><rect x="306" y="350" width="24" height="24" rx="7" fill="#F5B041" fill-opacity=".16"/><path d="M313.5 361v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#F5B041" stroke-width="1.8"/><rect x="312" y="361" width="12" height="8" rx="2" fill="#F5B041"/><text x="342" y="366" class="sans" font-size="13" font-weight="600" fill="#ECEEF3">Approve this change?</text><text x="342" y="386" class="mono" font-size="10.5" fill="#9AA3B5">board.create-notice  title="Server maintenance"</text><rect x="471.64" y="396" width="64.64" height="24" rx="7" fill="none" stroke="#2F3647"/><text x="503.96" y="412" text-anchor="middle" class="sans" font-size="11.5" fill="#9AA3B5">Reject</text><rect x="544.28" y="396" width="109.72" height="24" rx="7" fill="#2F5BEA"/><text x="599.14" y="412" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#fff">Approve</text>
-<g class="k36"><rect x="544.28" y="396" width="109.72" height="24" rx="7" fill="#3DD68C"/><text x="599.14" y="412" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#0B0D12">Approved once</text></g></g>
-<g class="k37"><path d="M0 0v15l4-3.6 2.6 6 2.6-1.1-2.6-5.9h5.4z" fill="#fff" stroke="#0B0D12" stroke-width="1.2" stroke-linejoin="round"/></g>
+<rect x="854" y="100" width="66" height="17" rx="8.5" fill="none" stroke="#2F3647"/>
+<text x="887" y="112" text-anchor="middle" font-size="9.5" fill="#9AA3B5">CLI · MCP</text>
+<g class="k32 still"><rect x="741.44" y="128" width="178.56" height="26" rx="10" fill="#2F5BEA"/><text x="908" y="145" text-anchor="end" class="sans" font-size="11.5" fill="#fff">Any maintenance notices?</text></g>
+<text class="k33 still" x="680" y="176" font-size="11" fill="#6E8BFF">→ board.list-notices</text>
+<g class="k34 still"><rect x="680" y="186" width="174.68" height="26" rx="8" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".45"/><text x="691" y="203" font-size="11" fill="#3DD68C">✓ 2 found · read ran now</text></g>
+<g class="k35 still"><rect x="767.2" y="224" width="152.8" height="26" rx="10" fill="#2F5BEA"/><text x="908" y="241" text-anchor="end" class="sans" font-size="11.5" fill="#fff">Post a server notice</text></g>
+<text class="k36 still" x="680" y="272" font-size="11" fill="#6E8BFF">→ board.create-notice</text>
+<g class="k37"><rect x="680" y="284" width="143.88" height="26" rx="8" fill="#F5B041" fill-opacity=".1" stroke="#F5B041" stroke-opacity=".45"/><text x="691" y="301" font-size="11" fill="#F5B041">⏸ approval_required</text></g>
+<g class="k38 still"><rect x="680" y="284" width="162.36" height="26" rx="8" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".45"/><text x="691" y="301" font-size="11" fill="#3DD68C">✓ posted once · logged</text></g>
+<circle class="k39" cx="664" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k40" cx="432" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k41" cx="296" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k42" cx="528" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k43" cx="664" cy="144" r="4.5" fill="#F5B041" filter="url(#glow)"/>
+<circle class="k44" cx="432" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k45" cx="296" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k46" cx="528" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<g class="k47"><rect x="290" y="334" width="380" height="94" rx="14" fill="#1A1F2C" stroke="#F5B041" stroke-opacity=".55" filter="url(#shadow)"/><rect x="306" y="350" width="24" height="24" rx="7" fill="#F5B041" fill-opacity=".16"/><path d="M313.5 361v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#F5B041" stroke-width="1.8"/><rect x="312" y="361" width="12" height="8" rx="2" fill="#F5B041"/><text x="342" y="366" class="sans" font-size="13" font-weight="600" fill="#ECEEF3">Approve this change?</text><text x="342" y="386" font-size="10.5" fill="#9AA3B5">board.create-notice  title="Server maintenance"</text><rect x="471.64" y="396" width="64.64" height="24" rx="7" fill="none" stroke="#2F3647"/><text x="503.96" y="412" text-anchor="middle" class="sans" font-size="11.5" fill="#9AA3B5">Reject</text><rect x="544.28" y="396" width="109.72" height="24" rx="7" fill="#2F5BEA"/><text x="599.14" y="412" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#fff">Approve</text>
+<g class="k48"><rect x="544.28" y="396" width="109.72" height="24" rx="7" fill="#3DD68C"/><text x="599.14" y="412" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#0B0D12">Approved once</text></g></g>
+<g class="k49"><path d="M0 0v15l4-3.6 2.6 6 2.6-1.1-2.6-5.9h5.4z" fill="#fff" stroke="#0B0D12" stroke-width="1.2" stroke-linejoin="round"/></g>
 </svg>
