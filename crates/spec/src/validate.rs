@@ -173,6 +173,29 @@ impl Spec {
                             "Reference a defined operation or a path starting with '/'",
                         );
                     }
+                    if !matches!(step.method.to_ascii_uppercase().as_str(), "" | "GET") {
+                        add(
+                            &mut out,
+                            &format!("{id}.preflight"),
+                            format!("preflight step {} is not a GET", step.name),
+                            "Preflight steps only read",
+                        );
+                    }
+                    for (name, source) in &step.extract {
+                        let known = ["json:/", "css:", "header:", "cookie:"]
+                            .iter()
+                            .any(|prefix| {
+                                source.starts_with(prefix) && source.len() > prefix.len()
+                            });
+                        if !known {
+                            add(
+                                &mut out,
+                                &format!("{id}.preflight"),
+                                format!("preflight step {} cannot extract {name}", step.name),
+                                "Use json:/pointer, css:selector[@attribute], header:name or cookie:name",
+                            );
+                        }
+                    }
                 }
                 let path_names = path_vars(&op.path);
                 for n in &path_names {
