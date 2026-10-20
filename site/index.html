@@ -106,9 +106,10 @@
         <li>
           <span class="step-n">1</span>
           <h3>Draft</h3>
-          <p>Point itda at the site's OpenAPI file, or at a recording of you using it. You get a site definition: which actions exist, what they send and what a correct answer looks like.</p>
+          <p>Point itda at the site's OpenAPI file, or at a recording of you using it, or start from a ready-made site. You get a site definition: which actions exist, what they send and what a correct answer looks like.</p>
           <code>itda draft openapi api.json</code>
           <code>itda draft har session.har</code>
+          <code>itda add sites/github.yaml</code>
         </li>
         <li>
           <span class="step-n">2</span>
@@ -151,7 +152,7 @@
         <article>
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
           <h3>Single-use approvals</h3>
-          <p>An approval covers one request with exactly the inputs you saw, expires on its own, and can only be given in your terminal. No agent tool can approve.</p>
+          <p>An approval covers one request with exactly the inputs you saw, expires on its own, and is given by you, in your terminal or in a form your agent app shows you. No agent tool can approve.</p>
         </article>
         <article>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v4H9zM9 10h6v4H9zM9 16h6v4H9z"/><path d="M12 8v2M12 14v2"/></svg>
@@ -172,6 +173,28 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
           <h3>Honest client</h3>
           <p>itda says who it is, never imitates a browser, and stops when a site refuses it. No proxy rotation, no captcha solving, no escalation.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <p class="eyebrow">Real sites, not demos</p>
+      <h2>Works where your work actually lives.</h2>
+      <div class="features">
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>
+          <h3>Sign in with your own browser</h3>
+          <p>For sites with single sign-on or one-time codes, <code>itda login --browser</code> opens a fresh window, you sign in by hand, and only that site's session is kept in the keyring.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/><path d="M15 15l2 2 3-3"/></svg>
+          <h3>Old intranets welcome</h3>
+          <p>Server-rendered tables become records, and forms that want a one-time CSRF token get it from a preflight step right before each approved post. The agent never sees it.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/><path d="M10 12l1.5 1.5L14 11"/></svg>
+          <h3>Know when a site changes</h3>
+          <p><code>itda check</code> runs every read that needs no input and tells you which ones no longer match, before an agent finds out the hard way. Run it on a schedule.</p>
         </article>
       </div>
     </section>
