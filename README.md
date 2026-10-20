@@ -69,6 +69,10 @@ itda call github.repo --owner rust-lang --repo rust
 itda mcp install claude-desktop   # then ask Claude about any repository
 ```
 
+<p><a href="sites/github.yaml"><img src="assets/brands/github.svg" width="36" height="36" alt="GitHub"></a> <a href="sites/npm.yaml"><img src="assets/brands/npm.svg" width="36" height="36" alt="npm"></a> <a href="sites/crates-io.yaml"><img src="assets/brands/crates-io.svg" width="36" height="36" alt="crates.io"></a> <a href="sites/pypi.yaml"><img src="assets/brands/pypi.svg" width="36" height="36" alt="PyPI"></a></p>
+
+`itda add npm`, `itda add crates-io` and `itda add pypi` work the same way.
+
 Or try the bundled sandbox, a fake intranet that only listens on
 127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site
 definition is one YAML file; `itda add spec.yaml` installs it after showing
