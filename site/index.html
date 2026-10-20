@@ -38,7 +38,7 @@
       <div class="glow" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <a class="pill" href="docs/changelog.html"><span class="pill-dot"></span>v0.1 is out: draft actions from OpenAPI or a browser recording</a>
+          <a class="pill" href="#sites"><span class="pill-dot"></span>New: ready-made sites for GitHub, npm, crates.io and PyPI</a>
           <h1>Don't drive the browser.<br><span class="grad">Compile the site.</span></h1>
           <p class="lede">itda turns a website into a small set of verified, typed actions your AI agent can call from the command line or over MCP. It runs on your machine, reads by default, and changes nothing until you approve that exact change.</p>
 
@@ -202,6 +202,39 @@
       </div>
     </section>
 
+    <section class="section wrap" id="sites">
+      <p class="eyebrow">Ready-made sites</p>
+      <h2>Try it on a site you already use.</h2>
+      <p class="section-lede">These definitions are built into <code>itda</code>, so the name is enough. Each one only talks to that site's official API, and <code>itda check</code> confirms every read still answers as declared.</p>
+      <div class="packs">
+        <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/github.yaml">
+          <img src="assets/brands/github.svg" width="44" height="44" alt="">
+          <h3>GitHub</h3>
+          <p>Repositories, issues and releases. Add a token for private repositories; opening an issue waits for you.</p>
+          <code>itda add github</code>
+        </a>
+        <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/npm.yaml">
+          <img src="assets/brands/npm.svg" width="44" height="44" alt="">
+          <h3>npm</h3>
+          <p>Packages, versions and weekly downloads. No account needed.</p>
+          <code>itda add npm</code>
+        </a>
+        <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/crates-io.yaml">
+          <img src="assets/brands/crates-io.svg" width="44" height="44" alt="">
+          <h3>crates.io</h3>
+          <p>Crates, versions and search. No account needed.</p>
+          <code>itda add crates-io</code>
+        </a>
+        <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/pypi.yaml">
+          <img src="assets/brands/pypi.svg" width="44" height="44" alt="">
+          <h3>PyPI</h3>
+          <p>Packages and releases with known vulnerabilities. No account needed.</p>
+          <code>itda add pypi</code>
+        </a>
+      </div>
+      <p class="packs-note">Logos are trademarks of their owners and only show which site a definition talks to. itda is not affiliated with them.</p>
+    </section>
+
     <section class="section wrap">
       <div class="split">
         <div>
@@ -233,7 +266,7 @@
       <h2>Give your agent the website, not the browser.</h2>
       <div class="cta center">
         <a class="btn btn-primary" href="docs/quickstart.html">Read the quick start</a>
-        <a class="btn btn-ghost" href="https://github.com/brnyxx/itda-cli/releases/latest">Download v0.1</a>
+        <a class="btn btn-ghost" href="https://github.com/brnyxx/itda-cli/releases/latest">Download the latest release</a>
       </div>
     </section>
   </main>

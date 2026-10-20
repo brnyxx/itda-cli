@@ -230,6 +230,23 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
 .features p { margin: 0; color: var(--muted); font-size: 15px; }
 .features code { color: var(--text); }
 
+.packs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
+.pack {
+  display: flex; flex-direction: column; padding: 24px; border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--panel), var(--ink-2)); border: 1px solid var(--line);
+  transition: border-color .2s, transform .2s;
+}
+.pack:hover { border-color: var(--line-2); transform: translateY(-2px); }
+.pack img { width: 44px; height: 44px; margin-bottom: 18px; border-radius: 10px; box-shadow: 0 8px 24px -10px rgba(0,0,0,.8); }
+.pack p { flex: 1; margin: 0 0 18px; color: var(--muted); font-size: 14.5px; }
+.pack code {
+  padding: 8px 12px; border-radius: 8px; background: var(--ink); border: 1px solid var(--line);
+  font-size: 12.5px; white-space: nowrap; overflow-x: auto;
+}
+.pack code::before { content: "$ "; color: var(--blue-hi); }
+.packs-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); }
+.section-lede code { color: var(--text); }
+
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
 .ticks { margin: 24px 0 0; padding: 0; list-style: none; }
 .ticks li { position: relative; padding-left: 28px; margin-top: 12px; color: var(--muted); }
@@ -260,12 +277,14 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
   .hero { padding-top: 64px; }
   .hero-grid, .split { grid-template-columns: 1fr; gap: 40px; }
   .steps, .features { grid-template-columns: 1fr; }
+  .packs { grid-template-columns: repeat(2, 1fr); }
   .section { padding-top: 80px; }
 }
 @media (max-width: 640px) {
   .nav-links a:not(.nav-gh) { display: none; }
   .lede { font-size: 16.5px; }
   .compare .row { grid-template-columns: 1fr; }
+  .packs { grid-template-columns: 1fr; }
   .compare .row > span:nth-child(3) { border-left: 0; }
   .compare .head { display: none; }
   .compare .row > span:nth-child(2)::before { content: "Browser agent: "; color: var(--faint); }
@@ -274,5 +293,5 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
 }
 @media (prefers-reduced-motion: reduce) {
   .term-body .l { animation: none; opacity: 1; }
-  .btn { transition: none; }
+  .btn, .pack { transition: none; }
 }
