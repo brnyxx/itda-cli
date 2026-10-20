@@ -427,3 +427,16 @@ async fn check_runs_reads_that_need_no_input_and_reports_each() {
     assert!(text.contains("2 ok, 0 failed, 1 skipped."), "{text}");
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn accounts_start_empty_and_logout_needs_one() {
+    let home = home();
+    install(&home, "http://127.0.0.1:9");
+    let listed = itda(&home, &["accounts", "--json"], &[]).await;
+    assert_eq!(listed.status.code(), Some(0));
+    assert_eq!(stdout_json(&listed), json!([]));
+    let logout = itda(&home, &["logout", "fixture"], &[]).await;
+    assert_eq!(logout.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&logout.stderr).contains("not signed in"));
+    std::fs::remove_dir_all(home).ok();
+}
