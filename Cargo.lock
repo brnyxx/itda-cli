@@ -1442,6 +1442,7 @@ dependencies = [
  "itda-store",
  "itda-types",
  "itda-vault",
+ "serde",
  "serde_json",
  "tokio",
  "url",
