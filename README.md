@@ -16,12 +16,14 @@
   <a href="https://brnyxx.github.io/itda-cli/docs/">Docs</a>
 </p>
 
-itda turns a website into a small set of verified, typed actions that an AI
-agent can call from the command line or over MCP. It runs on your own
-machine, reads by default, and never changes anything on a site until you
-approve that exact change.
+itda turns the websites you use, even old intranets behind a login, into a
+small set of verified commands that an AI agent can call from the command
+line or over MCP. Record yourself using the site once in your browser; itda
+drafts the commands from that recording. It runs on your own machine, reads
+by default, and never changes anything on a site until you approve that exact
+change.
 
-<p align="center"><img src="assets/flow.svg" alt="itda compiles a website into actions once; the agent's reads run right away, and a change waits until a person approves it" width="860"></p>
+<p align="center"><img src="assets/flow.svg" alt="Record a website once in your browser, itda drafts commands from the recording, the agent calls them, and a change waits until a person approves it" width="860"></p>
 
 > Status: early, and used against real sites. The runtime, CLI, MCP server,
 > approvals (in a terminal or inside the agent app), audit log, drafting from
@@ -62,18 +64,27 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-The quickest try is a ready-made site from [sites/](sites/README.md), which
-needs no account:
+Then turn a website you use into commands. In your browser's developer
+tools, open the Network tab, use the site as usual (sign in, search, post a
+form) and save the log as a HAR file:
 
 ```sh
-itda add github
-itda call github.repo --owner rust-lang --repo rust
-itda mcp install claude-desktop   # then ask Claude about any repository
+itda draft har board.har --name board --install   # shows what it found; never copies values
+itda login board --browser                          # sign in once in your own browser
+itda call board.list-notices --json                 # reads run right away
+itda call board.create-notice --title "Server maintenance"   # changes wait for your approval
+itda mcp install claude-desktop                     # or let your agent call them
 ```
+
+Public APIs need no recording. These ready-made sites from
+[sites/](sites/README.md) are built in and need no account:
 
 <p><a href="sites/github.yaml"><img src="assets/brands/github.svg" width="36" height="36" alt="GitHub"></a> <a href="sites/npm.yaml"><img src="assets/brands/npm.svg" width="36" height="36" alt="npm"></a> <a href="sites/crates-io.yaml"><img src="assets/brands/crates-io.svg" width="36" height="36" alt="crates.io"></a> <a href="sites/pypi.yaml"><img src="assets/brands/pypi.svg" width="36" height="36" alt="PyPI"></a></p>
 
-`itda add npm`, `itda add crates-io` and `itda add pypi` work the same way.
+```sh
+itda add github      # or npm, crates-io, pypi
+itda call github.repo --owner rust-lang --repo rust
+```
 
 Or try the bundled sandbox, a fake intranet that only listens on
 127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site

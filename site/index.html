@@ -39,9 +39,9 @@
       <div class="glow" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <a class="pill" href="#sites" data-i18n="hero.pill"><span class="pill-dot"></span>New: ready-made sites for GitHub, npm, crates.io and PyPI</a>
+          <a class="pill" href="#how" data-i18n="hero.pill"><span class="pill-dot"></span>Sign in once in your own browser, then let agents use the site</a>
           <h1 data-i18n="hero.h1">Don't drive the browser.<br><span class="grad">Compile the site.</span></h1>
-          <p class="lede" data-i18n="hero.lede">itda turns a website into a small set of verified, typed actions your AI agent can call from the command line or over MCP. It runs on your machine, reads by default, and changes nothing until you approve that exact change.</p>
+          <p class="lede" data-i18n="hero.lede">itda turns the websites you use, even old intranets behind a login, into a small set of verified commands your AI agent can call from the command line or over MCP. Record yourself using the site once; it runs on your machine, reads by default, and changes nothing until you approve that exact change.</p>
 
           <div class="install" data-tabs>
             <div class="install-tabs" role="tablist">
@@ -72,6 +72,9 @@
             <pre class="term-body"><span class="l"><b class="p">$</b> itda draft har board.har <i>--install</i></span>
 <span class="l o">Drafted board: 4 actions (2 reads, 2 changes).</span>
 <span class="l"> </span>
+<span class="l"><b class="p">$</b> itda login board <i>--browser</i></span>
+<span class="l o">Saved the session for board/default in the system keyring.</span>
+<span class="l"> </span>
 <span class="l"><b class="p">$</b> itda call board.list-notices <i>--q</i> maintenance <i>--json</i></span>
 <span class="l j">{ <k>"status"</k>: <s>"ok"</s>, <k>"effect"</k>: <s>"read"</s>, <k>"untrusted"</k>: <n>true</n>,</span>
 <span class="l j">  <k>"data"</k>: { <k>"total"</k>: <n>3</n>, <k>"items"</k>: [ … ] } }</span>
@@ -101,33 +104,54 @@
 
     <section class="section wrap" id="how">
       <p class="eyebrow" data-i18n="how.eyebrow">How it works</p>
-      <h2 data-i18n="how.h2">Do the browsing once. Call typed actions forever.</h2>
-      <p class="section-lede" data-i18n="how.lede">Browser agents re-read every page on every step. itda moves that work to an install step you review, so each call afterwards is small, typed and checked.</p>
+      <h2 data-i18n="how.h2">Use the site once. Your agent gets commands.</h2>
+      <p class="section-lede" data-i18n="how.lede">Sign in and click through the site in your browser while it records. itda turns that recording into a reviewed set of commands, so the agent calls them instead of re-reading every page.</p>
       <figure class="flow">
-        <img src="assets/flow.svg" data-src-ko="assets/flow.ko.svg" data-alt-ko="itda는 웹사이트를 한 번 액션으로 컴파일합니다. 에이전트의 읽기는 바로 실행되고, 변경은 사람이 승인할 때까지 기다립니다." width="960" height="440" alt="itda compiles a website into actions once; the agent's reads run right away, and a change waits until a person approves it">
+        <img src="assets/flow.svg" data-src-ko="assets/flow.ko.svg" data-alt-ko="브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다." width="960" height="440" alt="Record a website once in your browser, itda drafts commands from the recording, the agent calls them, and a change waits until a person approves it">
       </figure>
       <ol class="steps">
         <li>
           <span class="step-n">1</span>
-          <h3 data-i18n="how.1">Draft</h3>
-          <p data-i18n="how.1p">Point itda at the site's OpenAPI file, or at a recording of you using it, or start from a ready-made site. You get a site definition: which actions exist, what they send and what a correct answer looks like.</p>
-          <code>itda draft openapi api.json</code>
-          <code>itda draft har session.har</code>
-          <code>itda add github</code>
+          <h3 data-i18n="how.1">Record</h3>
+          <p data-i18n="how.1p">Open your browser's developer tools, use the site as usual (sign in, search, post a form) and save the network log as a HAR file. itda keeps the shape of each request, never the values you typed. An OpenAPI file works too.</p>
+          <code>itda draft har board.har --install</code>
+          <code>itda login board --browser</code>
         </li>
         <li>
           <span class="step-n">2</span>
           <h3 data-i18n="how.2">Review</h3>
-          <p data-i18n="how.2p">One readable YAML file per site. Every action carries the evidence it came from, changes are marked as changes, and recorded tokens or values never reach the file.</p>
+          <p data-i18n="how.2p">One readable YAML file per site. Every command carries the evidence it came from, changes are marked as changes, and recorded tokens, passwords or values never reach the file.</p>
           <code>specs/board/spec.yaml</code>
         </li>
         <li>
           <span class="step-n">3</span>
           <h3 data-i18n="how.3">Call</h3>
-          <p data-i18n="how.3p">Agents call actions as MCP tools or from a shell. Reads run right away. A change returns an approval id and waits until you approve that exact request.</p>
+          <p data-i18n="how.3p">Agents call the commands as MCP tools or from a shell, signed in with your saved session. Reads run right away. A change returns an approval id and waits until you approve that exact request.</p>
           <code>itda mcp install claude-desktop</code>
         </li>
       </ol>
+    </section>
+
+    <section class="section wrap">
+      <p class="eyebrow" data-i18n="real.eyebrow">Any website, even behind a login</p>
+      <h2 data-i18n="real.h2">Built for the sites that have no API.</h2>
+      <div class="features">
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>
+          <h3 data-i18n="real.1">Sign in with your own browser</h3>
+          <p data-i18n="real.1p">For sites with single sign-on or one-time codes, <code>itda login --browser</code> opens a fresh window, you sign in by hand, and only that site's session is kept in the keyring.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/><path d="M15 15l2 2 3-3"/></svg>
+          <h3 data-i18n="real.2">Old intranets welcome</h3>
+          <p data-i18n="real.2p">Server-rendered tables become records, and forms that want a one-time CSRF token get it from a preflight step right before each approved post. The agent never sees it.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/><path d="M10 12l1.5 1.5L14 11"/></svg>
+          <h3 data-i18n="real.3">Know when a site changes</h3>
+          <p data-i18n="real.3p"><code>itda check</code> runs every read that needs no input and tells you which ones no longer match, before an agent finds out the hard way. Run it on a schedule.</p>
+        </article>
+      </div>
     </section>
 
     <section class="section wrap">
@@ -182,31 +206,35 @@
     </section>
 
     <section class="section wrap">
-      <p class="eyebrow" data-i18n="real.eyebrow">Real sites, not demos</p>
-      <h2 data-i18n="real.h2">Works where your work actually lives.</h2>
-      <div class="features">
-        <article>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>
-          <h3 data-i18n="real.1">Sign in with your own browser</h3>
-          <p data-i18n="real.1p">For sites with single sign-on or one-time codes, <code>itda login --browser</code> opens a fresh window, you sign in by hand, and only that site's session is kept in the keyring.</p>
-        </article>
-        <article>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/><path d="M15 15l2 2 3-3"/></svg>
-          <h3 data-i18n="real.2">Old intranets welcome</h3>
-          <p data-i18n="real.2p">Server-rendered tables become records, and forms that want a one-time CSRF token get it from a preflight step right before each approved post. The agent never sees it.</p>
-        </article>
-        <article>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/><path d="M10 12l1.5 1.5L14 11"/></svg>
-          <h3 data-i18n="real.3">Know when a site changes</h3>
-          <p data-i18n="real.3p"><code>itda check</code> runs every read that needs no input and tells you which ones no longer match, before an agent finds out the hard way. Run it on a schedule.</p>
-        </article>
+      <div class="split">
+        <div>
+          <p class="eyebrow" data-i18n="agents.eyebrow">For agents</p>
+          <h2 data-i18n="agents.h2">Small, stable tool lists.</h2>
+          <p class="section-lede" data-i18n="agents.lede">Up to 30 actions appear as one MCP tool each, with input schemas and read-only, destructive and idempotent hints. Past that, three stable tools keep the list short and prompt caches warm.</p>
+          <ul class="ticks">
+            <li data-i18n="agents.1">Same JSON envelope from MCP and <code>itda call --json</code></li>
+            <li data-i18n="agents.2">Exit codes an agent can branch on: sign in, page changed, blocked, needs approval</li>
+            <li data-i18n="agents.3">Results marked untrusted and capped at 24 KB</li>
+          </ul>
+        </div>
+        <pre class="code"><span class="c"># connect your agent</span>
+<b>$</b> itda mcp install claude-desktop
+<b>$</b> itda mcp install cursor
+
+<span class="c"># or call from any shell</span>
+<b>$</b> itda call board.get-notice --notice_id 42 --json
+<b>$</b> echo $?
+<n>0</n>   <span class="c">ok</span>
+<n>10</n>  <span class="c">sign in again</span>
+<n>11</n>  <span class="c">page no longer matches</span>
+<n>20</n>  <span class="c">needs your approval</span></pre>
       </div>
     </section>
 
     <section class="section wrap" id="sites">
-      <p class="eyebrow" data-i18n="sites.eyebrow">Ready-made sites</p>
-      <h2 data-i18n="sites.h2">Try it on a site you already use.</h2>
-      <p class="section-lede" data-i18n="sites.lede">These definitions are built into <code>itda</code>, so the name is enough. Each one only talks to that site's official API, and <code>itda check</code> confirms every read still answers as declared.</p>
+      <p class="eyebrow" data-i18n="sites.eyebrow">Also built in</p>
+      <h2 data-i18n="sites.h2">Public APIs, ready to go.</h2>
+      <p class="section-lede" data-i18n="sites.lede">No recording needed for these: the definitions ship inside <code>itda</code>, so the name is enough. Each one only talks to that site's official API, and <code>itda check</code> confirms every read still answers as declared.</p>
       <div class="packs">
         <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/github.yaml">
           <img src="assets/brands/github.svg" width="44" height="44" alt="">
@@ -234,32 +262,6 @@
         </a>
       </div>
       <p class="packs-note" data-i18n="sites.note">Logos are trademarks of their owners and only show which site a definition talks to. itda is not affiliated with them.</p>
-    </section>
-
-    <section class="section wrap">
-      <div class="split">
-        <div>
-          <p class="eyebrow" data-i18n="agents.eyebrow">For agents</p>
-          <h2 data-i18n="agents.h2">Small, stable tool lists.</h2>
-          <p class="section-lede" data-i18n="agents.lede">Up to 30 actions appear as one MCP tool each, with input schemas and read-only, destructive and idempotent hints. Past that, three stable tools keep the list short and prompt caches warm.</p>
-          <ul class="ticks">
-            <li data-i18n="agents.1">Same JSON envelope from MCP and <code>itda call --json</code></li>
-            <li data-i18n="agents.2">Exit codes an agent can branch on: sign in, page changed, blocked, needs approval</li>
-            <li data-i18n="agents.3">Results marked untrusted and capped at 24 KB</li>
-          </ul>
-        </div>
-        <pre class="code"><span class="c"># connect your agent</span>
-<b>$</b> itda mcp install claude-desktop
-<b>$</b> itda mcp install cursor
-
-<span class="c"># or call from any shell</span>
-<b>$</b> itda call board.get-notice --notice_id 42 --json
-<b>$</b> echo $?
-<n>0</n>   <span class="c">ok</span>
-<n>10</n>  <span class="c">sign in again</span>
-<n>11</n>  <span class="c">page no longer matches</span>
-<n>20</n>  <span class="c">needs your approval</span></pre>
-      </div>
     </section>
 
     <section class="final wrap">

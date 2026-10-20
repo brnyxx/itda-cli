@@ -17,12 +17,13 @@
   <a href="https://brnyxx.github.io/itda-cli/docs/">문서(영어)</a>
 </p>
 
-itda는 웹사이트를 AI 에이전트가 명령줄이나 MCP로 호출할 수 있는, 검증되고
-타입이 정해진 작은 액션 묶음으로 바꿉니다. 내 컴퓨터에서 실행되고, 기본은
-읽기만 하며, 바로 그 변경을 내가 승인하기 전에는 사이트에서 아무것도 바꾸지
-않습니다.
+itda는 내가 쓰는 웹사이트를, 로그인이 필요한 오래된 사내 시스템까지도, AI
+에이전트가 명령줄이나 MCP로 호출할 수 있는 검증된 명령 묶음으로 바꿉니다.
+브라우저에서 사이트를 쓰는 모습을 한 번 녹화하면 itda가 그 녹화로 명령을
+만듭니다. 내 컴퓨터에서 실행되고, 기본은 읽기만 하며, 바로 그 변경을 내가
+승인하기 전에는 사이트에서 아무것도 바꾸지 않습니다.
 
-<p align="center"><img src="assets/flow.ko.svg" alt="itda는 웹사이트를 한 번 액션으로 컴파일합니다. 에이전트의 읽기는 바로 실행되고, 변경은 사람이 승인할 때까지 기다립니다." width="860"></p>
+<p align="center"><img src="assets/flow.ko.svg" alt="브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다." width="860"></p>
 
 > 상태: 초기 단계이며 실제 사이트에서 쓰고 있습니다. 런타임, CLI, MCP 서버,
 > 승인(터미널 또는 에이전트 앱 안에서), 감사 로그, OpenAPI 문서나 브라우저
@@ -62,18 +63,27 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
-가장 빨리 써 보는 방법은 계정이 필요 없는 [sites/](sites/README.md)의 기본
-사이트입니다.
+그다음 내가 쓰는 웹사이트를 명령으로 바꿔 보세요. 브라우저 개발자 도구의
+Network 탭을 열고 평소처럼 사이트를 쓴 뒤(로그인, 검색, 폼 전송) 기록을 HAR
+파일로 저장합니다.
 
 ```sh
-itda add github
-itda call github.repo --owner rust-lang --repo rust
-itda mcp install claude-desktop   # 이제 Claude에게 아무 저장소나 물어보세요
+itda draft har board.har --name board --install   # 찾은 내용을 보여줌, 값은 절대 복사 안 함
+itda login board --browser                          # 내 브라우저로 한 번 로그인
+itda call board.list-notices --json                 # 읽기는 바로 실행
+itda call board.create-notice --title "서버 점검 안내"   # 변경은 내 승인을 기다림
+itda mcp install claude-desktop                     # 에이전트가 호출하게 연결
 ```
+
+공개 API는 녹화가 필요 없습니다. [sites/](sites/README.md)의 기본 사이트는
+itda에 들어 있고 계정도 필요 없습니다.
 
 <p><a href="sites/github.yaml"><img src="assets/brands/github.svg" width="36" height="36" alt="GitHub"></a> <a href="sites/npm.yaml"><img src="assets/brands/npm.svg" width="36" height="36" alt="npm"></a> <a href="sites/crates-io.yaml"><img src="assets/brands/crates-io.svg" width="36" height="36" alt="crates.io"></a> <a href="sites/pypi.yaml"><img src="assets/brands/pypi.svg" width="36" height="36" alt="PyPI"></a></p>
 
-`itda add npm`, `itda add crates-io`, `itda add pypi`도 똑같이 동작합니다.
+```sh
+itda add github      # npm, crates-io, pypi도 같은 방식
+itda call github.repo --owner rust-lang --repo rust
+```
 
 127.0.0.1에서만 열리는 가짜 사내 시스템인 샌드박스로도 해 볼 수 있습니다.
 [examples/sandbox](examples/sandbox/README.md)를 따라 하세요. 사이트 정의는 YAML
