@@ -21,10 +21,11 @@ approve that exact change.
 
 <p align="center"><img src="assets/hero.png" alt="itda drafts actions from a browser recording, reads freely, and waits for a person to approve a change" width="860"></p>
 
-> Status: early. The runtime, CLI, MCP server, approvals, audit log and
-> drafting from OpenAPI documents or browser recordings work today against
-> plain HTTP sites with API keys. Browser sign-in and signed site packs are
-> next. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> Status: early, and used against real sites. The runtime, CLI, MCP server,
+> approvals (in a terminal or inside the agent app), audit log, drafting from
+> OpenAPI documents or browser recordings, API keys, browser sign-in and CSRF
+> preflight steps work today. Signed site packs are next. See
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Why
 
@@ -37,7 +38,7 @@ install step:
 |---|---|---|
 | What the agent sees | Whole pages, every step | One action's typed result, capped at 24 KB |
 | A changed or signed-out page | Read as data | Detected from the declared response (`response_mismatch`, `auth_required`) |
-| Changes on the site | Whatever the model decides | Single-use approval for exact inputs, granted by a person in a terminal |
+| Changes on the site | Whatever the model decides | Single-use approval for exact inputs, granted by a person in a terminal or the agent app |
 | Text on the page saying "ignore previous instructions" | In the prompt | Marked untrusted data, never a tool |
 | Credentials | Typed into the page by the model | In the OS keyring; the agent sees account ids only |
 | Being blocked | Retry, rotate, imitate a browser | Stop, tell you, wait for you to resume |
