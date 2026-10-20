@@ -93,3 +93,4 @@ real website, so consecutive calls take a moment.
 | `itda mcp [--mode direct\|catalog]` | Serve installed sites over MCP |
 | `itda mcp install <client> [--dry-run]` | Add itda to an MCP client |
 | `itda doctor` | Check the setup |
+| `itda check [<site>] [--account id] [--json]` | Run every read that needs no input and report which no longer match the site |

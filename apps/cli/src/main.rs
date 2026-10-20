@@ -1,6 +1,7 @@
 //! The `itda` command. This is the composition root: it picks the data
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
+mod check;
 mod install;
 mod login;
 mod output;
@@ -116,6 +117,16 @@ enum Command {
     },
     /// Check the data directory, the keyring and the installed sites
     Doctor,
+    /// Run every read that needs no input and report whether the site still
+    /// answers the way its definition says. Changes are never sent
+    Check {
+        /// Only this site
+        site: Option<String>,
+        #[arg(long)]
+        account: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Serve installed actions to an AI agent over MCP (stdio)
     Mcp {
         #[command(subcommand)]
@@ -194,6 +205,7 @@ fn main() -> ExitCode {
         || matches!(&cli.command, Command::Approvals { json: true })
         || matches!(&cli.command, Command::Accounts { json: true, .. })
         || matches!(&cli.command, Command::Audit { json: true, .. })
+        || matches!(&cli.command, Command::Check { json: true, .. })
         || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match cli.command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
@@ -266,6 +278,11 @@ fn main() -> ExitCode {
             json,
         } => audit(&home, limit, verify, json),
         Command::Doctor => Ok(doctor(&home)),
+        Command::Check {
+            site,
+            account,
+            json,
+        } => block_on(check(&home, site.as_deref(), account.as_deref(), json)),
         Command::Mcp {
             command:
                 Some(McpCommand::Install {
@@ -500,6 +517,55 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
         println!("{}", serde_json::to_string_pretty(&envelope.data)?);
     }
     Ok(ExitCode::SUCCESS)
+}
+
+async fn check(
+    home: &Path,
+    only: Option<&str>,
+    account: Option<&str>,
+    as_json: bool,
+) -> AppResult<ExitCode> {
+    let specs = match only {
+        Some(site) => vec![sites::load(home, site)?],
+        None => sites::list(home)
+            .into_iter()
+            .filter_map(|site| site.spec.ok())
+            .collect(),
+    };
+    let outcomes = check::run(&open(home)?.runtime(), &specs, account).await;
+    let worst = check::worst(&outcomes);
+    if as_json {
+        println!(
+            "{}",
+            json!({"status": worst.unwrap_or("ok"), "results": outcomes})
+        );
+    } else {
+        let width = outcomes
+            .iter()
+            .map(|o| o.site.len() + o.action.len() + 1)
+            .max()
+            .unwrap_or(0);
+        for o in &outcomes {
+            let time = o
+                .duration_ms
+                .map(|ms| format!(" {ms} ms"))
+                .unwrap_or_default();
+            println!(
+                "{:<width$}  {:<18} {}{time}",
+                format!("{}.{}", o.site, o.action),
+                o.status,
+                o.detail
+            );
+        }
+        let count = |status: &str| outcomes.iter().filter(|o| o.status == status).count();
+        let failed = outcomes.iter().filter(|o| o.failed()).count();
+        println!(
+            "\n{} ok, {failed} failed, {} skipped.",
+            count("ok"),
+            count("skipped")
+        );
+    }
+    Ok(ExitCode::from(worst.map_or(0, output::exit_code)))
 }
 
 async fn login(
