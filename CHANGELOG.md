@@ -14,6 +14,8 @@ change the definition format or the CLI.
   `{{step.<step>.<name>}}`. Agents never see or set those values.
 - The sandbox has a write form with a one-time CSRF token
   (`sandbox.write-notice`) to try preflight steps on.
+- `itda draft har` turns a form token such as `_csrf` into a preflight step
+  that reads it from the form page recorded before the post.
 - `itda add <file>` installs a site definition (or `-` for stdin) and shows
   where it sends requests, which actions change the site and how it signs
   in; `itda remove <site>` takes it away.
