@@ -134,7 +134,17 @@ pub(crate) fn insert_after(map: &mut Mapping, after: &str, key: &str, value: Yam
 /// `name` first and `evidence` after `effect`, as people write them.
 pub(crate) fn reorder(entry: Mapping) -> Mapping {
     let order = [
-        "name", "desc", "method", "path", "auth", "effect", "evidence", "params", "query", "body",
+        "name",
+        "desc",
+        "method",
+        "path",
+        "auth",
+        "effect",
+        "evidence",
+        "preflight",
+        "params",
+        "query",
+        "body",
         "response",
     ];
     let mut out = Mapping::new();

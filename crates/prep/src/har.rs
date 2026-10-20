@@ -127,6 +127,10 @@ struct Call {
     token: Option<(String, bool)>,
     /// Sign-in cookie names every sample sent; `None` before the first sample.
     session: Option<BTreeSet<String>>,
+    /// Form fields that carried a token, such as `_csrf`.
+    form_tokens: BTreeSet<String>,
+    /// Position of the first sample in the recording.
+    first: Option<usize>,
 }
 
 pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
@@ -183,6 +187,12 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             continue;
         }
         let call = calls.entry((path.clone(), method.clone())).or_default();
+        call.first.get_or_insert_with(|| {
+            entries
+                .iter()
+                .position(|e| std::ptr::eq(e, *entry))
+                .unwrap_or(0)
+        });
         call.method = method;
         call.path = path;
         call.params = params;
@@ -346,10 +356,56 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             entry.insert("query".into(), Yaml::Mapping(call.query.yaml(call.samples)));
         }
         let mut body = Mapping::new();
+        let mut left_out = call.left_out.clone();
         if !call.json.0.is_empty() {
             body.insert("json".into(), Yaml::Mapping(call.json.yaml(call.samples)));
-        } else if !call.form.0.is_empty() {
-            body.insert("form".into(), Yaml::Mapping(call.form.yaml(call.samples)));
+        } else {
+            let mut form = call.form.yaml(call.samples);
+            if let Some(page) = token_page(entries, call, &origin) {
+                let mut extract = Mapping::new();
+                for token in &call.form_tokens {
+                    let key = Some(slug(token))
+                        .filter(|key| !key.is_empty())
+                        .unwrap_or_else(|| "token".into());
+                    extract.insert(
+                        key.clone().into(),
+                        format!("css:input[name=\"{token}\"]@value").into(),
+                    );
+                    let mut field = Mapping::new();
+                    field.insert("type".into(), "string".into());
+                    field.insert("default".into(), format!("{{{{step.form.{key}}}}}").into());
+                    form.insert(token.clone().into(), Yaml::Mapping(field));
+                    left_out.remove(token);
+                }
+                let mut step = Mapping::new();
+                step.insert("name".into(), "form".into());
+                // Only the path: query values, like every recorded value, stay out.
+                match page.path().strip_prefix(&prefix) {
+                    Some(rest) => step.insert("path".into(), rest.into()),
+                    None => {
+                        step.insert("base_url".into(), origin.ascii_serialization().into());
+                        step.insert("path".into(), page.path().into())
+                    }
+                };
+                step.insert("extract".into(), Yaml::Mapping(extract));
+                entry.insert(
+                    "preflight".into(),
+                    Yaml::Sequence(vec![Yaml::Mapping(step)]),
+                );
+                notes.push(format!(
+                    "{label}: {} come from {} through a preflight step, read fresh before each change{}.",
+                    call.form_tokens.iter().cloned().collect::<Vec<_>>().join(", "),
+                    page.path(),
+                    if page.query().is_some() {
+                        "; add the query that page needs to the step's path"
+                    } else {
+                        ""
+                    }
+                ));
+            }
+            if !form.is_empty() {
+                body.insert("form".into(), Yaml::Mapping(form));
+            }
         }
         if !body.is_empty() {
             entry.insert("body".into(), Yaml::Mapping(body));
@@ -369,10 +425,10 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             }
             entry.insert("response".into(), Yaml::Mapping(response));
         }
-        if !call.left_out.is_empty() {
+        if !left_out.is_empty() {
             notes.push(format!(
                 "{label}: left out {}; tokens like these come from sign-in or a preflight step, never from the agent.",
-                call.left_out.iter().cloned().collect::<Vec<_>>().join(", ")
+                left_out.iter().cloned().collect::<Vec<_>>().join(", ")
             ));
         }
         operations.push(reorder(entry));
@@ -400,6 +456,32 @@ fn not_har() -> itda_types::error::AppError {
         "This is not a HAR recording",
         "In the browser's network panel, choose Save all as HAR (with content).",
     )
+}
+
+/// The page, recorded before the call, whose form holds every token field
+/// the call sent: the latest one, as the form the person filled in.
+fn token_page(entries: &[Value], call: &Call, origin: &url::Origin) -> Option<url::Url> {
+    if call.form_tokens.is_empty() {
+        return None;
+    }
+    entries[..call.first?].iter().rev().find_map(|entry| {
+        let url = url::Url::parse(entry["request"]["url"].as_str()?).ok()?;
+        let content = &entry["response"]["content"];
+        let html = entry["request"]["method"].as_str() == Some("GET")
+            && entry["response"]["status"]
+                .as_u64()
+                .is_some_and(|s| (200..300).contains(&s))
+            && content["mimeType"]
+                .as_str()
+                .is_some_and(|m| m.contains("html"));
+        let text = content["text"].as_str()?;
+        let has = |token: &str| {
+            ["\"", "'", ""]
+                .iter()
+                .any(|quote| text.contains(&format!("name={quote}{token}{quote}")))
+        };
+        (html && url.origin() == *origin && call.form_tokens.iter().all(|t| has(t))).then_some(url)
+    })
 }
 
 /// Calls a page makes to its API: JSON answers, and changes sent with a body.
@@ -440,6 +522,9 @@ fn record_body(call: &mut Call, post: &Value) {
         }
     } else if mime.contains("x-www-form-urlencoded") {
         for (name, value) in url::form_urlencoded::parse(text.as_bytes()) {
+            if secret_field(&name) {
+                call.form_tokens.insert(name.clone().into_owned());
+            }
             add_input(
                 &mut call.form,
                 &mut call.left_out,

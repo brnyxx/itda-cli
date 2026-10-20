@@ -96,7 +96,27 @@ fn what_was_left_out_is_listed() {
     );
     assert!(notes.contains("POST /api/v1/files: skipped"), "{notes}");
     assert!(notes.contains("left out csrf_token"), "{notes}");
-    assert!(notes.contains("left out _csrf"), "{notes}");
+    assert!(
+        notes.contains("_csrf come from /board/writeForm.do through a preflight step"),
+        "{notes}"
+    );
+}
+
+#[test]
+fn a_form_token_is_read_from_the_form_page_before_each_post() {
+    let draft = from_har(&recording(), &Options::default()).unwrap();
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+    let post = spec.op("post-write").unwrap();
+    assert_eq!(post.preflight.len(), 1);
+    assert_eq!(post.preflight[0].path, "/board/writeForm.do");
+    assert_eq!(
+        post.preflight[0].extract["csrf"],
+        "css:input[name=\"_csrf\"]@value"
+    );
+    let form = &post.body.as_ref().unwrap().form;
+    assert!(form["_csrf"].from_step());
+    assert!(!draft.yaml.contains("PRIVATE-BBS"));
 }
 
 #[test]
