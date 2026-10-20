@@ -20,7 +20,7 @@ use itda_vault::{EnvStore, KeyringStore, Secret, SecretStore, Vault};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
-    io::{BufRead, IsTerminal},
+    io::{BufRead, IsTerminal, Read},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -47,6 +47,16 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Install a site definition from a file, or - for stdin, after showing
+    /// where it sends requests and which actions change the site
+    Add {
+        file: PathBuf,
+        /// Replace the site if it is already installed
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove an installed site definition
+    Remove { site: String },
     /// Call an action: itda call <site>.<action> [--input value]... [--account id] [--json]
     Call {
         /// <site>.<action>
@@ -209,6 +219,8 @@ fn main() -> ExitCode {
         || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match cli.command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
+        Command::Add { file, force } => add(&home, &file, force),
+        Command::Remove { site } => remove(&home, &site),
         Command::Call { target, rest } => block_on(call(&home, &target, rest)),
         Command::Login {
             site,
@@ -663,6 +675,31 @@ async fn resume_scopes(
         net.resume(origin, account.unwrap_or_default()).await?;
     }
     Ok(())
+}
+
+fn add(home: &Path, file: &Path, force: bool) -> AppResult<ExitCode> {
+    let bytes = if file == Path::new("-") {
+        let mut bytes = Vec::new();
+        std::io::stdin()
+            .take(4 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)?;
+        bytes
+    } else {
+        itda_types::util::read_bounded(file, 4 * 1024 * 1024)?
+    };
+    let (spec, path) = sites::install(home, &bytes, force)?;
+    eprintln!("Installed {} at {}.", spec.site.name, path.display());
+    for line in sites::review(&spec) {
+        eprintln!("  {line}");
+    }
+    eprintln!("Try `itda ls {}`.", spec.site.name);
+    Ok(ExitCode::SUCCESS)
+}
+
+fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
+    sites::remove(home, site)?;
+    eprintln!("Removed {site}. Accounts signed in to it stay until `itda logout {site}`.");
+    Ok(ExitCode::SUCCESS)
 }
 
 type Drafter = fn(&[u8], &itda_prep::Options) -> AppResult<itda_prep::Draft>;
