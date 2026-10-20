@@ -61,11 +61,13 @@ or build from source with
 
 Try it on the bundled sandbox, a fake intranet that only listens on
 127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site
-definition is one YAML file at `<data dir>/specs/<site>/spec.yaml`;
-`itda doctor` prints where the data directory is, and
+definition is one YAML file; `itda add spec.yaml` installs it after showing
+where it sends requests and which actions change the site, `itda doctor`
+prints where the data directory is, and
 [docs/SPEC.md](docs/SPEC.md) explains how to write one.
 
 ```sh
+itda add spec.yaml / remove <site>       # install or remove a site definition
 itda ls                                  # installed sites and their actions
 itda call <site>.<action> --input value  # run one; --json for agents
 echo "$KEY" | itda login <site>          # store an API key in the OS keyring

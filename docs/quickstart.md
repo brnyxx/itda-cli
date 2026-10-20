@@ -81,6 +81,8 @@ real website, so consecutive calls take a moment.
 
 | Command | What it does |
 |---|---|
+| `itda add <file\|-> [--force]` | Install a site definition after showing where it sends requests and which actions change the site |
+| `itda remove <site>` | Remove an installed site definition; its accounts stay until `itda logout` |
 | `itda ls [site] [--json]` | Installed sites and their actions |
 | `itda call <site>.<action> [--input value]… [--account id] [--approval id] [--json]` | Run one action |
 | `itda login <site> [--account id] [--secret name]` | Store a secret read from stdin |
