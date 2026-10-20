@@ -1,0 +1,43 @@
+spec_version: 1
+site:
+  name: pypi
+  title: Python Package Index
+  base_url: https://pypi.org
+models:
+  package:
+    name: {path: info.name}
+    version: {path: info.version}
+    summary: {path: info.summary}
+    license: {path: info.license_expression}
+    requires_python: {path: info.requires_python}
+    requires: {path: info.requires_dist}
+    homepage: {path: info.home_page}
+    links: {path: info.project_urls}
+    yanked: {path: info.yanked, type: bool}
+    vulnerabilities: {path: vulnerabilities}
+operations:
+  - name: package
+    desc: Show a package's latest version, summary, Python requirement and known vulnerabilities
+    method: GET
+    path: /pypi/{name}/json
+    effect: read
+    evidence: https://docs.pypi.org/api/json/
+    params:
+      name: {type: string, default: requests}
+    model: package
+    response:
+      format: json
+      required_pointers: [/info/name, /info/version]
+  - name: version
+    desc: Show one release of a package and its known vulnerabilities
+    method: GET
+    path: /pypi/{name}/{version}/json
+    effect: read
+    evidence: https://docs.pypi.org/api/json/
+    params:
+      name: {type: string}
+      version: {type: string}
+    model: package
+    response:
+      format: json
+      required_pointers: [/info/name, /info/version]

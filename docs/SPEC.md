@@ -170,6 +170,15 @@ response:
   required_pointers: [/items, /total]  # JSON Pointers that must exist
 ```
 
+When the records sit inside a wrapper, `extract_pointer` returns only that
+part, and `required_pointers` and `model` then apply to it:
+
+```yaml
+response:
+  format: json
+  extract_pointer: /items            # {"total_count": 3, "items": [...]} -> [...]
+```
+
 For server-rendered pages, extract records with CSS selectors:
 
 ```yaml
