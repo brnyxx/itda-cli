@@ -11,18 +11,20 @@
 //! agent (`itda approve`), and a second call with that id uses it up before
 //! anything is sent. Without an approval store, changes are refused.
 //! A `browser` credential is the cookie jar the user's own sign-in left
-//! behind (`itda login --browser`); it is sent only to the same site. Preflight
-//! steps are refused until their stage exists.
+//! behind (`itda login --browser`); it is sent only to the same site.
+//! Preflight steps read per-visit values such as a CSRF token from the same
+//! origin just before the action is sent; see `preflight`.
 //!
 //! With an audit log, every call is recorded with its outcome, and a change
 //! is recorded before it is sent: if that record cannot be written, the
 //! change is not sent.
 pub mod audit;
+mod preflight;
 use itda_net::{Network, Request};
 use itda_policy::{
     Approvals, Effect, ExecutionRequest, ReviewInput, operation_effect, validate_spec,
 };
-use itda_spec::{Operation, Spec};
+use itda_spec::{Operation, Spec, interpolate_template_str};
 use itda_types::{
     error::{AppError, AppResult, usage},
     url::{same_site_origin, validate_url},
@@ -150,10 +152,10 @@ impl Runtime {
             (_, Some(approvals)) => Some(approvals),
             (_, None) => return Err(AppError::api("writes_disabled", 403)),
         };
-        if !matches!(op.transport.as_str(), "" | "http") || !op.preflight.is_empty() {
+        if !matches!(op.transport.as_str(), "" | "http") {
             return Err(usage(
-                format!("{} needs a browser or preflight steps", op.name),
-                "This version runs plain HTTP reads only.",
+                format!("{} needs a browser", op.name),
+                "This version sends plain HTTP requests only.",
             ));
         }
 
@@ -239,6 +241,41 @@ impl Runtime {
             // A change is sent once: no retries and no redirects.
             request.read_only = false;
             request.follow_redirects = false;
+        }
+
+        if !op.preflight.is_empty() {
+            let found = preflight::run(
+                &self.net,
+                spec,
+                op,
+                &call.args,
+                &request.headers,
+                &request.account_id,
+                &destination,
+            )
+            .await?;
+            let mut args = call.args.clone();
+            args.extend(found.clone());
+            let (url, body) = spec.build_request(op, &args)?;
+            if validate_url(&url)?.origin() != destination.origin() {
+                return Err(AppError::api("unsafe_target", 400));
+            }
+            request.url = url;
+            request.body = body;
+            request.headers.extend(
+                spec.defaults
+                    .headers
+                    .iter()
+                    .chain(op.headers.iter())
+                    .filter(|(_, value)| value.contains("{{"))
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            interpolate_template_str(v, &BTreeMap::new(), &args),
+                        )
+                    }),
+            );
+            exposed.extend(found.into_values().filter(|value| value.len() >= 8));
         }
 
         let read = approvals.is_none();
@@ -399,16 +436,20 @@ fn review_inputs(method: &str, url: &str, args: &BTreeMap<String, String>) -> Ve
     .collect()
 }
 
-/// Every input must be declared; required ones and types are checked when the
-/// request is built.
+/// Every input must be declared and not filled by a preflight step; required
+/// ones and types are checked when the request is built.
 fn check_inputs(op: &Operation, args: &BTreeMap<String, String>) -> AppResult<()> {
     for name in args.keys() {
-        let declared = op.params.contains_key(name)
-            || op.query.contains_key(name)
-            || op
-                .body
-                .as_ref()
-                .is_some_and(|body| body.inputs().any(|(n, _)| n == name));
+        let declared = op
+            .params
+            .get(name)
+            .or_else(|| op.query.get(name))
+            .or_else(|| {
+                op.body
+                    .as_ref()
+                    .and_then(|body| body.inputs().find(|(n, _)| *n == name).map(|(_, p)| p))
+            })
+            .is_some_and(|param| !param.from_step());
         if !declared {
             return Err(usage(
                 format!("Unknown input: {name}"),
