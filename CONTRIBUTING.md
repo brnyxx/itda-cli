@@ -48,6 +48,14 @@ feat: add same-site checks based on the public suffix list
 - Branch names follow the commit type: `feat/net-gate`, `fix/redirect-origin`.
 - The description says what a reader sees before and after the change, then how.
 
+## Translations
+
+`README.ko.md` and the Korean strings in `site/i18n.js` follow `README.md` and
+`site/index.html`. A pull request that changes the English text updates the
+Korean text too, or says in its description that it does not. New elements on
+the landing page get a `data-i18n` key with a Korean entry. The animated
+diagrams are built by `python3 assets/src/flow.py`, which holds both languages.
+
 ## Checks
 
 ```sh
