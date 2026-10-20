@@ -12,6 +12,8 @@ change the definition format or the CLI.
 - Preflight steps: an action can read a page just before it runs and pass
   a fresh value, such as a CSRF token, into its headers, query or form as
   `{{step.<step>.<name>}}`. Agents never see or set those values.
+- `itda draft har` turns a form token such as `_csrf` into a preflight step
+  that reads it from the form page recorded before the post.
 - `itda add <file>` installs a site definition (or `-` for stdin) and shows
   where it sends requests, which actions change the site and how it signs
   in; `itda remove <site>` takes it away.
