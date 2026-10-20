@@ -10,11 +10,13 @@ the address in its `base_url`, and every change waits for your approval.
 | [crates-io](crates-io.yaml) | None | crate, versions, search | none |
 | [pypi](pypi.yaml) | None | package and release, with known vulnerabilities | none |
 
-Install one from a checkout, or straight from GitHub:
+Each one is built into `itda`, so the name is enough. A file from a checkout
+or a raw URL works too, which is how you install a newer copy or your own:
 
 ```sh
+itda add npm
 itda add sites/npm.yaml
-curl -sL https://raw.githubusercontent.com/brnyxx/itda-cli/main/sites/pypi.yaml | itda add -
+itda add https://raw.githubusercontent.com/brnyxx/itda-cli/main/sites/pypi.yaml
 ```
 
 `itda add` prints where the definition sends requests and which actions change

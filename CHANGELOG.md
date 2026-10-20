@@ -7,6 +7,11 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `itda add` also takes an https URL, or the name of a ready-made site
+  (`itda add github`); the four definitions in `sites/` are built in.
+
 ## [0.3.0] - 2026-10-20
 
 Install ready-made sites with one command, and work with old intranet forms

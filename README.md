@@ -64,7 +64,7 @@ The quickest try is a ready-made site from [sites/](sites/README.md), which
 needs no account:
 
 ```sh
-curl -sL https://raw.githubusercontent.com/brnyxx/itda-cli/main/sites/github.yaml | itda add -
+itda add github
 itda call github.repo --owner rust-lang --repo rust
 itda mcp install claude-desktop   # then ask Claude about any repository
 ```
@@ -77,7 +77,7 @@ prints where the data directory is, and
 [docs/SPEC.md](docs/SPEC.md) explains how to write one.
 
 ```sh
-itda add spec.yaml / remove <site>       # install or remove a site definition
+itda add spec.yaml / remove <site>       # install or remove a site (also a URL or github)
 itda ls                                  # installed sites and their actions
 itda call <site>.<action> --input value  # run one; --json for agents
 echo "$KEY" | itda login <site>          # store an API key in the OS keyring

@@ -492,3 +492,41 @@ operations:
     assert_eq!(gone.status.code(), Some(2));
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn add_takes_a_ready_made_site_or_an_address() {
+    let home = home();
+    let bundled = itda(&home, &["add", "github"], &[]).await;
+    assert_eq!(bundled.status.code(), Some(0));
+    let review = String::from_utf8_lossy(&bundled.stderr);
+    assert!(review.contains("https://api.github.com"), "{review}");
+    let unknown = itda(&home, &["add", "gitlab"], &[]).await;
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("crates-io"));
+
+    let router = Router::new().route(
+        "/spec.yaml",
+        get(|| async {
+            "spec_version: 1
+site: {name: remote, base_url: 'https://api.example.com'}
+operations:
+  - {name: ping, method: GET, path: /ping, effect: read, evidence: doc}
+"
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let fetched = itda(&home, &["add", &format!("{base}/spec.yaml")], &[]).await;
+    assert_eq!(fetched.status.code(), Some(0), "{fetched:?}");
+    let missing = itda(&home, &["add", &format!("{base}/other.yaml")], &[]).await;
+    assert_eq!(missing.status.code(), Some(1));
+    assert_eq!(
+        itda(&home, &["ls", "remote", "--json"], &[])
+            .await
+            .status
+            .code(),
+        Some(0)
+    );
+    std::fs::remove_dir_all(home).ok();
+}

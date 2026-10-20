@@ -10,6 +10,22 @@ use std::path::{Path, PathBuf};
 const SPEC_LIMIT: usize = 4 * 1024 * 1024;
 const FILE_NAMES: [&str; 3] = ["spec.yaml", "spec.yml", "spec.json"];
 
+/// The ready-made definitions in `sites/`, built into the binary so
+/// `itda add github` works without a checkout.
+pub const BUNDLED: [(&str, &str); 4] = [
+    ("crates-io", include_str!("../../../sites/crates-io.yaml")),
+    ("github", include_str!("../../../sites/github.yaml")),
+    ("npm", include_str!("../../../sites/npm.yaml")),
+    ("pypi", include_str!("../../../sites/pypi.yaml")),
+];
+
+pub fn bundled(name: &str) -> Option<&'static str> {
+    BUNDLED
+        .iter()
+        .find(|(bundled, _)| *bundled == name)
+        .map(|(_, text)| *text)
+}
+
 pub struct Installed {
     pub name: String,
     pub path: PathBuf,
