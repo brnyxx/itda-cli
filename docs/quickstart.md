@@ -22,7 +22,7 @@ Check the setup:
 
 ```console
 $ itda doctor
-itda 0.2.0
+itda 0.3.0
 ok    data directory   /home/you/.local/share/itda
 ok    secrets          system keyring
 ok    audit log        0 records, chain intact

@@ -7,6 +7,11 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+Install ready-made sites with one command, and work with old intranet forms
+that need a fresh security token on every change.
+
 ### Added
 
 - Preflight steps: an action can read a page just before it runs and pass
@@ -87,6 +92,7 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/brnyxx/itda-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/brnyxx/itda-cli/releases/tag/v0.1.0
