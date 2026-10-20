@@ -7,6 +7,8 @@
 
 <p align="center"><strong>Don't drive the browser. Compile the site.</strong></p>
 
+<p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
+
 <p align="center">
   <a href="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml"><img src="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/brnyxx/itda-cli/releases"><img src="https://img.shields.io/github/v/release/brnyxx/itda-cli?include_prereleases&amp;label=release" alt="Release"></a>
