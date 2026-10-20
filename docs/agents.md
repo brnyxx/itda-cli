@@ -50,7 +50,8 @@ agent can tell the user what to do.
 A change never runs on the first call. The agent gets `approval_required` with
 an `approval` id and is told to ask you. You run `itda approve <id>` in a
 terminal, see the exact request and answer `y`. The agent then calls again
-with the same inputs and the `approval` id, and the change is sent once. See
+with the same inputs and the `approval` id, and the change is sent once. With
+`--approve-in-client`, clients that show forms ask you directly instead. See
 [Approvals and the audit log](approvals.md).
 
 ## Shell agents

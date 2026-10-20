@@ -80,6 +80,7 @@ itda resume <site>                       # after a site refused or a key expired
 ```sh
 itda mcp install claude-desktop   # or cursor, vscode, codex
 itda mcp install claude-code      # prints the `claude mcp add` command
+# add --approve-in-client to approve changes in the client's own form
 ```
 
 The installer merges into the client's config, keeps your other servers and

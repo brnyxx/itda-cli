@@ -13,6 +13,10 @@ change the definition format or the CLI.
   opens your own browser in a fresh profile, keeps only that site's session
   cookies in the system keyring, and `kind: browser` actions send them only to
   the same site.
+- Approve changes inside the MCP client: with `itda mcp --approve-in-client`
+  (or `itda mcp install <client> --approve-in-client`), clients that show
+  elicitation forms ask you to approve the exact request, and declining
+  returns `approval_rejected`.
 
 ## [0.1.0] - 2026-10-19
 
