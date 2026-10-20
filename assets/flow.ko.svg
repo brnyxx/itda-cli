@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-label="itda 동작 방식: 사이트를 한 번 컴파일하고, 읽기는 바로, 변경은 승인 후" lang="ko">
+<title>itda 동작 방식: 사이트를 한 번 컴파일하고, 읽기는 바로, 변경은 승인 후</title>
+<defs>
+<linearGradient id="m-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232A3B"/><stop offset="1" stop-color="#0B0D12"/></linearGradient>
+<linearGradient id="m-dot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6E8BFF"/><stop offset="1" stop-color="#2F5BEA"/></linearGradient>
+<radialGradient id="bg-glow" cx=".5" cy="0" r=".7"><stop offset="0" stop-color="#2F5BEA" stop-opacity=".22"/><stop offset="1" stop-color="#2F5BEA" stop-opacity="0"/></radialGradient>
+<filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="shadow" x="-20%" y="-40%" width="140%" height="200%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".6"/></filter>
+</defs>
+<style>
+text{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono', 'D2Coding', 'Noto Sans Mono CJK KR', monospace}
+.sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif}
+.cap{font-size:10.5px;letter-spacing:.12em;fill:#6B7385}
+.origin{transform-box:fill-box;transform-origin:center}
+[class^="k"]{opacity:0}
+@keyframes k1{0.00%{opacity:1} 27.69%{opacity:1} 30.00%{opacity:0} 97.69%{opacity:0} 100.00%{opacity:1}}
+.k1{animation:k1 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k2{0.00%{opacity:0} 27.69%{opacity:0} 30.00%{opacity:1} 53.85%{opacity:1} 56.15%{opacity:0} 100.00%{opacity:0}}
+.k2{animation:k2 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k3{0.00%{opacity:0} 53.85%{opacity:0} 56.15%{opacity:1} 95.38%{opacity:1} 97.69%{opacity:0} 100.00%{opacity:0}}
+.k3{animation:k3 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k4{0.00%{opacity:0;transform:translateY(6px)} 78.85%{opacity:0;transform:translateY(6px)} 81.54%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k4{animation:k4 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k5{0.00%{opacity:0;transform:translateY(0)} 3.08%{opacity:0;transform:translateY(0)} 4.62%{opacity:1;transform:translateY(0)} 8.46%{opacity:1;transform:translateY(34px)} 12.31%{opacity:1;transform:translateY(68px)} 15.38%{opacity:0;transform:translateY(68px)} 100.00%{opacity:0;transform:translateY(68px)}}
+.k5{animation:k5 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k6{0.00%{opacity:0} 40.00%{opacity:0} 41.54%{opacity:1} 50.00%{opacity:1} 53.08%{opacity:0} 100.00%{opacity:0}}
+.k6{animation:k6 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k7{0.00%{opacity:0;transform:scale(.85)} 15.38%{opacity:0;transform:scale(.85)} 16.54%{opacity:.7;transform:scale(.95)} 21.54%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
+.k7{animation:k7 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k8{0.00%{opacity:0;transform:scale(.85)} 37.31%{opacity:0;transform:scale(.85)} 38.46%{opacity:.7;transform:scale(.95)} 43.46%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
+.k8{animation:k8 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k9{0.00%{opacity:0;transform:scale(.85)} 75.00%{opacity:0;transform:scale(.85)} 76.15%{opacity:.7;transform:scale(.95)} 81.15%{opacity:0;transform:scale(1.25)} 100.00%{opacity:0;transform:scale(1.25)}}
+.k9{animation:k9 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k10{0.00%{opacity:0} 62.69%{opacity:0} 64.23%{opacity:1} 73.85%{opacity:1} 75.38%{opacity:0} 100.00%{opacity:0}}
+.k10{animation:k10 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k11{0.00%{opacity:0;transform:translateY(6px)} 19.23%{opacity:0;transform:translateY(6px)} 21.92%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k11{animation:k11 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k12{0.00%{opacity:0;transform:translateY(6px)} 22.31%{opacity:0;transform:translateY(6px)} 25.00%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k12{animation:k12 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k13{0.00%{opacity:0} 36.54%{opacity:0} 38.08%{opacity:1} 47.69%{opacity:1} 50.00%{opacity:0} 100.00%{opacity:0}}
+.k13{animation:k13 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k14{0.00%{opacity:0} 60.77%{opacity:0} 62.31%{opacity:1} 79.23%{opacity:1} 81.54%{opacity:0} 100.00%{opacity:0}}
+.k14{animation:k14 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k15{0.00%{opacity:0;transform:translateY(6px)} 24.62%{opacity:0;transform:translateY(6px)} 27.31%{opacity:1;transform:translateY(0)} 83.85%{opacity:1;transform:translateY(0)} 86.15%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k15{animation:k15 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k16{0.00%{opacity:0;transform:translateY(6px)} 84.62%{opacity:0;transform:translateY(6px)} 87.31%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k16{animation:k16 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k17{0.00%{opacity:0;transform:translateY(6px)} 29.23%{opacity:0;transform:translateY(6px)} 31.92%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k17{animation:k17 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k18{0.00%{opacity:0;transform:translateY(6px)} 32.69%{opacity:0;transform:translateY(6px)} 35.38%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k18{animation:k18 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k19{0.00%{opacity:0;transform:translateY(6px)} 50.00%{opacity:0;transform:translateY(6px)} 52.69%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k19{animation:k19 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k20{0.00%{opacity:0;transform:translateY(6px)} 55.38%{opacity:0;transform:translateY(6px)} 58.08%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k20{animation:k20 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k21{0.00%{opacity:0;transform:translateY(6px)} 58.46%{opacity:0;transform:translateY(6px)} 61.15%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k21{animation:k21 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k22{0.00%{opacity:0;transform:translateY(6px)} 63.85%{opacity:0;transform:translateY(6px)} 66.54%{opacity:1;transform:translateY(0)} 82.69%{opacity:1;transform:translateY(0)} 85.00%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k22{animation:k22 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k23{0.00%{opacity:0;transform:translateY(6px)} 84.62%{opacity:0;transform:translateY(6px)} 87.31%{opacity:1;transform:translateY(0)} 95.38%{opacity:1;transform:translateY(0)} 97.69%{opacity:0;transform:translateY(0)} 100.00%{opacity:0;transform:translateY(0)}}
+.k23{animation:k23 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k24{0.00%{opacity:0;transform:translateX(0)} 7.62%{opacity:0;transform:translateX(0)} 7.69%{opacity:1;transform:translateX(0)} 13.08%{opacity:1;transform:translateX(136px)} 14.00%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k24{animation:k24 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k25{0.00%{opacity:0;transform:translateX(0)} 9.54%{opacity:0;transform:translateX(0)} 9.62%{opacity:1;transform:translateX(0)} 15.00%{opacity:1;transform:translateX(136px)} 15.92%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k25{animation:k25 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k26{0.00%{opacity:0;transform:translateX(0)} 11.46%{opacity:0;transform:translateX(0)} 11.54%{opacity:1;transform:translateX(0)} 16.92%{opacity:1;transform:translateX(136px)} 17.85%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k26{animation:k26 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k27{0.00%{opacity:0;transform:translateX(0)} 33.38%{opacity:0;transform:translateX(0)} 33.46%{opacity:1;transform:translateX(0)} 36.92%{opacity:1;transform:translateX(-136px)} 37.85%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k27{animation:k27 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k28{0.00%{opacity:0;transform:translateX(0)} 37.23%{opacity:0;transform:translateX(0)} 37.31%{opacity:1;transform:translateX(0)} 40.38%{opacity:1;transform:translateX(-136px)} 41.31%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k28{animation:k28 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k29{0.00%{opacity:0;transform:translateX(0)} 43.00%{opacity:0;transform:translateX(0)} 43.08%{opacity:1;transform:translateX(0)} 46.15%{opacity:1;transform:translateX(136px)} 47.08%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k29{animation:k29 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k30{0.00%{opacity:0;transform:translateX(0)} 46.46%{opacity:0;transform:translateX(0)} 46.54%{opacity:1;transform:translateX(0)} 49.62%{opacity:1;transform:translateX(136px)} 50.54%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k30{animation:k30 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k31{0.00%{opacity:0;transform:translateX(0)} 59.15%{opacity:0;transform:translateX(0)} 59.23%{opacity:1;transform:translateX(0)} 62.69%{opacity:1;transform:translateX(-136px)} 63.62%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k31{animation:k31 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k32{0.00%{opacity:0;transform:translateX(0)} 75.31%{opacity:0;transform:translateX(0)} 75.38%{opacity:1;transform:translateX(0)} 78.46%{opacity:1;transform:translateX(-136px)} 79.38%{opacity:0;transform:translateX(-136px)} 100.00%{opacity:0;transform:translateX(-136px)}}
+.k32{animation:k32 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k33{0.00%{opacity:0;transform:translateX(0)} 79.15%{opacity:0;transform:translateX(0)} 79.23%{opacity:1;transform:translateX(0)} 81.54%{opacity:1;transform:translateX(136px)} 82.46%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k33{animation:k33 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k34{0.00%{opacity:0;transform:translateX(0)} 81.46%{opacity:0;transform:translateX(0)} 81.54%{opacity:1;transform:translateX(0)} 83.85%{opacity:1;transform:translateX(136px)} 84.77%{opacity:0;transform:translateX(136px)} 100.00%{opacity:0;transform:translateX(136px)}}
+.k34{animation:k34 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k35{0.00%{opacity:0;transform:translateY(16px)} 65.77%{opacity:0;transform:translateY(16px)} 68.85%{opacity:1;transform:translateY(0)} 76.54%{opacity:1;transform:translateY(0)} 78.85%{opacity:0;transform:translateY(8px)} 100.00%{opacity:0;transform:translateY(8px)}}
+.k35{animation:k35 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k36{0.00%{opacity:0} 73.08%{opacity:0} 73.85%{opacity:1} 100.00%{opacity:1}}
+.k36{animation:k36 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes k37{0.00%{opacity:0;transform:translate(699.81px,450px) scale(1)} 68.46%{opacity:0;transform:translate(699.81px,450px) scale(1)} 69.62%{opacity:1;transform:translate(679.81px,440px) scale(1)} 72.31%{opacity:1;transform:translate(609.81px,410px) scale(1)} 72.92%{opacity:1;transform:translate(609.81px,410px) scale(.82)} 73.69%{opacity:1;transform:translate(609.81px,410px) scale(1)} 76.54%{opacity:1;transform:translate(609.81px,410px) scale(1)} 78.46%{opacity:0;transform:translate(609.81px,410px) scale(1)} 100.00%{opacity:0;transform:translate(609.81px,410px) scale(1)}}
+.k37{animation:k37 13.0s cubic-bezier(.4,0,.2,1) infinite}
+@media (prefers-reduced-motion: reduce){[class^="k"]{animation:none!important;transform:none!important}.still{opacity:1}}
+</style>
+<rect width="960" height="440" rx="20" fill="#0B0D12"/>
+<rect width="960" height="440" rx="20" fill="url(#bg-glow)"/>
+<rect x=".5" y=".5" width="959" height="439" rx="19.5" fill="none" stroke="#fff" stroke-opacity=".07"/>
+<rect x="189.0" y="16" width="186" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
+<text x="282.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">1  한 번 컴파일</text>
+<g class="k1"><rect x="189.0" y="16" width="186" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="282.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">1  한 번 컴파일</text></g>
+<rect x="387.0" y="16" width="186" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
+<text x="480.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">2  읽기는 바로 실행</text>
+<g class="k2"><rect x="387.0" y="16" width="186" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="480.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">2  읽기는 바로 실행</text></g>
+<rect x="585.0" y="16" width="186" height="30" rx="15" fill="#10131A" stroke="#242A38"/>
+<text x="678.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" fill="#6B7385">3  변경은 내가 승인</text>
+<g class="k3 still"><rect x="585.0" y="16" width="186" height="30" rx="15" fill="#2F5BEA" fill-opacity=".18" stroke="#6E8BFF" stroke-opacity=".7"/><text x="678.0" y="35.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="600" fill="#ECEEF3">3  변경은 내가 승인</text></g>
+<text x="24" y="76" class="mono cap">웹사이트</text>
+<text x="480" y="76" text-anchor="middle" class="mono cap">ITDA</text>
+<text x="664" y="76" class="mono cap">AI 에이전트</text>
+<line x1="296" y1="144" x2="432" y2="144" stroke="#2F3647" stroke-width="1.5" stroke-dasharray="3 5"/>
+<line x1="528" y1="144" x2="664" y2="144" stroke="#2F3647" stroke-width="1.5" stroke-dasharray="3 5"/>
+<rect x="24" y="86" width="272" height="262" rx="14" fill="#141823" stroke="#242A38"/>
+<circle cx="42" cy="104" r="4" fill="#2B3141"/>
+<circle cx="55" cy="104" r="4" fill="#2B3141"/>
+<circle cx="68" cy="104" r="4" fill="#2B3141"/>
+<rect x="84" y="96" width="198" height="17" rx="8.5" fill="#0B0D12"/>
+<text x="96" y="108.5" class="mono" font-size="10" fill="#6B7385">intranet.example/board</text>
+<text x="40" y="143" class="sans" font-size="14" font-weight="600" fill="#ECEEF3">공지사항</text>
+<rect x="227.0" y="128" width="53.0" height="21" rx="6" fill="#2F5BEA" fill-opacity=".85"/>
+<text x="253.5" y="142.5" text-anchor="middle" class="sans" font-size="11" font-weight="600" fill="#fff">글쓰기</text>
+<rect x="40" y="160" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/>
+<text x="52" y="177" class="mono" font-size="10" fill="#6B7385">12</text>
+<text x="76" y="177" class="sans" font-size="11.5" fill="#9AA3B5">점검: 메일 서버</text>
+<rect x="40" y="194" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/>
+<text x="52" y="211" class="mono" font-size="10" fill="#6B7385">13</text>
+<text x="76" y="211" class="sans" font-size="11.5" fill="#9AA3B5">휴무 일정</text>
+<rect x="40" y="228" width="240" height="26" rx="6" fill="#10131A" stroke="#242A38"/>
+<text x="52" y="245" class="mono" font-size="10" fill="#6B7385">14</text>
+<text x="76" y="245" class="sans" font-size="11.5" fill="#9AA3B5">점검: VPN</text>
+<g class="k4 still"><rect x="40" y="262" width="240" height="26" rx="6" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".55"/><text x="52" y="279" class="mono" font-size="10" fill="#3DD68C">15</text><text x="76" y="279" class="sans" font-size="11.5" fill="#ECEEF3">서버 점검 안내</text></g>
+<rect class="k5" x="40" y="160" width="240" height="26" rx="6" fill="#2F5BEA" fill-opacity=".16" stroke="#6E8BFF" stroke-opacity=".8"/>
+<g class="k6" fill="none" stroke="#3DD68C" stroke-opacity=".8"><rect x="40" y="160" width="240" height="26" rx="6"/><rect x="40" y="228" width="240" height="26" rx="6"/></g>
+<text x="40" y="334" class="mono" font-size="10" fill="#6B7385">HTML · OpenAPI · HAR</text>
+<circle class="k7 origin" cx="480" cy="144" r="44" fill="none" stroke="#6E8BFF" stroke-width="2"/>
+<circle class="k8 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
+<circle class="k9 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
+<g transform="translate(444 108) scale(.75)"><rect x="2" y="2" width="92" height="92" rx="24" fill="url(#m-bg)"/><rect x="2.5" y="2.5" width="91" height="91" rx="23.5" fill="none" stroke="#fff" stroke-opacity=".1"/><path d="M29 31 L46 48 L29 65" fill="none" stroke="#F4F5F8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="63" cy="63" r="7.5" fill="url(#m-dot)"/></g>
+<g class="k10"><circle cx="480" cy="144" r="44" fill="#F5B041" fill-opacity=".08" stroke="#F5B041" stroke-width="2" stroke-dasharray="5 5"/><rect x="502" y="160" width="22" height="22" rx="7" fill="#F5B041"/><path d="M508.5 170v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#0B0D12" stroke-width="1.8"/><rect x="507" y="170" width="12" height="8" rx="2" fill="#0B0D12"/></g>
+<rect x="372" y="196" width="216" height="152" rx="12" fill="#10131A" stroke="#242A38"/>
+<text x="386" y="217" class="mono" font-size="10.5" fill="#6B7385">board/spec.yaml</text>
+<g class="k11 still"><rect x="384" y="232" width="192" height="26" rx="7" fill="#141823" stroke="#2F3647"/><text x="396" y="249" class="mono" font-size="11.5" fill="#ECEEF3">list-notices</text><rect x="528.4" y="237" width="39.6" height="16" rx="8" fill="#3DD68C" fill-opacity=".14"/><text x="548.2" y="248.5" text-anchor="middle" class="mono" font-size="9.5" font-weight="600" fill="#3DD68C">READ</text></g>
+<g class="k12 still"><rect x="384" y="266" width="192" height="26" rx="7" fill="#141823" stroke="#2F3647"/><text x="396" y="283" class="mono" font-size="11.5" fill="#ECEEF3">create-notice</text><rect x="515.6" y="271" width="52.400000000000006" height="16" rx="8" fill="#F5B041" fill-opacity=".14"/><text x="541.8" y="282.5" text-anchor="middle" class="mono" font-size="9.5" font-weight="600" fill="#F5B041">CHANGE</text></g>
+<rect class="k13" x="384" y="232" width="192" height="26" rx="7" fill="none" stroke="#3DD68C" stroke-width="1.5"/>
+<rect class="k14" x="384" y="266" width="192" height="26" rx="7" fill="none" stroke="#F5B041" stroke-width="1.5"/>
+<text class="k15" x="386" y="322" font-size="10.5" fill="#3DD68C">✓ 액션 2개 컴파일됨</text>
+<text class="k16 still" x="386" y="322" font-size="10.5" fill="#6E8BFF">✓ 감사 로그 체인 검증됨</text>
+<rect x="664" y="86" width="272" height="262" rx="14" fill="#141823" stroke="#242A38"/>
+<path d="M688 100l2.6 6.4 6.4 2.6-6.4 2.6-2.6 6.4-2.6-6.4-6.4-2.6 6.4-2.6z" fill="#6E8BFF"/>
+<text x="704" y="113" class="sans" font-size="13" font-weight="600" fill="#ECEEF3">AI 에이전트</text>
+<rect x="884" y="100" width="36" height="17" rx="8.5" fill="none" stroke="#2F3647"/>
+<text x="902" y="112" text-anchor="middle" class="mono" font-size="9.5" fill="#9AA3B5">MCP</text>
+<g class="k17 still"><rect x="807.68" y="128" width="112.32000000000001" height="26" rx="10" fill="#2F5BEA"/><text x="908" y="145" text-anchor="end" class="sans" font-size="11.5" fill="#fff">점검 공지 있어?</text></g>
+<text class="k18 still" x="680" y="176" font-size="11" fill="#6E8BFF">→ board.list-notices</text>
+<g class="k19 still"><rect x="680" y="186" width="164.12" height="26" rx="8" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".45"/><text x="691" y="203" class="mono" font-size="11" fill="#3DD68C">✓ 2건 · 읽기는 바로 실행</text></g>
+<g class="k20 still"><rect x="773.1800000000001" y="224" width="146.82" height="26" rx="10" fill="#2F5BEA"/><text x="908" y="241" text-anchor="end" class="sans" font-size="11.5" fill="#fff">서버 점검 공지 올려줘</text></g>
+<text class="k21 still" x="680" y="272" font-size="11" fill="#6E8BFF">→ board.create-notice</text>
+<g class="k22"><rect x="680" y="284" width="143.88" height="26" rx="8" fill="#F5B041" fill-opacity=".1" stroke="#F5B041" stroke-opacity=".45"/><text x="691" y="301" class="mono" font-size="11" fill="#F5B041">⏸ approval_required</text></g>
+<g class="k23 still"><rect x="680" y="284" width="157.96" height="26" rx="8" fill="#3DD68C" fill-opacity=".1" stroke="#3DD68C" stroke-opacity=".45"/><text x="691" y="301" class="mono" font-size="11" fill="#3DD68C">✓ 한 번만 게시 · 기록됨</text></g>
+<circle class="k24" cx="296" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k25" cx="296" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k26" cx="296" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k27" cx="664" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k28" cx="432" cy="144" r="4.5" fill="#6E8BFF" filter="url(#glow)"/>
+<circle class="k29" cx="296" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k30" cx="528" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k31" cx="664" cy="144" r="4.5" fill="#F5B041" filter="url(#glow)"/>
+<circle class="k32" cx="432" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k33" cx="296" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<circle class="k34" cx="528" cy="144" r="4.5" fill="#3DD68C" filter="url(#glow)"/>
+<g class="k35"><rect x="290" y="334" width="380" height="94" rx="14" fill="#1A1F2C" stroke="#F5B041" stroke-opacity=".55" filter="url(#shadow)"/><rect x="306" y="350" width="24" height="24" rx="7" fill="#F5B041" fill-opacity=".16"/><path d="M313.5 361v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#F5B041" stroke-width="1.8"/><rect x="312" y="361" width="12" height="8" rx="2" fill="#F5B041"/><text x="342" y="366" class="sans" font-size="13" font-weight="600" fill="#ECEEF3">이 변경을 승인할까요?</text><text x="342" y="386" class="mono" font-size="10.5" fill="#9AA3B5">board.create-notice  title="서버 점검 안내"</text><rect x="500.62" y="396" width="49.0" height="24" rx="7" fill="none" stroke="#2F3647"/><text x="525.12" y="412" text-anchor="middle" class="sans" font-size="11.5" fill="#9AA3B5">거절</text><rect x="557.62" y="396" width="96.38" height="24" rx="7" fill="#2F5BEA"/><text x="605.81" y="412" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#fff">승인</text>
+<g class="k36"><rect x="557.62" y="396" width="96.38" height="24" rx="7" fill="#3DD68C"/><text x="605.81" y="412" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#0B0D12">한 번 승인됨</text></g></g>
+<g class="k37"><path d="M0 0v15l4-3.6 2.6 6 2.6-1.1-2.6-5.9h5.4z" fill="#fff" stroke="#0B0D12" stroke-width="1.2" stroke-linejoin="round"/></g>
+</svg>
