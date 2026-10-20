@@ -58,6 +58,22 @@ operations:
     body:
       json:
         title: {type: string, required: true}
+  - name: write-notice
+    desc: Post a notice through the board's write form
+    method: POST
+    path: /notices
+    auth: key
+    effect: write
+    evidence: POST /notices needs the one-time _csrf from GET /notices/new
+    preflight:
+      - name: form
+        path: /notices/new
+        extract:
+          csrf: css:input[name="_csrf"]@value
+    body:
+      form:
+        title: {type: string, required: true}
+        _csrf: {type: string, default: "{{step.form.csrf}}"}
   - name: reports
     desc: Read the reports page, which refuses automated access
     method: GET
