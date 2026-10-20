@@ -1,0 +1,63 @@
+spec_version: 1
+site:
+  name: crates-io
+  title: crates.io
+  base_url: https://crates.io
+defaults:
+  headers:
+    Accept: application/json
+models:
+  crate:
+    name: {path: name}
+    version: {path: max_stable_version}
+    description: {path: description}
+    downloads: {path: downloads, type: int}
+    recent_downloads: {path: recent_downloads, type: int}
+    repository: {path: repository}
+    documentation: {path: documentation}
+    updated_at: {path: updated_at}
+  version:
+    version: {path: num}
+    yanked: {path: yanked, type: bool}
+    license: {path: license}
+    rust_version: {path: rust_version}
+    downloads: {path: downloads, type: int}
+    published_at: {path: created_at}
+operations:
+  - name: crate
+    desc: Show a crate's latest version, description and downloads
+    method: GET
+    path: /api/v1/crates/{name}
+    effect: read
+    evidence: https://crates.io/data-access#api
+    params:
+      name: {type: string, default: serde}
+    model: crate
+    response:
+      format: json
+      extract_pointer: /crate
+  - name: versions
+    desc: List a crate's published versions, newest first
+    method: GET
+    path: /api/v1/crates/{name}/versions
+    effect: read
+    evidence: https://crates.io/data-access#api
+    params:
+      name: {type: string, default: serde}
+    model: version
+    response:
+      format: json
+      extract_pointer: /versions
+  - name: search
+    desc: Search crates by name or keywords, best match first
+    method: GET
+    path: /api/v1/crates
+    effect: read
+    evidence: https://crates.io/data-access#api
+    query:
+      q: {type: string, required: true}
+      per_page: {type: int, default: 10}
+    model: crate
+    response:
+      format: json
+      extract_pointer: /crates

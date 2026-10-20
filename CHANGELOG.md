@@ -12,6 +12,8 @@ change the definition format or the CLI.
 - `itda add <file>` installs a site definition (or `-` for stdin) and shows
   where it sends requests, which actions change the site and how it signs
   in; `itda remove <site>` takes it away.
+- Ready-made site definitions in `sites/`: GitHub (public reads without an
+  account, issues and comments with a token), npm, crates.io and PyPI.
 
 ### Changed
 

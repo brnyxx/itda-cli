@@ -59,7 +59,16 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Try it on the bundled sandbox, a fake intranet that only listens on
+The quickest try is a ready-made site from [sites/](sites/README.md), which
+needs no account:
+
+```sh
+curl -sL https://raw.githubusercontent.com/brnyxx/itda-cli/main/sites/github.yaml | itda add -
+itda call github.repo --owner rust-lang --repo rust
+itda mcp install claude-desktop   # then ask Claude about any repository
+```
+
+Or try the bundled sandbox, a fake intranet that only listens on
 127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site
 definition is one YAML file; `itda add spec.yaml` installs it after showing
 where it sends requests and which actions change the site, `itda doctor`
