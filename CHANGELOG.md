@@ -9,6 +9,9 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda draft har` also handles a token sent as a header, such as
+  `X-CSRF-Token`: a preflight step reads it from the page's
+  `<meta name="csrf-token">` tag before each call.
 - `itda add` also takes an https URL, or the name of a ready-made site
   (`itda add github`); the four definitions in `sites/` are built in.
 

@@ -51,7 +51,9 @@ values you add with `itda login`. Calls that sent a sign-in cookie (by name,
 such as `JSESSIONID` or `SID`) and no token get a `kind: browser` entry, so
 `itda login <site> --browser` signs them in. A form token such as `_csrf` becomes a
 `preflight` step that reads it from the form page recorded before the post, so
-each change sends a fresh one; other token and session fields are left out and
+each change sends a fresh one. A header such as `X-CSRF-Token` gets the same
+treatment from a `<meta name="csrf-token">` tag on an earlier page, the pattern
+Rails, Laravel and many single-page apps use; other token and session fields are left out and
 listed, since they come from sign-in, never from the agent. Calls to other addresses, file uploads and failed calls are skipped.
 Delete the HAR file when you are done with it.
 
