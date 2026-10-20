@@ -7,6 +7,11 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Changed
+
+- A `model` now applies to each record when the answer is a JSON list,
+  instead of returning an empty object.
+
 ## [0.2.0] - 2026-10-20
 
 Sign in through your own browser, approve changes inside the agent app, and

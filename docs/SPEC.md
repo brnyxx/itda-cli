@@ -245,7 +245,7 @@ Preflight steps are part of the format but refused by the 0.1 runtime.
 ## `models`
 
 A model picks and renames fields from a JSON answer, so agents get small,
-stable records:
+stable records. When the answer is a list, each record is picked the same way:
 
 ```yaml
 models:
