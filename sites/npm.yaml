@@ -1,0 +1,61 @@
+spec_version: 1
+site:
+  name: npm
+  title: npm registry
+  base_url: https://registry.npmjs.org
+models:
+  package:
+    name: {path: name}
+    version: {path: version}
+    description: {path: description}
+    license: {path: license}
+    homepage: {path: homepage}
+    repository: {path: repository.url}
+    dependencies: {path: dependencies}
+    node: {path: engines.node}
+  result:
+    name: {path: package.name}
+    version: {path: package.version}
+    description: {path: package.description}
+    weekly_downloads: {path: downloads.weekly, type: int}
+    updated: {path: updated}
+    url: {path: package.links.npm}
+operations:
+  - name: package
+    desc: Show a package's latest version, description, license and dependencies
+    method: GET
+    path: /{name}/latest
+    effect: read
+    evidence: https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md
+    params:
+      name: {type: string, default: react}
+    model: package
+    response:
+      format: json
+      required_pointers: [/name, /version]
+  - name: version
+    desc: Show one published version of a package
+    method: GET
+    path: /{name}/{version}
+    effect: read
+    evidence: https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md
+    params:
+      name: {type: string}
+      version: {type: string}
+    model: package
+    response:
+      format: json
+      required_pointers: [/name, /version]
+  - name: search
+    desc: Search packages by keywords, best match first, with weekly downloads
+    method: GET
+    path: /-/v1/search
+    effect: read
+    evidence: https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search
+    query:
+      text: {type: string, required: true}
+      size: {type: int, default: 10}
+    model: result
+    response:
+      format: json
+      extract_pointer: /objects

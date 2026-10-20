@@ -177,6 +177,26 @@ fn the_sandbox_definition_is_valid() {
     itda_policy::validate_spec(&spec).unwrap();
 }
 
+#[test]
+fn the_bundled_sites_are_valid_and_named_after_their_files() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sites");
+    let mut count = 0;
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "yaml") {
+            continue;
+        }
+        let spec = itda_spec::parse(&std::fs::read(&path).unwrap()).unwrap();
+        itda_policy::validate_spec(&spec).unwrap();
+        assert_eq!(
+            Some(spec.site.name.as_str()),
+            path.file_stem().and_then(|s| s.to_str())
+        );
+        count += 1;
+    }
+    assert!(count > 0);
+}
+
 #[tokio::test]
 async fn mcp_serves_installed_actions_over_stdio() {
     use std::io::Write;

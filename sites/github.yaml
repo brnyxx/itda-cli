@@ -1,0 +1,168 @@
+spec_version: 1
+site:
+  name: github
+  title: GitHub
+  base_url: https://api.github.com
+defaults:
+  headers:
+    Accept: application/vnd.github+json
+    X-GitHub-Api-Version: "2022-11-28"
+auth:
+  # Optional for public reads (60 requests an hour without it); needed for
+  # private repositories and for changes. A fine-grained token with only the
+  # permissions you want agents to have:
+  #   echo "$GITHUB_TOKEN" | itda login github
+  - name: token
+    kind: header
+    header: Authorization
+    prefix: "Bearer "
+    value_from: store:github/api-key
+models:
+  repo:
+    name: {path: full_name}
+    description: {path: description}
+    stars: {path: stargazers_count, type: int}
+    forks: {path: forks_count, type: int}
+    open_issues: {path: open_issues_count, type: int}
+    language: {path: language}
+    license: {path: license.spdx_id}
+    default_branch: {path: default_branch}
+    pushed_at: {path: pushed_at}
+    url: {path: html_url}
+  issue:
+    number: {path: number, type: int}
+    title: {path: title}
+    state: {path: state}
+    author: {path: user.login}
+    comments: {path: comments, type: int}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    url: {path: html_url}
+    body: {path: body}
+  release:
+    tag: {path: tag_name}
+    name: {path: name}
+    published_at: {path: published_at}
+    prerelease: {path: prerelease, type: bool}
+    url: {path: html_url}
+    notes: {path: body}
+  comment:
+    author: {path: user.login}
+    created_at: {path: created_at}
+    body: {path: body}
+    url: {path: html_url}
+operations:
+  - name: repo
+    desc: Show a repository's description, stars, language and license
+    method: GET
+    path: /repos/{owner}/{repo}
+    effect: read
+    evidence: https://docs.github.com/rest/repos/repos#get-a-repository
+    params:
+      owner: {type: string, default: brnyxx}
+      repo: {type: string, default: itda-cli}
+    model: repo
+    response:
+      format: json
+      required_pointers: [/full_name, /stargazers_count]
+  - name: search-repos
+    desc: Search public repositories, best match first (GitHub search syntax, e.g. "mcp language:rust stars:>100")
+    method: GET
+    path: /search/repositories
+    effect: read
+    evidence: https://docs.github.com/rest/search/search#search-repositories
+    query:
+      q: {type: string, required: true}
+      per_page: {type: int, default: 10}
+    model: repo
+    response:
+      format: json
+      extract_pointer: /items
+  - name: list-issues
+    desc: List a repository's issues and pull requests, most recently updated first
+    method: GET
+    path: /repos/{owner}/{repo}/issues
+    effect: read
+    evidence: https://docs.github.com/rest/issues/issues#list-repository-issues
+    params:
+      owner: {type: string, default: brnyxx}
+      repo: {type: string, default: itda-cli}
+    query:
+      state: {type: string, default: open}
+      sort: {type: string, default: updated}
+      per_page: {type: int, default: 10}
+    model: issue
+    response:
+      format: json
+  - name: issue
+    desc: Read one issue or pull request with its description
+    method: GET
+    path: /repos/{owner}/{repo}/issues/{number}
+    effect: read
+    evidence: https://docs.github.com/rest/issues/issues#get-an-issue
+    params:
+      owner: {type: string}
+      repo: {type: string}
+      number: {type: int}
+    model: issue
+    response:
+      format: json
+      required_pointers: [/number, /title]
+  - name: issue-comments
+    desc: Read the comments on an issue or pull request, oldest first
+    method: GET
+    path: /repos/{owner}/{repo}/issues/{number}/comments
+    effect: read
+    evidence: https://docs.github.com/rest/issues/comments#list-issue-comments
+    params:
+      owner: {type: string}
+      repo: {type: string}
+      number: {type: int}
+    query:
+      per_page: {type: int, default: 30}
+    model: comment
+    response:
+      format: json
+  - name: latest-release
+    desc: Show a repository's latest release and its notes
+    method: GET
+    path: /repos/{owner}/{repo}/releases/latest
+    effect: read
+    evidence: https://docs.github.com/rest/releases/releases#get-the-latest-release
+    params:
+      owner: {type: string, default: brnyxx}
+      repo: {type: string, default: itda-cli}
+    model: release
+    response:
+      format: json
+      required_pointers: [/tag_name]
+  - name: create-issue
+    desc: Open an issue in a repository
+    method: POST
+    path: /repos/{owner}/{repo}/issues
+    auth: token
+    effect: write
+    evidence: https://docs.github.com/rest/issues/issues#create-an-issue
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    body:
+      json:
+        title: {type: string, required: true}
+        body: {type: string}
+    model: issue
+  - name: comment-issue
+    desc: Add a comment to an issue or pull request
+    method: POST
+    path: /repos/{owner}/{repo}/issues/{number}/comments
+    auth: token
+    effect: write
+    evidence: https://docs.github.com/rest/issues/comments#create-an-issue-comment
+    params:
+      owner: {type: string}
+      repo: {type: string}
+      number: {type: int}
+    body:
+      json:
+        body: {type: string, required: true}
+    model: comment
