@@ -7,6 +7,11 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
+Sign in through your own browser, approve changes inside the agent app, and
+check that sites still answer the way their definitions say.
+
 ### Added
 
 - `itda accounts` lists signed-in accounts and the names of their secrets;
@@ -62,5 +67,6 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/brnyxx/itda-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/brnyxx/itda-cli/releases/tag/v0.1.0
