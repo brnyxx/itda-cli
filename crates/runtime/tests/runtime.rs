@@ -366,3 +366,105 @@ async fn the_audit_log_records_calls_and_changes_before_they_are_sent() {
     );
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[tokio::test]
+async fn preflight_steps_fetch_a_fresh_token_for_the_change() {
+    const TOKEN: &str = "csrf-token-7f3a91";
+    let posted = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen = posted.clone();
+    let router = Router::new()
+        .route(
+            "/form",
+            get(|| async {
+                axum::response::Html(format!(
+                    "<form><input type=hidden name=_csrf value={TOKEN}></form>"
+                ))
+            }),
+        )
+        .route(
+            "/empty",
+            get(|| async { axum::response::Html("<form></form>") }),
+        )
+        .route(
+            "/posts",
+            axum::routing::post(move |headers: HeaderMap, body: String| async move {
+                let token = headers
+                    .get("x-csrf-token")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or_default()
+                    .to_owned();
+                assert!(body.contains(&format!("_csrf={TOKEN}")), "{body}");
+                seen.lock().unwrap().push(token.clone());
+                axum::Json(json!({"ok": true, "echo": token}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "board", "base_url": base},
+        "operations": [
+            {"name": "post", "method": "POST", "path": "/posts", "effect": "write", "evidence": "doc",
+             "headers": {"X-CSRF-Token": "{{step.form.csrf}}"},
+             "preflight": [{"name": "form", "path": "/form", "extract": {"csrf": "css:input[name=_csrf]@value"}}],
+             "body": {"form": {"title": {"type": "string"}, "_csrf": {"type": "string", "default": "{{step.form.csrf}}"}}}},
+            {"name": "broken", "method": "POST", "path": "/posts", "effect": "write", "evidence": "doc",
+             "headers": {"X-CSRF-Token": "{{step.form.csrf}}"},
+             "preflight": [{"name": "form", "path": "/empty", "extract": {"csrf": "css:input[name=_csrf]@value"}}]}
+        ]
+    });
+    let spec = itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let runtime =
+        Runtime::new(Arc::new(Network::new(gate, true)), vault).with_approvals(approvals.clone());
+    let approved = |action: &'static str, args: &'static [(&'static str, &'static str)]| {
+        let runtime = &runtime;
+        let approvals = approvals.clone();
+        let spec = &spec;
+        async move {
+            let error = runtime.call(spec, call(action, args)).await.unwrap_err();
+            let id = error.extra["approval"].as_str().unwrap().to_owned();
+            approvals.claim(&id).await.unwrap();
+            let mut with = call(action, args);
+            with.approval = Some(id);
+            runtime.call(spec, with).await
+        }
+    };
+
+    let envelope = approved("post", &[("title", "hi")]).await.unwrap();
+    assert_eq!(posted.lock().unwrap().as_slice(), [TOKEN]);
+    // The token is the site's, not data for the agent.
+    assert!(!envelope.data.to_string().contains(TOKEN));
+
+    // The agent cannot supply what a step fills in.
+    let error = runtime
+        .call(&spec, call("post", &[("_csrf", "forged")]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "bad_request");
+
+    let error = approved("broken", &[]).await.unwrap_err();
+    assert_eq!(error.public_code, "response_mismatch");
+    assert_eq!(posted.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn preflight_steps_only_read() {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "board", "base_url": "https://board.example.com"},
+        "operations": [
+            {"name": "post", "method": "POST", "path": "/posts", "effect": "write", "evidence": "doc",
+             "preflight": [{"name": "form", "method": "POST", "path": "/form", "extract": {"title": "css:input", "x": "body:/a"}}],
+             "body": {"json": {"title": {"type": "string"}}}}
+        ]
+    });
+    let spec = itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let error = itda_policy::validate_spec(&spec).unwrap_err();
+    let text = format!("{} {}", error.msg, error.remedy);
+    assert!(text.contains("preflight"), "{text}");
+}

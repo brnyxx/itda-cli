@@ -1531,6 +1531,7 @@ name = "itda-runtime"
 version = "0.2.0"
 dependencies = [
  "axum",
+ "itda-html",
  "itda-net",
  "itda-policy",
  "itda-spec",

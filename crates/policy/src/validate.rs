@@ -214,7 +214,7 @@ fn check_operation(
         .chain(op.query.iter())
         .chain(op.body.iter().flat_map(|b| b.inputs()))
     {
-        if util::secret_field(name) {
+        if util::secret_field(name) && !param.from_step() {
             out.add(
                 "data_invalid",
                 format!("{id}.inputs.{name}"),

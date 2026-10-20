@@ -166,6 +166,17 @@ pub struct Param {
     pub default: Option<Value>,
 }
 
+impl Param {
+    /// Filled from a preflight step (`default: "{{step.name}}"`), never by
+    /// the agent.
+    pub fn from_step(&self) -> bool {
+        self.default
+            .as_ref()
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.trim_start().starts_with("{{step."))
+    }
+}
+
 fn default_param_type() -> String {
     "string".into()
 }

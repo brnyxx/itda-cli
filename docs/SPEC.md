@@ -250,7 +250,47 @@ When the session expires, the site answers 401 or 403, the account pauses with
 resumes it. On a server without a keyring, set
 `ITDA_SECRET__<SITE>__<ACCOUNT>__SESSION` to a `Cookie` header value instead.
 
-Preflight steps are part of the format but refused by the 0.1 runtime.
+## `preflight`
+
+Older sites often hand out a one-time value with the form page, such as a CSRF
+token in a hidden input, and refuse a change without it. A preflight step reads
+that page just before the action and passes the value along:
+
+```yaml
+operations:
+  - name: post-notice
+    method: POST
+    path: /board/write.do
+    auth: session
+    effect: write
+    evidence: the write form posts _csrf from /board/writeForm.do
+    preflight:
+      - name: form
+        path: /board/writeForm.do
+        extract:
+          csrf: "css:input[name=_csrf]@value"
+    headers:
+      X-CSRF-Token: "{{step.form.csrf}}"           # if the site wants a header
+    body:
+      form:
+        title:   {type: string, required: true}
+        _csrf:   {type: string, default: "{{step.form.csrf}}"}   # or a form field
+```
+
+| `extract` source | Takes |
+|---|---|
+| `css:selector` | the text of the one element the selector matches |
+| `css:selector@attribute` | that element's attribute |
+| `json:/pointer` | a value from a JSON answer |
+| `header:name` | a response header |
+| `cookie:name` | a cookie the answer sets |
+
+A step is a `GET` to the action's own origin, with the same account, either
+to `path` or to a read action named in `op` (with `args`). Steps run in order,
+after you approve a change and right before it is sent, so the value is always
+fresh. A value is used as `{{step.<step>.<name>}}`; inputs filled this way are not
+shown to agents and they cannot set them. When a step finds nothing, the call
+stops with `response_mismatch` and nothing is sent.
 
 ## `models`
 

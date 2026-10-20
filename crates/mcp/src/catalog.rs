@@ -109,7 +109,7 @@ fn input_schema(op: &Operation, effect: Effect) -> Map<String, Value> {
                 .flat_map(|b| b.inputs())
                 .map(|(n, p)| (n, p, p.required)),
         );
-    for (name, param, is_required) in inputs {
+    for (name, param, is_required) in inputs.filter(|(_, param, _)| !param.from_step()) {
         properties.insert(name.clone(), param_schema(param));
         if is_required && param.default.is_none() && !required.contains(name) {
             required.push(name.clone());
