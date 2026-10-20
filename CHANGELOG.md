@@ -9,6 +9,8 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda check [<site>]` runs every read that needs no input and reports which
+  ones no longer match the site, with exit code 11 when a site changed.
 - Browser sign-in for sites without API keys: `itda login <site> --browser`
   opens your own browser in a fresh profile, keeps only that site's session
   cookies in the system keyring, and `kind: browser` actions send them only to
