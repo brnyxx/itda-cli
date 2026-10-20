@@ -77,3 +77,114 @@ fn read(site: &str, path: &Path) -> AppResult<Spec> {
     validate_spec(&spec)?;
     Ok(spec)
 }
+
+/// Install a definition (YAML or JSON) under the site name it declares.
+/// An installed site is only replaced with `force`.
+pub fn install(home: &Path, bytes: &[u8], force: bool) -> AppResult<(Spec, PathBuf)> {
+    if bytes.len() > SPEC_LIMIT {
+        return Err(usage(
+            "The definition is larger than 4 MB",
+            "Split it into smaller sites.",
+        ));
+    }
+    let spec = itda_spec::parse(bytes)?;
+    let site = spec.site.name.clone();
+    if !util::valid_id(&site) {
+        return Err(usage(
+            format!("{site} is not a usable site name"),
+            "Use lowercase letters, digits and dashes in site.name.",
+        ));
+    }
+    validate_spec(&spec)?;
+    let dir = specs_dir(home).join(&site);
+    if spec_file(&dir).is_some() && !force {
+        return Err(usage(
+            format!("{site} is already installed"),
+            "Pass --force to replace it.",
+        ));
+    }
+    let json = bytes.trim_ascii_start().starts_with(b"{");
+    let path = dir.join(if json { "spec.json" } else { "spec.yaml" });
+    util::atomic_file(&path, bytes)?;
+    for name in FILE_NAMES {
+        let other = dir.join(name);
+        if other != path && other.is_file() {
+            std::fs::remove_file(other)?;
+        }
+    }
+    Ok((spec, path))
+}
+
+/// Remove an installed site's definition. Signed-in accounts stay until
+/// `itda logout`.
+pub fn remove(home: &Path, site: &str) -> AppResult<()> {
+    let dir = specs_dir(home).join(site);
+    if !util::valid_id(site) || spec_file(&dir).is_none() {
+        return Err(usage(
+            format!("No installed site named {site}"),
+            "Run `itda ls` to see installed sites.",
+        ));
+    }
+    std::fs::remove_dir_all(dir)?;
+    Ok(())
+}
+
+/// What to look at before trusting a definition: where it sends requests,
+/// which actions change the site, and how it signs in.
+pub fn review(spec: &Spec) -> Vec<String> {
+    let mut origins: Vec<String> = std::iter::once(spec.site.base_url.as_str())
+        .chain(spec.operations.iter().map(|op| op.base_url.as_str()))
+        .chain(
+            spec.operations
+                .iter()
+                .flat_map(|op| op.preflight.iter().map(|step| step.base_url.as_str())),
+        )
+        .filter_map(|base| url::Url::parse(base).ok())
+        .map(|url| url.origin().ascii_serialization())
+        .collect();
+    origins.sort();
+    origins.dedup();
+    let changes: Vec<&str> = spec
+        .operations
+        .iter()
+        .filter(|op| {
+            itda_policy::operation_effect(op, &Default::default()) != itda_policy::Effect::Read
+        })
+        .map(|op| op.name.as_str())
+        .collect();
+    let mut lines = vec![format!("sends requests to {}", origins.join(", "))];
+    lines.push(format!(
+        "{}: {}, {}",
+        count(spec.operations.len(), "action"),
+        count(spec.operations.len() - changes.len(), "read"),
+        count(changes.len(), "change")
+    ));
+    if !changes.is_empty() {
+        lines.push(format!(
+            "changes, each approved by you before it runs: {}",
+            changes.join(", ")
+        ));
+    }
+    let kinds: Vec<&str> = spec
+        .auth
+        .iter()
+        .map(|auth| auth.kind.as_str())
+        .filter(|kind| *kind != "none")
+        .collect();
+    if !kinds.is_empty() {
+        lines.push(format!(
+            "signs in with {}: run `itda login {}`",
+            kinds.join(", "),
+            spec.site.name
+        ));
+    }
+    lines
+}
+
+fn count(n: usize, noun: &str) -> String {
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
+}

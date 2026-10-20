@@ -7,6 +7,12 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `itda add <file>` installs a site definition (or `-` for stdin) and shows
+  where it sends requests, which actions change the site and how it signs
+  in; `itda remove <site>` takes it away.
+
 ### Changed
 
 - A `model` now applies to each record when the answer is a JSON list,

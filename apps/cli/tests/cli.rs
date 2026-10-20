@@ -440,3 +440,35 @@ async fn accounts_start_empty_and_logout_needs_one() {
     assert!(String::from_utf8_lossy(&logout.stderr).contains("not signed in"));
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn add_installs_a_definition_and_remove_takes_it_away() {
+    let home = home();
+    let file = home.join("weather.yaml");
+    std::fs::write(
+        &file,
+        "spec_version: 1
+site: {name: weather, base_url: 'https://api.example.com'}
+operations:
+  - {name: forecast, method: GET, path: /forecast, effect: read, evidence: doc}
+  - {name: delete-station, method: DELETE, path: /stations/1, effect: write, evidence: doc}
+",
+    )
+    .unwrap();
+    let added = itda(&home, &["add", file.to_str().unwrap()], &[]).await;
+    assert_eq!(added.status.code(), Some(0));
+    let review = String::from_utf8_lossy(&added.stderr);
+    assert!(review.contains("https://api.example.com"), "{review}");
+    assert!(review.contains("delete-station"), "{review}");
+    let listed = itda(&home, &["ls", "weather", "--json"], &[]).await;
+    assert_eq!(listed.status.code(), Some(0));
+    let again = itda(&home, &["add", file.to_str().unwrap()], &[]).await;
+    assert_eq!(again.status.code(), Some(2));
+    let forced = itda(&home, &["add", file.to_str().unwrap(), "--force"], &[]).await;
+    assert_eq!(forced.status.code(), Some(0));
+    let removed = itda(&home, &["remove", "weather"], &[]).await;
+    assert_eq!(removed.status.code(), Some(0));
+    let gone = itda(&home, &["remove", "weather"], &[]).await;
+    assert_eq!(gone.status.code(), Some(2));
+    std::fs::remove_dir_all(home).ok();
+}
