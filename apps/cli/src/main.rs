@@ -47,10 +47,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Install a site definition from a file, or - for stdin, after showing
-    /// where it sends requests and which actions change the site
+    /// Install a site definition after showing where it sends requests and
+    /// which actions change the site
     Add {
-        file: PathBuf,
+        /// A file, an https URL, - for stdin, or a ready-made site: github,
+        /// npm, crates-io or pypi
+        source: String,
         /// Replace the site if it is already installed
         #[arg(long)]
         force: bool,
@@ -219,7 +221,7 @@ fn main() -> ExitCode {
         || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match cli.command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
-        Command::Add { file, force } => add(&home, &file, force),
+        Command::Add { source, force } => block_on(add(&home, &source, force)),
         Command::Remove { site } => remove(&home, &site),
         Command::Call { target, rest } => block_on(call(&home, &target, rest)),
         Command::Login {
@@ -677,15 +679,39 @@ async fn resume_scopes(
     Ok(())
 }
 
-fn add(home: &Path, file: &Path, force: bool) -> AppResult<ExitCode> {
-    let bytes = if file == Path::new("-") {
+async fn add(home: &Path, source: &str, force: bool) -> AppResult<ExitCode> {
+    const LIMIT: usize = 4 * 1024 * 1024;
+    let bytes = if source == "-" {
         let mut bytes = Vec::new();
         std::io::stdin()
-            .take(4 * 1024 * 1024 + 1)
+            .take(LIMIT as u64 + 1)
             .read_to_end(&mut bytes)?;
         bytes
+    } else if source.starts_with("https://") || source.starts_with("http://") {
+        let request = itda_net::Request {
+            limit: LIMIT,
+            ..itda_net::Request::read(source)
+        };
+        let response = open(home)?.net.fetch(request).await?;
+        if !response.successful() {
+            return Err(AppError::new(
+                itda_types::error::Code::Runtime,
+                format!("{source} answered HTTP {}", response.status),
+                "Check the address points at the raw definition file.",
+            ));
+        }
+        response.bytes
+    } else if !Path::new(source).exists() && !source.contains(['/', '\\', '.']) {
+        let Some(text) = sites::bundled(source) else {
+            let names: Vec<_> = sites::BUNDLED.iter().map(|(name, _)| *name).collect();
+            return Err(usage(
+                format!("{source} is not a file or a ready-made site"),
+                format!("Ready-made sites: {}.", names.join(", ")),
+            ));
+        };
+        text.as_bytes().to_vec()
     } else {
-        itda_types::util::read_bounded(file, 4 * 1024 * 1024)?
+        itda_types::util::read_bounded(Path::new(source), LIMIT)?
     };
     let (spec, path) = sites::install(home, &bytes, force)?;
     eprintln!("Installed {} at {}.", spec.site.name, path.display());
