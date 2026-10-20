@@ -70,6 +70,7 @@ itda ls                                  # installed sites and their actions
 itda call <site>.<action> --input value  # run one; --json for agents
 echo "$KEY" | itda login <site>          # store an API key in the OS keyring
 itda login <site> --browser              # or sign in in your own browser, once
+itda accounts / logout <site>            # see or remove saved sign-ins
 itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # what agents did
 itda resume <site>                       # after a site refused or a key expired

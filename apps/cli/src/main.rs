@@ -72,6 +72,19 @@ enum Command {
         #[arg(long, default_value = "")]
         label: String,
     },
+    /// List signed-in accounts and the names of their secrets, never the values
+    Accounts {
+        /// Only this site
+        site: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove an account and every secret saved for it
+    Logout {
+        site: String,
+        #[arg(long, default_value = itda_runtime::DEFAULT_ACCOUNT)]
+        account: String,
+    },
     /// Resume requests paused after a block or an expired sign-in
     Resume {
         site: String,
@@ -179,6 +192,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let as_json = matches!(&cli.command, Command::Ls { json: true, .. })
         || matches!(&cli.command, Command::Approvals { json: true })
+        || matches!(&cli.command, Command::Accounts { json: true, .. })
         || matches!(&cli.command, Command::Audit { json: true, .. })
         || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match cli.command {
@@ -199,6 +213,8 @@ fn main() -> ExitCode {
             label,
             ..
         } => block_on(login(&home, &site, &account, &secret, &label)),
+        Command::Accounts { site, json } => block_on(accounts(&home, site.as_deref(), json)),
+        Command::Logout { site, account } => block_on(logout(&home, &site, &account)),
         Command::Resume { site, account } => block_on(resume(&home, &site, account.as_deref())),
         Command::Approvals { json } => block_on(approvals(&home, json)),
         Command::Approve { id } => block_on(approve(&home, &id)),
@@ -632,6 +648,49 @@ fn draft(
 
 fn approvals_store(home: &Path) -> AppResult<Approvals> {
     Approvals::open(Store::open(&home.join("itda.db"))?)
+}
+
+async fn accounts(home: &Path, site: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
+    let accounts = open(home)?.vault.accounts(site).await?;
+    if as_json {
+        println!("{}", serde_json::to_value(&accounts)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    if accounts.is_empty() {
+        println!("No accounts are signed in. Add one with `itda login <site>`.");
+    }
+    for account in &accounts {
+        let label = if account.label.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", account.label)
+        };
+        println!(
+            "{}/{}{label}  {}",
+            account.site,
+            account.id,
+            account.secrets.join(", ")
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+async fn logout(home: &Path, site: &str, account: &str) -> AppResult<ExitCode> {
+    let vault = open(home)?.vault;
+    if !vault
+        .accounts(Some(site))
+        .await?
+        .iter()
+        .any(|a| a.id == account)
+    {
+        return Err(usage(
+            format!("{site}/{account} is not signed in"),
+            "Run `itda accounts` to see signed-in accounts.",
+        ));
+    }
+    vault.remove_account(site, account).await?;
+    eprintln!("Removed {site}/{account} and its saved secrets.");
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn approvals(home: &Path, as_json: bool) -> AppResult<ExitCode> {

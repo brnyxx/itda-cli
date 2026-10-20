@@ -9,6 +9,8 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda accounts` lists signed-in accounts and the names of their secrets;
+  `itda logout <site>` removes an account and its saved secrets.
 - Browser sign-in for sites without API keys: `itda login <site> --browser`
   opens your own browser in a fresh profile, keeps only that site's session
   cookies in the system keyring, and `kind: browser` actions send them only to
