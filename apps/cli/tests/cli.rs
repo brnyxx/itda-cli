@@ -393,3 +393,37 @@ async fn a_recorded_session_becomes_actions() {
     assert!(String::from_utf8_lossy(&called.stderr).contains("error[auth_required]"));
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn check_runs_reads_that_need_no_input_and_reports_each() {
+    let home = home();
+    install(&home, &serve().await);
+
+    let signed_out = itda(&home, &["check", "--json"], &[]).await;
+    assert_eq!(signed_out.status.code(), Some(10));
+    let report = stdout_json(&signed_out);
+    assert_eq!(report["status"], "auth_required");
+    let status = |action: &str| {
+        report["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["action"] == action)
+            .unwrap()["status"]
+            .clone()
+    };
+    assert_eq!(status("list-items"), "ok");
+    assert_eq!(status("create-item"), "skipped");
+    assert_eq!(status("me"), "auth_required");
+
+    let signed_in = itda(
+        &home,
+        &["check", "fixture"],
+        &[("ITDA_SECRET__FIXTURE__DEFAULT__API_KEY", "k")],
+    )
+    .await;
+    assert_eq!(signed_in.status.code(), Some(0));
+    let text = String::from_utf8_lossy(&signed_in.stdout);
+    assert!(text.contains("2 ok, 0 failed, 1 skipped."), "{text}");
+    std::fs::remove_dir_all(home).ok();
+}

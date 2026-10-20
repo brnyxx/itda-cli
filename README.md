@@ -72,6 +72,7 @@ echo "$KEY" | itda login <site>          # store an API key in the OS keyring
 itda login <site> --browser              # or sign in in your own browser, once
 itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # what agents did
+itda check [<site>]                      # does every read still match the site?
 itda resume <site>                       # after a site refused or a key expired
 ```
 

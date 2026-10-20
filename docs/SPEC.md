@@ -259,9 +259,29 @@ operations:
     ...
 ```
 
+## Keep it working
+
+Sites change. `itda check` runs every read that needs no input (give inputs a
+`default` to include more) and reports, per action, whether the answer still
+matches its `response`:
+
+```console
+$ itda check board
+board.list-notices  ok                 HTTP 200 142 ms
+board.get-notice    skipped            needs notice_id
+board.post-notice   skipped            changes the site
+board.my-messages   auth_required      sign in: itda login board
+
+1 ok, 1 failed, 2 skipped.
+```
+
+Changes are never sent. The exit code follows the [contract](agents.md):
+11 when a site no longer matches its definition, so a scheduled job can warn
+you before an agent runs into it.
+
 ## Checklist before sharing a definition
 
-- Every read declares a `response`.
+- Every read declares a `response`, and `itda check` passes.
 - Every `desc` says what the action does, in one line.
 - `evidence` points at something a reviewer can check.
 - No credentials, personal data or internal hostnames in the file you share.
