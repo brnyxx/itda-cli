@@ -206,6 +206,12 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
   box-shadow: 0 6px 18px -6px rgba(47,91,234,.8);
 }
 
+.flow { margin: 44px 0 0; }
+.flow img {
+  width: 100%; height: auto; border-radius: 20px;
+  box-shadow: 0 40px 80px -40px rgba(0,0,0,.8), 0 30px 120px -50px rgba(47,91,234,.5);
+}
+
 .compare { margin-top: 44px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .compare .row { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr; border-top: 1px solid var(--line); }
 .compare .row:first-child { border-top: 0; }
