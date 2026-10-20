@@ -144,6 +144,16 @@ fn apply_model() {
 }
 
 #[test]
+fn apply_model_to_each_record_of_a_list() {
+    let sp = parse(GOOD);
+    let raw = br#"[{"id": 1, "name": "a", "extra": 1}, {"id": 2, "name": "b"}]"#;
+    let out = sp.apply_model("item_view", raw).unwrap();
+    assert_eq!(out[0]["name"], "a");
+    assert_eq!(out[1]["id"], 2);
+    assert!(out[0].get("extra").is_none());
+}
+
+#[test]
 fn op_not_found_lists_names() {
     let sp = parse(GOOD);
     let err = sp.op("nope").unwrap_err();
