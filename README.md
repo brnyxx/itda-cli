@@ -19,7 +19,7 @@ agent can call from the command line or over MCP. It runs on your own
 machine, reads by default, and never changes anything on a site until you
 approve that exact change.
 
-<p align="center"><img src="assets/hero.png" alt="itda drafts actions from a browser recording, reads freely, and waits for a person to approve a change" width="860"></p>
+<p align="center"><img src="assets/flow.svg" alt="itda compiles a website into actions once; the agent's reads run right away, and a change waits until a person approves it" width="860"></p>
 
 > Status: early, and used against real sites. The runtime, CLI, MCP server,
 > approvals (in a terminal or inside the agent app), audit log, drafting from
