@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>브라우저 조종 말고, 사이트를 컴파일하세요.</strong></p>
+<p align="center"><strong>내가 쓰는 웹사이트를 AI에게. 안전하게.</strong></p>
 
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
 
@@ -17,11 +17,29 @@
   <a href="https://brnyxx.github.io/itda-cli/docs/">문서(영어)</a>
 </p>
 
-itda는 내가 쓰는 웹사이트를, 로그인이 필요한 오래된 사내 시스템까지도, AI
-에이전트가 명령줄이나 MCP로 호출할 수 있는 검증된 명령 묶음으로 바꿉니다.
-브라우저에서 사이트를 쓰는 모습을 한 번 녹화하면 itda가 그 녹화로 명령을
-만듭니다. 내 컴퓨터에서 실행되고, 기본은 읽기만 하며, 바로 그 변경을 내가
-승인하기 전에는 사이트에서 아무것도 바꾸지 않습니다.
+주소 하나만 주면 됩니다. itda가 그 사이트에서 할 수 있는 일을 알아내고,
+실제로 한 번씩 해 보고, AI 에이전트에게 사람 말로 된 짧은 목록을 넘깁니다.
+읽기는 알아서 됩니다. 사이트를 바꾸는 건 내가 허락하기 전엔 절대 안 합니다.
+내 컴퓨터에서만 돌아가고, 로그인해야 하는 오래된 사내 시스템도 됩니다.
+
+```console
+$ itda setup https://news.ycombinator.com/
+1/5  news.ycombinator.com 살펴보는 중...
+     찾은 것: 목록 30건, 폼 1개, 피드.
+2/5  에이전트가 할 수 있게 되는 일:
+     읽기   home   Hacker News 목록 읽기  (입력: p)
+     읽기   feed   RSS 피드 읽기
+3/5  읽기를 하나씩 실제로 불러보는 중...
+     ✓ home   30건
+     ✓ feed   성공
+4/5  'news-ycombinator'로 저장했습니다.
+5/5  에이전트에 연결할까요? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] 나중에:
+```
+
+그다음 에이전트에게 말하면 됩니다: *"news-ycombinator에서 Hacker News 목록 읽어줘"*.
+로그인이 필요한 사이트는 대신 내 브라우저가 열립니다. 평소처럼 로그인하고
+쓰는 동안 itda가 지켜볼 뿐이고, 내가 입력한 값은 내 컴퓨터 밖으로 나가지
+않습니다.
 
 <p align="center"><img src="assets/flow.ko.svg" alt="브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다." width="860"></p>
 
@@ -64,24 +82,8 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
-그다음 내가 쓰는 웹사이트를 한 번에 설정해 보세요. itda가 페이지를 살펴보고
-(로그인이 필요하면 브라우저를 열어 쓰는 모습을 지켜보고), 할 수 있는 일을
-사람 말로 이름 붙이고, 읽기를 하나씩 실제로 불러본 뒤 되는 것만 남기고,
-에이전트에 연결합니다. 단계마다 물어보고, 한국어로 말합니다:
-
-```console
-$ itda setup https://example.com/board
-1/5  example.com 살펴보는 중...
-     찾은 것: 목록 42건, 폼 2개, 피드.
-2/5  에이전트가 할 수 있게 되는 일:
-     읽기   get-board      공지사항 목록 읽기
-     읽기   search-board   공지사항에서 검색  (입력: q)
-     변경   post-board     공지사항의 폼 보내기  (실행 전마다 내 승인 필요)
-3/5  읽기를 하나씩 실제로 불러보는 중...
-     ✓ get-board      42건
-4/5  'example'로 저장했습니다.
-5/5  에이전트에 연결할까요? [1] Claude Desktop ... [0] 나중에
-```
+그다음 내가 쓰는 사이트에서 `itda setup <주소>`를 실행하세요. 질문 몇 개에
+답하면(한국어 환경이면 한국어로 물어봅니다) 에이전트 연결까지 끝납니다.
 
 조각 명령도 따로 있습니다. 로그인 없이 열리는 페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
 폼은 변경으로, 피드도 함께 초안이 됩니다.

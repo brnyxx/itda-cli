@@ -270,7 +270,9 @@ fn describe_page(page: &itda_prep::Page) -> String {
         .iter()
         .filter(|f| !f.password)
         .count();
-    if forms > 0 {
+    if forms == 1 {
+        parts.push(t("found_form").to_owned());
+    } else if forms > 1 {
         parts.push(tf("found_forms", &[("n", &forms.to_string())]));
     }
     if !evidence::feeds(&page.html, &page.url).is_empty() {

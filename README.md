@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>Don't drive the browser. Compile the site.</strong></p>
+<p align="center"><strong>The websites you use, handed to your AI. Safely.</strong></p>
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
@@ -16,12 +16,28 @@
   <a href="https://brnyxx.github.io/itda-cli/docs/">Docs</a>
 </p>
 
-itda turns the websites you use, even old intranets behind a login, into a
-small set of verified commands that an AI agent can call from the command
-line or over MCP. Record yourself using the site once in your browser; itda
-drafts the commands from that recording. It runs on your own machine, reads
-by default, and never changes anything on a site until you approve that exact
-change.
+Give itda one address. It learns what the site can do, tries it, and hands
+your AI agent a short list of actions in plain words. Reads just work.
+Nothing changes on the site until you say yes. It runs on your own computer,
+and it works on the old intranet behind a login too.
+
+```console
+$ itda setup https://news.ycombinator.com/
+1/5  Looking at news.ycombinator.com...
+     Found: a list of 30 records, a form, a feed.
+2/5  What agents will be able to do:
+     read   home   List what Hacker News shows  (inputs: p)
+     read   feed   Read the RSS feed
+3/5  Trying every read once...
+     ✓ home   30 records
+     ✓ feed   ok
+4/5  Saved as 'news-ycombinator'.
+5/5  Connect an agent? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] later:
+```
+
+Then ask your agent: *"use news-ycombinator to list what Hacker News shows"*.
+A site behind a sign-in opens in your own browser instead; you sign in and use
+it as usual while itda watches, and what you type never leaves your computer.
 
 <p align="center"><img src="assets/flow.svg" alt="Record a website once in your browser, itda drafts commands from the recording, the agent calls them, and a change waits until a person approves it" width="860"></p>
 
@@ -64,24 +80,8 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then set a website up in one go. itda looks at the page (or opens your
-browser and watches while you use the site, when the page needs a sign-in),
-names what it offers in plain words, tries every read once, keeps what works
-and connects your agent. It asks before each step, in your language:
-
-```console
-$ itda setup https://example.com/board
-1/5  Looking at example.com...
-     Found: a list of 42 records, 2 forms, a feed.
-2/5  What agents will be able to do:
-     read   get-board      List what Notices shows
-     read   search-board   Search on Notices  (inputs: q)
-     change post-board     Submit the form on Notices  (waits for your approval each time)
-3/5  Trying every read once...
-     ✓ get-board      42 records
-4/5  Saved as 'example'.
-5/5  Connect an agent? [1] Claude Desktop ... [0] later
-```
+Then run `itda setup <address>` on a site you use. It asks a few questions
+(`ITDA_LANG=ko` makes it speak Korean) and ends with your agent connected.
 
 The pieces are commands of their own. For pages you can open without
 signing in, give itda their addresses: tables and lists become records,
