@@ -130,6 +130,29 @@ impl Capture {
                 }
             }
             "Network.responseReceived" => {
+                // Linux builds have been seen to report a response for a
+                // request they never announced; the response names the
+                // address, so the exchange starts here, as a GET.
+                if !self.live.contains_key(&key) {
+                    let url = params["response"]["url"].as_str().unwrap_or_default();
+                    if !recordable(url) {
+                        return Vec::new();
+                    }
+                    self.seq += 1;
+                    let headers = self.early_headers.remove(&key).unwrap_or_default();
+                    self.live.insert(
+                        key.clone(),
+                        Exchange {
+                            seq: self.seq,
+                            started: wall_time(None),
+                            url: url.to_owned(),
+                            method: "GET".into(),
+                            headers,
+                            kept: true,
+                            ..Exchange::default()
+                        },
+                    );
+                }
                 let Some(exchange) = self.live.get_mut(&key) else {
                     return Vec::new();
                 };
@@ -239,11 +262,12 @@ impl Capture {
     }
 
     /// The recording as a HAR document, in request order. An exchange that
-    /// loaded but whose body never came back is kept without it.
+    /// got its response but never the end of its load, or whose body never
+    /// came back, is kept without the body.
     pub fn har(mut self) -> Value {
         let late: Vec<Exchange> = std::mem::take(&mut self.live)
             .into_values()
-            .filter(|exchange| exchange.finished && exchange.response.is_some())
+            .filter(|exchange| exchange.response.is_some())
             .collect();
         for exchange in late {
             self.finish(exchange);
@@ -306,6 +330,15 @@ impl Capture {
             }),
         ));
     }
+}
+
+/// An address worth recording: a web address that is not the favicon.
+fn recordable(url: &str) -> bool {
+    (url.starts_with("http://") || url.starts_with("https://"))
+        && !url
+            .split(['?', '#'])
+            .next()
+            .is_some_and(|p| p.ends_with("/favicon.ico"))
 }
 
 fn response_parts(response: &Value) -> (u16, BTreeMap<String, String>, String) {
@@ -780,6 +813,36 @@ mod tests {
         let entries = har["log"]["entries"].as_array().unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries[1]["response"]["content"].get("text").is_none());
+    }
+
+    #[test]
+    fn a_response_without_its_request_and_a_load_that_never_ends_are_kept() {
+        let mut capture = Capture::default();
+        // Seen on Linux: the response arrives for a request never announced.
+        let answer = json!({"requestId": "9", "type": "Fetch", "response": {"url": "https://a.example/api/items?q=x", "status": 200, "mimeType": "application/json", "headers": {}}});
+        let fetches = capture.event("s", "Network.responseReceived", &answer);
+        assert!(fetches.is_empty());
+        let fetches = capture.event("s", "Network.loadingFinished", &json!({"requestId": "9"}));
+        assert_eq!(fetches.len(), 1);
+        capture.fetched(
+            &fetches[0],
+            Some(&json!({"body": "{}", "base64Encoded": false})),
+        );
+        // And a document whose load is never reported as finished.
+        capture.event("s", "Network.requestWillBeSent", &json!({"requestId": "d", "type": "Document", "wallTime": 2.0, "request": {"url": "https://a.example/board", "method": "GET", "headers": {}}}));
+        capture.event("s", "Network.responseReceived", &json!({"requestId": "d", "type": "Document", "response": {"url": "https://a.example/board", "status": 200, "mimeType": "text/html", "headers": {}}}));
+        let har = capture.har();
+        let urls: Vec<&str> = har["log"]["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["request"]["url"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            urls,
+            ["https://a.example/api/items?q=x", "https://a.example/board"]
+        );
+        assert_eq!(har["log"]["entries"][0]["request"]["method"], "GET");
     }
 
     #[test]
