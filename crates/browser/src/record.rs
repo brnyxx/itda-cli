@@ -377,6 +377,9 @@ pub struct Recorder {
     /// The page to open once the first tab is being watched, so its own
     /// document request is recorded too.
     start: Option<url::Url>,
+    /// The last events seen, for a test or a bug report: method, session
+    /// and request id only, never a value.
+    trace: std::collections::VecDeque<String>,
 }
 
 enum Pending {
@@ -401,6 +404,7 @@ impl Recorder {
             sessions: BTreeSet::new(),
             capture: Capture::default(),
             start: Some(url.clone()),
+            trace: std::collections::VecDeque::new(),
         };
         let attached = recorder.send(
             None,
@@ -452,6 +456,11 @@ impl Recorder {
         crate::site_cookies(&result, site)
     }
 
+    /// What the browser sent, newest last: one line per event or reply.
+    pub fn trace(&self) -> Vec<String> {
+        self.trace.iter().cloned().collect()
+    }
+
     /// Close the window and return the recording.
     pub fn finish(mut self) -> Value {
         let _ = self.send(None, "Browser.close", json!({}));
@@ -467,6 +476,34 @@ impl Recorder {
         let Ok(reply) = serde_json::from_str::<Value>(text) else {
             return Ok(());
         };
+        let line = match reply["id"].as_u64() {
+            Some(id) => format!(
+                "reply {id} {}",
+                if reply.get("error").is_some() {
+                    "error"
+                } else {
+                    "ok"
+                }
+            ),
+            None => format!(
+                "{} {} {}",
+                reply["method"].as_str().unwrap_or_default(),
+                reply["sessionId"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .chars()
+                    .take(6)
+                    .collect::<String>(),
+                reply["params"]["requestId"]
+                    .as_str()
+                    .or_else(|| reply["params"]["targetInfo"]["type"].as_str())
+                    .unwrap_or_default()
+            ),
+        };
+        if self.trace.len() == 400 {
+            self.trace.pop_front();
+        }
+        self.trace.push_back(line);
         if let Some(id) = reply["id"].as_u64() {
             match self.pending.remove(&id) {
                 Some(Pending::Fetch(fetch)) => self.capture.fetched(&fetch, reply.get("result")),
