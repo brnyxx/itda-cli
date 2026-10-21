@@ -9,6 +9,9 @@ change the definition format or the CLI.
 
 ### Changed
 
+- `action_outcome_unknown` now says that itda never resends a change on its
+  own, and the runtime tests prove it against a server that drops the
+  connection after taking the request.
 - A bare `itda` in a terminal says what it is and asks for one address, then
   runs `itda setup` on it, so the first run is: type `itda`, paste, Enter.
 - `itda setup` finds the agent apps on this computer (Claude Desktop, Claude

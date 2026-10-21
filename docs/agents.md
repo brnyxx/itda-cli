@@ -54,6 +54,14 @@ with the same inputs and the `approval` id, and the change is sent once. With
 `--approve-in-client`, clients that show forms ask you directly instead. See
 [Approvals and the audit log](approvals.md).
 
+A change is sent once. When the request left but no answer came back (a
+timeout after sending, a dropped connection), the call fails with
+`action_outcome_unknown` (exit 22) and the audit log records that outcome:
+the site may or may not have applied the change. itda never resends a change
+on its own, and an agent must not either. Check the site first; only a person
+decides whether to ask for the change again. Reads keep their ordinary codes
+(`timeout`, `request_failed`) and may be retried.
+
 ## Shell agents
 
 Agents that only have a shell can call `itda call <site>.<action> --json` and
