@@ -153,6 +153,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # what agents did
 itda check [<site>]                      # does every read still match the site?
 itda resume <site>                       # after a site refused or a key expired
+itda feedback                            # report a problem: opens a new issue, filled in
 ```
 
 ## Use it from an agent

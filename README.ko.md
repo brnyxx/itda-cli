@@ -152,6 +152,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # 에이전트가 한 일
 itda check [<site>]                      # 모든 읽기가 아직 사이트와 맞는지 확인
 itda resume <site>                       # 사이트가 거부했거나 키가 만료된 뒤 재개
+itda feedback                            # 문제 신고: 버전과 환경이 채워진 새 이슈 열기
 ```
 
 ## 에이전트에서 쓰기

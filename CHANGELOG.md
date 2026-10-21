@@ -9,6 +9,9 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda feedback` prints a link to a new GitHub issue with the version, the
+  platform and the doctor checks filled in (never the data directory path)
+  and opens it; `--no-open` only prints. It sends nothing itself.
 - `itda check` ends each site with a verdict and what to do: `ok`,
   `signed_out`, `site_changed`, `blocked` or `unreachable`. The exit code
   follows the worst verdict, and `--json` carries it as `verdict` and per
