@@ -64,8 +64,26 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
-그다음 내가 쓰는 웹사이트를 명령으로 바꿔 보세요. 로그인 없이 열리는
-페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
+그다음 내가 쓰는 웹사이트를 한 번에 설정해 보세요. itda가 페이지를 살펴보고
+(로그인이 필요하면 브라우저를 열어 쓰는 모습을 지켜보고), 할 수 있는 일을
+사람 말로 이름 붙이고, 읽기를 하나씩 실제로 불러본 뒤 되는 것만 남기고,
+에이전트에 연결합니다. 단계마다 물어보고, 한국어로 말합니다:
+
+```console
+$ itda setup https://example.com/board
+1/5  example.com 살펴보는 중...
+     찾은 것: 목록 42건, 폼 2개, 피드.
+2/5  에이전트가 할 수 있게 되는 일:
+     읽기   get-board      공지사항 목록 읽기
+     읽기   search-board   공지사항에서 검색  (입력: q)
+     변경   post-board     공지사항의 폼 보내기  (실행 전마다 내 승인 필요)
+3/5  읽기를 하나씩 실제로 불러보는 중...
+     ✓ get-board      42건
+4/5  'example'로 저장했습니다.
+5/5  에이전트에 연결할까요? [1] Claude Desktop ... [0] 나중에
+```
+
+조각 명령도 따로 있습니다. 로그인 없이 열리는 페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
 폼은 변경으로, 피드도 함께 초안이 됩니다.
 
 ```sh
@@ -107,6 +125,7 @@ itda call github.repo --owner rust-lang --repo rust
 알려줍니다. 정의를 직접 쓰는 방법은 [docs/SPEC.md](docs/SPEC.md)에 있습니다.
 
 ```sh
+itda setup <url>                         # 페이지/녹화 -> 이름 붙인 액션 -> 실제 호출 -> 에이전트 연결, 물어보며 진행
 itda draft page <url>... [--install]     # 내가 쓰는 페이지로 사이트 초안 만들기
 itda record <url> [--install]            # 또는 로그인이 필요한 사이트를 브라우저로 써서
 itda draft har <file> / openapi <file>   # 또는 저장한 녹화나 API 설명서로

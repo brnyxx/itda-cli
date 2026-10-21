@@ -64,7 +64,26 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then turn a website you use into commands. For pages you can open without
+Then set a website up in one go. itda looks at the page (or opens your
+browser and watches while you use the site, when the page needs a sign-in),
+names what it offers in plain words, tries every read once, keeps what works
+and connects your agent. It asks before each step, in your language:
+
+```console
+$ itda setup https://example.com/board
+1/5  Looking at example.com...
+     Found: a list of 42 records, 2 forms, a feed.
+2/5  What agents will be able to do:
+     read   get-board      List what Notices shows
+     read   search-board   Search on Notices  (inputs: q)
+     change post-board     Submit the form on Notices  (waits for your approval each time)
+3/5  Trying every read once...
+     ✓ get-board      42 records
+4/5  Saved as 'example'.
+5/5  Connect an agent? [1] Claude Desktop ... [0] later
+```
+
+The pieces are commands of their own. For pages you can open without
 signing in, give itda their addresses: tables and lists become records,
 search forms become reads, post forms become changes, and feeds come along:
 
@@ -108,6 +127,7 @@ prints where the data directory is, and
 [docs/SPEC.md](docs/SPEC.md) explains how to write one.
 
 ```sh
+itda setup <url>                         # page or recording -> named actions -> tried -> agent, with questions
 itda draft page <url>... [--install]     # draft a site from the pages you use
 itda record <url> [--install]            # or from using it in your browser, behind a sign-in
 itda draft har <file> / openapi <file>   # or from a saved recording or an API description
