@@ -113,7 +113,7 @@ fn remedy(public_code: &str) -> &'static str {
             "The approval was used, rejected, expired or no longer matches these inputs. Call again to request a new one."
         }
         "action_outcome_unknown" => {
-            "Check the website before trying again; the change may already have happened."
+            "Check the website before trying again; the change may already have happened. itda never resends a change on its own."
         }
         "unsafe_target" | "local_target" => {
             "Check the destination. Local or private addresses need an explicit allow-local setting."

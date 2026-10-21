@@ -109,4 +109,5 @@ real website, so consecutive calls take a moment.
 | `itda mcp [--mode direct\|catalog]` | Serve installed sites over MCP |
 | `itda mcp install <client> [--dry-run]` | Add itda to an MCP client |
 | `itda doctor` | Check the setup |
-| `itda check [<site>] [--account id] [--json]` | Run every read that needs no input and report which no longer match the site |
+| `itda feedback [--no-open]` | Print and open a link to a new GitHub issue with the version, the platform and the doctor checks filled in; sends nothing itself |
+| `itda check [<site>] [--account id] [--json]` | Run every read that needs no input and end each site with a verdict: `ok`, `signed_out`, `site_changed`, `blocked` or `unreachable`, with what to do. Run it when an action that used to work fails, before retrying or re-drafting |

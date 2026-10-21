@@ -7,8 +7,25 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `AGENTS.md` and `skills/itda/SKILL.md` tell coding agents how to use itda:
+  discover actions, run reads, treat website text as data, wait for `itda
+  approve`, never retry a lost change, run `itda check` first when something
+  stops working. The MCP server's instructions say the same, shorter.
+- `itda feedback` prints a link to a new GitHub issue with the version, the
+  platform and the doctor checks filled in (never the data directory path)
+  and opens it; `--no-open` only prints. It sends nothing itself.
+- `itda check` ends each site with a verdict and what to do: `ok`,
+  `signed_out`, `site_changed`, `blocked` or `unreachable`. The exit code
+  follows the worst verdict, and `--json` carries it as `verdict` and per
+  site under `sites`.
+
 ### Changed
 
+- `action_outcome_unknown` now says that itda never resends a change on its
+  own, and the runtime tests prove it against a server that drops the
+  connection after taking the request.
 - A bare `itda` in a terminal says what it is and asks for one address, then
   runs `itda setup` on it, so the first run is: type `itda`, paste, Enter.
 - `itda setup` finds the agent apps on this computer (Claude Desktop, Claude

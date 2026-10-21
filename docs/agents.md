@@ -1,5 +1,12 @@
 # Use it from an agent
 
+For the agent itself there are two files in the repository:
+[AGENTS.md](https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md), a guide
+to using itda well, and
+[skills/itda/SKILL.md](https://github.com/brnyxx/itda-cli/blob/main/skills/itda/SKILL.md),
+the same in the short form skill loaders take. The MCP server hands the agent
+the same rules as its instructions.
+
 ## MCP clients
 
 ```sh
@@ -53,6 +60,34 @@ terminal, see the exact request and answer `y`. The agent then calls again
 with the same inputs and the `approval` id, and the change is sent once. With
 `--approve-in-client`, clients that show forms ask you directly instead. See
 [Approvals and the audit log](approvals.md).
+
+A change is sent once. When the request left but no answer came back (a
+timeout after sending, a dropped connection), the call fails with
+`action_outcome_unknown` (exit 22) and the audit log records that outcome:
+the site may or may not have applied the change. itda never resends a change
+on its own, and an agent must not either. Check the site first; only a person
+decides whether to ask for the change again. Reads keep their ordinary codes
+(`timeout`, `request_failed`) and may be retried.
+
+## When something that worked stops working
+
+Run `itda check <site>` before retrying or re-drafting. It runs every read
+that needs no input, never sends a change, and ends each site with one
+verdict and what to do:
+
+| Verdict | Meaning | What to do |
+|---|---|---|
+| `ok` | every read still matches | retry the action; the failure was not the site |
+| `signed_out` | the account is no longer accepted | ask the user to run `itda login <site>` |
+| `site_changed` | a page or answer no longer matches its definition | ask the user to set the site up again (`itda setup <url>`) |
+| `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site and run `itda resume <site>` |
+| `unreachable` | the site did not answer | wait, then run `itda check` again |
+
+A site with several problems gets one verdict, in this order: `signed_out`,
+then `site_changed`, `blocked`, `unreachable`. The exit code follows the
+worst verdict across the sites checked: 10, 11, 12 or 30 as in the table
+below, or 0 for `ok`. `--json` adds `verdict`, one entry per
+site under `sites`, and every action under `results`.
 
 ## Shell agents
 

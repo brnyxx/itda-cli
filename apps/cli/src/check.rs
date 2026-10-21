@@ -106,11 +106,186 @@ pub fn needed_inputs(op: &Operation) -> Vec<String> {
     path.chain(other).collect()
 }
 
-/// The code to exit with: a changed site first, then the first other failure.
-pub fn worst(outcomes: &[Outcome]) -> Option<&str> {
-    outcomes
-        .iter()
-        .find(|o| o.status == "response_mismatch")
-        .or_else(|| outcomes.iter().find(|o| o.failed()))
-        .map(|o| o.status.as_str())
+/// One word per site, worst last: what to do about the site as a whole.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Ok,
+    Unreachable,
+    Blocked,
+    SiteChanged,
+    SignedOut,
+}
+
+impl Verdict {
+    fn of_status(status: &str) -> Option<Self> {
+        Some(match status {
+            "auth_required" => Self::SignedOut,
+            "response_mismatch" | "not_found" => Self::SiteChanged,
+            "blocked_by_site" | "site_rate_limited" => Self::Blocked,
+            "timeout" | "request_failed" => Self::Unreachable,
+            _ => return None,
+        })
+    }
+
+    /// The worst verdict among these outcomes.
+    pub fn of(outcomes: &[Outcome]) -> Self {
+        outcomes
+            .iter()
+            .filter_map(|o| Self::of_status(&o.status))
+            .max()
+            .unwrap_or(Self::Ok)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unreachable => "unreachable",
+            Self::Blocked => "blocked",
+            Self::SiteChanged => "site_changed",
+            Self::SignedOut => "signed_out",
+        }
+    }
+
+    /// The error code whose exit code this verdict shares.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unreachable => "request_failed",
+            Self::Blocked => "blocked_by_site",
+            Self::SiteChanged => "response_mismatch",
+            Self::SignedOut => "auth_required",
+        }
+    }
+
+    /// What to do, in plain words.
+    pub fn hint(self, site: &str) -> String {
+        match self {
+            Self::Ok => "every read still matches the site".into(),
+            Self::Unreachable => {
+                "the site did not answer; check the connection and try later".into()
+            }
+            Self::Blocked => {
+                format!("the site refused; check it in your browser, then itda resume {site}")
+            }
+            Self::SiteChanged => {
+                "the site changed; set it up again with itda setup <url> before an agent uses it"
+                    .into()
+            }
+            Self::SignedOut => format!("sign in again with itda login {site}"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct SiteVerdict {
+    pub site: String,
+    pub verdict: Verdict,
+    pub hint: String,
+}
+
+/// One verdict per site, in the order the sites were checked.
+pub fn verdicts(outcomes: &[Outcome]) -> Vec<SiteVerdict> {
+    let mut sites: Vec<&str> = Vec::new();
+    for o in outcomes {
+        if !sites.contains(&o.site.as_str()) {
+            sites.push(&o.site);
+        }
+    }
+    sites
+        .into_iter()
+        .map(|site| {
+            let own: Vec<&Outcome> = outcomes.iter().filter(|o| o.site == site).collect();
+            let verdict = own
+                .iter()
+                .filter_map(|o| Verdict::of_status(&o.status))
+                .max()
+                .unwrap_or(Verdict::Ok);
+            // A failure the verdicts do not cover is not the site's doing,
+            // but it must not hide behind "every read still matches".
+            let hint = match own.iter().find(|o| o.failed()) {
+                Some(other) if verdict == Verdict::Ok => format!(
+                    "the site did not change, but {} failed with {}",
+                    other.action, other.status
+                ),
+                _ => verdict.hint(site),
+            };
+            SiteVerdict {
+                site: site.to_owned(),
+                verdict,
+                hint,
+            }
+        })
+        .collect()
+}
+
+/// The code to exit with: the worst verdict, or, when every verdict is ok,
+/// the first failure the verdicts do not cover.
+pub fn exit_status(outcomes: &[Outcome]) -> &str {
+    match Verdict::of(outcomes) {
+        Verdict::Ok => outcomes
+            .iter()
+            .find(|o| o.failed())
+            .map_or("ok", |o| o.status.as_str()),
+        verdict => verdict.code(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn outcome(site: &str, status: &str) -> Outcome {
+        Outcome {
+            site: site.into(),
+            action: "a".into(),
+            status: status.into(),
+            detail: String::new(),
+            duration_ms: None,
+            records: None,
+        }
+    }
+
+    #[test]
+    fn a_signed_out_account_outranks_every_other_verdict() {
+        let outcomes = [
+            outcome("a", "timeout"),
+            outcome("a", "blocked_by_site"),
+            outcome("a", "not_found"),
+            outcome("a", "auth_required"),
+        ];
+        assert_eq!(Verdict::of(&outcomes), Verdict::SignedOut);
+        assert_eq!(exit_status(&outcomes), "auth_required");
+        assert_eq!(Verdict::of(&outcomes[..3]), Verdict::SiteChanged);
+        assert_eq!(Verdict::of(&outcomes[..2]), Verdict::Blocked);
+        assert_eq!(Verdict::of(&outcomes[..1]), Verdict::Unreachable);
+        assert_eq!(Verdict::of(&[outcome("a", "ok")]), Verdict::Ok);
+    }
+
+    #[test]
+    fn each_site_gets_its_own_verdict_and_other_failures_still_exit() {
+        let outcomes = [
+            outcome("a", "ok"),
+            outcome("b", "response_mismatch"),
+            outcome("b", "ok"),
+            outcome("c", "internal"),
+        ];
+        let per_site = verdicts(&outcomes);
+        let summary: Vec<(&str, &str)> = per_site
+            .iter()
+            .map(|v| (v.site.as_str(), v.verdict.as_str()))
+            .collect();
+        assert_eq!(summary, [("a", "ok"), ("b", "site_changed"), ("c", "ok")]);
+        assert!(
+            per_site[1].hint.contains("itda setup"),
+            "{}",
+            per_site[1].hint
+        );
+        assert_eq!(
+            per_site[2].hint,
+            "the site did not change, but a failed with internal"
+        );
+        assert_eq!(exit_status(&outcomes), "response_mismatch");
+        assert_eq!(exit_status(&outcomes[3..]), "internal");
+    }
 }
