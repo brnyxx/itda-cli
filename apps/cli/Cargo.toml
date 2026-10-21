@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 itda-types = { workspace = true }
 itda-spec.workspace = true
+itda-html.workspace = true
 itda-policy.workspace = true
 itda-store.workspace = true
 itda-net.workspace = true
@@ -27,6 +28,7 @@ itda-prep.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_norway.workspace = true
 url.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 

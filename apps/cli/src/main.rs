@@ -6,7 +6,9 @@ mod install;
 mod login;
 mod output;
 mod record;
+mod setup;
 mod sites;
+mod text;
 
 use clap::{Parser, Subcommand};
 use itda_net::{Gate, Network};
@@ -118,6 +120,29 @@ enum Command {
     Draft {
         #[command(subcommand)]
         source: DraftSource,
+    },
+    /// Set a site up in one go: look at the page (or record you using it),
+    /// name what it offers, try every read, keep what works, and connect an
+    /// agent. Asks before each step; flags answer for scripts
+    Setup {
+        /// The page to start from
+        url: String,
+        /// Site id; taken from the host name when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// Record in your browser instead of fetching the page
+        #[arg(long, conflicts_with = "no_record")]
+        record: bool,
+        /// Never open the browser; fail if the page cannot be read
+        #[arg(long)]
+        no_record: bool,
+        /// The agent to connect: claude-desktop, claude-code, cursor, vscode,
+        /// codex or none
+        #[arg(long)]
+        client: Option<String>,
+        /// Answer yes to every question, including replacing an installed site
+        #[arg(long, short = 'y')]
+        yes: bool,
     },
     /// Use a site in your own browser while itda records the requests, then
     /// draft a site definition from them. Nothing is written to disk unless
@@ -310,6 +335,7 @@ fn main() -> ExitCode {
                     name,
                     base_url,
                     include,
+                    lang: lang(),
                 },
                 install,
                 force,
@@ -329,6 +355,7 @@ fn main() -> ExitCode {
                     name,
                     base_url,
                     include,
+                    lang: lang(),
                 },
                 install,
                 force,
@@ -347,11 +374,35 @@ fn main() -> ExitCode {
                     name,
                     base_url,
                     include,
+                    lang: lang(),
                 },
                 install,
                 force,
             )),
         },
+        Command::Setup {
+            url,
+            name,
+            record,
+            no_record,
+            client,
+            yes,
+        } => block_on(setup::run(
+            &home,
+            setup::Flags {
+                url,
+                name,
+                record: if record {
+                    Some(true)
+                } else if no_record {
+                    Some(false)
+                } else {
+                    None
+                },
+                client,
+                yes,
+            },
+        )),
         Command::Record {
             url,
             name,
@@ -367,6 +418,7 @@ fn main() -> ExitCode {
                 name,
                 base_url,
                 include,
+                lang: lang(),
             },
             install,
             force,
@@ -422,6 +474,15 @@ fn block_on<F: Future<Output = AppResult<ExitCode>>>(future: F) -> AppResult<Exi
         .enable_all()
         .build()?
         .block_on(future)
+}
+
+/// `ITDA_LANG`, else the system `LANG`: the language of what people read.
+fn lang() -> String {
+    std::env::var("ITDA_LANG")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .or_else(|| std::env::var("LANG").ok())
+        .unwrap_or_default()
 }
 
 /// Private and local addresses are refused unless `ITDA_ALLOW_LOCAL=1`, which

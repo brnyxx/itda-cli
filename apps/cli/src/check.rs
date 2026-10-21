@@ -17,6 +17,9 @@ pub struct Outcome {
     pub detail: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<i64>,
+    /// How many records the answer held, when it was a list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub records: Option<usize>,
 }
 
 impl Outcome {
@@ -36,6 +39,7 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                 status: status.into(),
                 detail,
                 duration_ms,
+                records: None,
             };
             if operation_effect(op, &BTreeMap::new()) != Effect::Read {
                 out.push(outcome("skipped", "changes the site".into(), None));
@@ -56,11 +60,14 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                 ..Call::default()
             };
             out.push(match runtime.call(spec, call).await {
-                Ok(envelope) => outcome(
-                    "ok",
-                    format!("HTTP {}", envelope.meta.http_status),
-                    Some(envelope.meta.duration_ms),
-                ),
+                Ok(envelope) => Outcome {
+                    records: records_in(&envelope.data),
+                    ..outcome(
+                        "ok",
+                        format!("HTTP {}", envelope.meta.http_status),
+                        Some(envelope.meta.duration_ms),
+                    )
+                },
                 Err(error) => {
                     let detail = match error.public_code.as_str() {
                         "response_mismatch" => "the answer no longer matches the definition".into(),
@@ -75,9 +82,16 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
     out
 }
 
+/// The length of the list an answer is, or holds as `items`.
+fn records_in(data: &serde_json::Value) -> Option<usize> {
+    data.as_array()
+        .or_else(|| data.get("items").and_then(serde_json::Value::as_array))
+        .map(Vec::len)
+}
+
 /// Inputs the action cannot run without: required, or in the path, and with
 /// no default.
-fn needed_inputs(op: &Operation) -> Vec<String> {
+pub fn needed_inputs(op: &Operation) -> Vec<String> {
     let path = op
         .params
         .iter()

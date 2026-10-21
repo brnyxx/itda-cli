@@ -585,3 +585,77 @@ operations:
     );
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn setup_goes_from_a_page_to_working_actions_in_one_go() {
+    let home = home();
+    let router = Router::new().route(
+        "/board",
+        get(|| async {
+            axum::response::Html(
+                "<html lang='ko'><title>공지사항 - 사내</title><link rel='alternate' type='application/rss+xml' href='/missing.xml'><h1>공지</h1>
+                 <form action='/board/search' method='get'><input name='q' required></form>
+                 <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                 <tr><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+                 <tr><td>1</td><td><a href='/n/1'>First</a></td></tr></table>
+                 <form action='/board' method='post'><input name='title'></form></html>",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let url = format!("{base}/board");
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &url,
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "ko")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(said.contains("목록 2건"), "{said}");
+    assert!(said.contains("공지사항 목록 읽기"), "{said}");
+    assert!(said.contains("뺐음"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/board/spec.yaml")).unwrap();
+    assert!(spec.contains("name: get-board"));
+    assert!(
+        !spec.contains("name: feed"),
+        "the broken feed was removed:\n{spec}"
+    );
+    assert!(spec.contains("name: post-board"));
+    let called = itda(&home, &["call", "board.get-board", "--json"], &[]).await;
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "Second");
+
+    let again = itda(
+        &home,
+        &[
+            "setup",
+            &url,
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+        ],
+        &[],
+    )
+    .await;
+    assert!(
+        !again.status.success(),
+        "without --yes an installed site is kept"
+    );
+    let no_terminal = itda(&home, &["setup", &url], &[]).await;
+    assert_eq!(no_terminal.status.code(), Some(2));
+    std::fs::remove_dir_all(home).ok();
+}
