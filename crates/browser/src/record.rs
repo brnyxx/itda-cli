@@ -56,6 +56,8 @@ struct Exchange {
     body: Option<String>,
     /// Replies still expected before the entry is complete.
     waiting: usize,
+    /// `loadingFinished` arrived; the response may still be on its way.
+    finished: bool,
 }
 
 /// Turns DevTools `Network` events into HAR entries. Pure: it only records
@@ -128,44 +130,26 @@ impl Capture {
                 }
             }
             "Network.responseReceived" => {
-                if let Some(exchange) = self.live.get_mut(&key) {
-                    exchange.response = Some(response_parts(&params["response"]));
-                    if let Some(kind) = params["type"].as_str() {
-                        exchange.kept &= KEPT_TYPES.contains(&kind);
-                    }
+                let Some(exchange) = self.live.get_mut(&key) else {
+                    return Vec::new();
+                };
+                exchange.response = Some(response_parts(&params["response"]));
+                if let Some(kind) = params["type"].as_str() {
+                    exchange.kept &= KEPT_TYPES.contains(&kind);
+                }
+                // The end of the load was reported first; complete it now.
+                if exchange.finished {
+                    return self.complete(session, request_id, &key);
                 }
             }
             "Network.loadingFinished" => {
-                let Some(mut exchange) = self.live.remove(&key) else {
+                let Some(exchange) = self.live.get_mut(&key) else {
                     return Vec::new();
                 };
-                if !exchange.kept || exchange.response.is_none() {
-                    return Vec::new();
+                exchange.finished = true;
+                if exchange.response.is_some() {
+                    return self.complete(session, request_id, &key);
                 }
-                let mut fetches = Vec::new();
-                if exchange
-                    .response
-                    .as_ref()
-                    .is_some_and(|(_, _, mime)| textual(mime))
-                {
-                    fetches.push(Fetch::Body {
-                        session: session.to_owned(),
-                        request: request_id.to_owned(),
-                    });
-                }
-                if exchange.has_post && exchange.post_data.is_none() {
-                    fetches.push(Fetch::PostData {
-                        session: session.to_owned(),
-                        request: request_id.to_owned(),
-                    });
-                }
-                exchange.waiting = fetches.len();
-                if fetches.is_empty() {
-                    self.finish(exchange);
-                } else {
-                    self.live.insert(key, exchange);
-                }
-                return fetches;
             }
             "Network.loadingFailed" => {
                 self.live.remove(&key);
@@ -173,6 +157,42 @@ impl Capture {
             _ => {}
         }
         Vec::new()
+    }
+
+    /// A loaded exchange: ask for its bodies, or record it when there are
+    /// none to ask for. Events may arrive in either order, so this runs from
+    /// whichever of `responseReceived` and `loadingFinished` comes last.
+    fn complete(&mut self, session: &str, request_id: &str, key: &str) -> Vec<Fetch> {
+        let Some(mut exchange) = self.live.remove(key) else {
+            return Vec::new();
+        };
+        if !exchange.kept {
+            return Vec::new();
+        }
+        let mut fetches = Vec::new();
+        if exchange
+            .response
+            .as_ref()
+            .is_some_and(|(_, _, mime)| textual(mime))
+        {
+            fetches.push(Fetch::Body {
+                session: session.to_owned(),
+                request: request_id.to_owned(),
+            });
+        }
+        if exchange.has_post && exchange.post_data.is_none() {
+            fetches.push(Fetch::PostData {
+                session: session.to_owned(),
+                request: request_id.to_owned(),
+            });
+        }
+        exchange.waiting = fetches.len();
+        if fetches.is_empty() {
+            self.finish(exchange);
+        } else {
+            self.live.insert(key.to_owned(), exchange);
+        }
+        fetches
     }
 
     /// The reply to a [`Fetch`]; `None` when the browser had nothing.
@@ -218,8 +238,16 @@ impl Capture {
         self.entries.is_empty()
     }
 
-    /// The recording as a HAR document, in request order.
+    /// The recording as a HAR document, in request order. An exchange that
+    /// loaded but whose body never came back is kept without it.
     pub fn har(mut self) -> Value {
+        let late: Vec<Exchange> = std::mem::take(&mut self.live)
+            .into_values()
+            .filter(|exchange| exchange.finished && exchange.response.is_some())
+            .collect();
+        for exchange in late {
+            self.finish(exchange);
+        }
         self.entries.sort_by_key(|(seq, _)| *seq);
         json!({"log": {
             "version": "1.2",
@@ -681,6 +709,40 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["response"]["status"], 302);
         assert_eq!(entries[0]["request"]["url"], "https://a.example/old");
+    }
+
+    #[test]
+    fn events_in_either_order_and_bodies_that_never_come_still_record() {
+        let mut capture = Capture::default();
+        let start = |id: &str| json!({"requestId": id, "type": "Fetch", "wallTime": 1.0, "request": {"url": "https://a.example/api", "method": "GET", "headers": {}}});
+        let answer = |id: &str| json!({"requestId": id, "type": "Fetch", "response": {"status": 200, "mimeType": "application/json", "headers": {}}});
+        // The end of the load reported before the response.
+        capture.event("s", "Network.requestWillBeSent", &start("1"));
+        assert!(
+            capture
+                .event("s", "Network.loadingFinished", &json!({"requestId": "1"}))
+                .is_empty()
+        );
+        let fetches = capture.event("s", "Network.responseReceived", &answer("1"));
+        assert_eq!(fetches.len(), 1);
+        capture.fetched(
+            &fetches[0],
+            Some(&json!({"body": "{}", "base64Encoded": false})),
+        );
+        assert_eq!(capture.len(), 1);
+        // A body that is never delivered.
+        capture.event("s", "Network.requestWillBeSent", &start("2"));
+        capture.event("s", "Network.responseReceived", &answer("2"));
+        assert_eq!(
+            capture
+                .event("s", "Network.loadingFinished", &json!({"requestId": "2"}))
+                .len(),
+            1
+        );
+        let har = capture.har();
+        let entries = har["log"]["entries"].as_array().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries[1]["response"]["content"].get("text").is_none());
     }
 
     #[test]
