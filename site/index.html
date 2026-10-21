@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>itda: compile websites into actions for AI agents</title>
-  <meta name="description" content="itda turns a website into a small set of verified, typed actions an AI agent can call from the command line or over MCP. Local, read-only by default, and every change waits for your approval.">
-  <meta property="og:title" content="itda: don't drive the browser, compile the site">
-  <meta property="og:description" content="Verified, typed website actions for AI agents. Local-first CLI and MCP server with approvals for every change.">
+  <title>itda: hand your AI the websites you use, safely</title>
+  <meta name="description" content="One command turns any website you use into a short list of plain-word actions your AI agent can call. Reads just work; nothing changes on the site until you say yes. Runs on your own computer.">
+  <meta property="og:title" content="itda: hand your AI the websites you use, safely">
+  <meta property="og:description" content="One command turns any website into safe, plain-word actions for your AI agent. Reads just work; changes wait for your yes.">
   <meta property="og:image" content="https://brnyxx.github.io/itda-cli/assets/social.png">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
@@ -39,9 +39,9 @@
       <div class="glow" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <a class="pill" href="#how" data-i18n="hero.pill"><span class="pill-dot"></span>Sign in once in your own browser, then let agents use the site</a>
-          <h1 data-i18n="hero.h1">Don't drive the browser.<br><span class="grad">Compile the site.</span></h1>
-          <p class="lede" data-i18n="hero.lede">itda turns the websites you use, even old intranets behind a login, into a small set of verified commands your AI agent can call from the command line or over MCP. Record yourself using the site once; it runs on your machine, reads by default, and changes nothing until you approve that exact change.</p>
+          <a class="pill" href="#how" data-i18n="hero.pill"><span class="pill-dot"></span>New: <code>itda setup</code> does it all in one go</a>
+          <h1 data-i18n="hero.h1">The websites you use,<br><em class="accent">handed to your AI.</em></h1>
+          <p class="lede" data-i18n="hero.lede">Give itda one address. It learns what the site can do, tries it, and hands your AI agent a short list of actions in plain words. Reads just work. Nothing changes on the site until you say yes. Even the old intranet behind a login.</p>
 
           <div class="install" data-tabs>
             <div class="install-tabs" role="tablist">
@@ -58,6 +58,7 @@
               </button>
             </div>
           </div>
+          <p class="then" data-i18n="hero.then">then <code>itda setup https://the-site-you-use.example</code></p>
 
           <div class="cta">
             <a class="btn btn-primary" href="docs/quickstart.html" data-i18n="hero.start">Get started</a>
@@ -68,28 +69,25 @@
 
         <div class="hero-visual" aria-label="An agent reads freely through itda and waits for a person to approve a change">
           <div class="term">
-            <div class="term-bar"><span></span><span></span><span></span><em data-i18n="hero.term">agent session</em></div>
-            <pre class="term-body"><span class="l"><b class="p">$</b> itda record https://board.example <i>--install</i></span>
-<span class="l o">Drafted board: 4 actions (2 reads, 2 changes).</span>
-<span class="l"> </span>
-<span class="l"><b class="p">$</b> itda login board <i>--browser</i></span>
-<span class="l o">Saved the session for board/default in the system keyring.</span>
-<span class="l"> </span>
-<span class="l"><b class="p">$</b> itda call board.list-notices <i>--q</i> maintenance <i>--json</i></span>
-<span class="l j">{ <k>"status"</k>: <s>"ok"</s>, <k>"effect"</k>: <s>"read"</s>, <k>"untrusted"</k>: <n>true</n>,</span>
-<span class="l j">  <k>"data"</k>: { <k>"total"</k>: <n>3</n>, <k>"items"</k>: [ … ] } }</span>
-<span class="l"> </span>
-<span class="l"><b class="p">$</b> itda call board.create-notice <i>--title</i> "Server maintenance"</span>
-<span class="l w">⏸ approval_required  board.create-notice changes the site</span>
-<span class="l o">  waiting for a person: itda approve 4c1a…</span>
-<span class="l"> </span>
-<span class="l"><b class="p you">you</b> itda approve 4c1a…</span>
-<span class="l g">✓ Approved once, for exactly these inputs.</span></pre>
+            <div class="term-bar"><span></span><span></span><span></span><em data-i18n="hero.term">itda setup, as it ran</em></div>
+            <pre class="term-body" data-i18n="hero.demo"><span class="l"><b class="p">$</b> itda setup https://news.ycombinator.com/</span>
+<span class="l o">1/5  Looking at news.ycombinator.com...</span>
+<span class="l o">     Found: a list of 30 records, a form, a feed.</span>
+<span class="l o">2/5  What agents will be able to do:</span>
+<span class="l o">     read  home   List what Hacker News shows  (inputs: p)</span>
+<span class="l o">     read  feed   Read the RSS feed</span>
+<span class="l o">3/5  Trying every read once...</span>
+<span class="l g">     ✓ home   30 records</span>
+<span class="l g">     ✓ feed   ok</span>
+<span class="l o">4/5  Saved as 'news-ycombinator'.</span>
+<span class="l w">5/5  Connect an agent? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] later:</span>
+<span class="l"><b class="p you">you</b> 1</span>
+<span class="l g">Done. Ask your agent for something on 'news-ycombinator', for example "use news-ycombinator to List what Hacker News shows".</span></pre>
           </div>
           <div class="chips" aria-hidden="true">
-            <span class="chip read" data-i18n="chip.read">read · runs now</span>
-            <span class="chip wait" data-i18n="chip.wait">change · waits for you</span>
-            <span class="chip log" data-i18n="chip.log">every call · audit log</span>
+            <span class="chip read" data-i18n="chip.read">reads · just work</span>
+            <span class="chip wait" data-i18n="chip.wait">changes · wait for your yes</span>
+            <span class="chip log" data-i18n="chip.log">every call · written down</span>
           </div>
         </div>
       </div>
@@ -103,37 +101,34 @@
     </section>
 
     <section class="section wrap" id="how">
-      <p class="eyebrow" data-i18n="how.eyebrow">How it works</p>
-      <h2 data-i18n="how.h2">Use the site once. Your agent gets commands.</h2>
-      <p class="section-lede" data-i18n="how.lede">Sign in and click through the site in your browser while it records. itda turns that recording into a reviewed set of commands, so the agent calls them instead of re-reading every page.</p>
+      <h2 data-i18n="how.h2">One address. A few questions. Your agent is in.</h2>
+      <p class="section-lede" data-i18n="how.lede">itda looks at the page. When the site needs a sign-in, it opens your own browser and simply watches while you use it; it never clicks or types. Then it names each thing the site can do, tries every read once, keeps what works, and connects your agent.</p>
       <figure class="flow">
         <img src="assets/flow.svg" data-src-ko="assets/flow.ko.svg" data-alt-ko="브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다." width="960" height="440" alt="Record a website once in your browser, itda drafts commands from the recording, the agent calls them, and a change waits until a person approves it">
       </figure>
       <ol class="steps">
         <li>
           <span class="step-n">1</span>
-          <h3 data-i18n="how.1">Record</h3>
-          <p data-i18n="how.1p">itda opens your own browser in a fresh window. Use the site as usual (sign in, search, post a form) while it watches what the pages ask the server for; it never clicks or types. itda keeps the shape of each request, never the values you typed. A page address, a HAR file or an OpenAPI file works too.</p>
-          <code>itda record https://board.example --install</code>
-          <code>itda login board --browser</code>
+          <h3 data-i18n="how.1">Point</h3>
+          <p data-i18n="how.1p">Paste the address of a site you use. A public page is read as is; a site behind a login opens in your own browser, where you sign in and use it as usual while itda watches. What you type never leaves your computer.</p>
+          <code>itda setup https://board.example</code>
         </li>
         <li>
           <span class="step-n">2</span>
-          <h3 data-i18n="how.2">Review</h3>
-          <p data-i18n="how.2p">One readable YAML file per site. Every command carries the evidence it came from, changes are marked as changes, and recorded tokens, passwords or values never reach the file.</p>
-          <code>specs/board/spec.yaml</code>
+          <h3 data-i18n="how.2">Look it over</h3>
+          <p data-i18n="how.2p">itda lists what your agent will be able to do, in plain words: "List what Notices shows", "Search on Notices", "Submit the form on Notices (waits for your approval)". It tries every read once and drops what does not work.</p>
+          <code>read   get-board   List what Notices shows</code>
         </li>
         <li>
           <span class="step-n">3</span>
-          <h3 data-i18n="how.3">Call</h3>
-          <p data-i18n="how.3p">Agents call the commands as MCP tools or from a shell, signed in with your saved session. Reads run right away. A change returns an approval id and waits until you approve that exact request.</p>
-          <code>itda mcp install claude-desktop</code>
+          <h3 data-i18n="how.3">Ask your agent</h3>
+          <p data-i18n="how.3p">Pick Claude, Cursor, VS Code or Codex and itda connects itself. From then on you just ask: "find this week's notices". Reads happen right away; a change stops and waits until you say yes to exactly that one.</p>
+          <code>"use board to find this week's notices"</code>
         </li>
       </ol>
     </section>
 
     <section class="section wrap">
-      <p class="eyebrow" data-i18n="real.eyebrow">Any website, even behind a login</p>
       <h2 data-i18n="real.h2">Built for the sites that have no API.</h2>
       <div class="features">
         <article>
@@ -155,7 +150,6 @@
     </section>
 
     <section class="section wrap">
-      <p class="eyebrow" data-i18n="cmp.eyebrow">Why not a browser agent</p>
       <h2 data-i18n="cmp.h2">Same website, very different risks.</h2>
       <div class="compare" role="table">
         <div class="row head" role="row"><span role="columnheader"></span><span role="columnheader" data-i18n="cmp.browser">Browser-driving agent</span><span role="columnheader">itda</span></div>
@@ -169,7 +163,6 @@
     </section>
 
     <section class="section wrap">
-      <p class="eyebrow" data-i18n="safe.eyebrow">Built to be trusted</p>
       <h2 data-i18n="safe.h2">Safety is the default, not a setting.</h2>
       <div class="features">
         <article>
@@ -208,7 +201,6 @@
     <section class="section wrap">
       <div class="split">
         <div>
-          <p class="eyebrow" data-i18n="agents.eyebrow">For agents</p>
           <h2 data-i18n="agents.h2">Small, stable tool lists.</h2>
           <p class="section-lede" data-i18n="agents.lede">Up to 30 actions appear as one MCP tool each, with input schemas and read-only, destructive and idempotent hints. Past that, three stable tools keep the list short and prompt caches warm.</p>
           <ul class="ticks">
@@ -232,7 +224,6 @@
     </section>
 
     <section class="section wrap" id="sites">
-      <p class="eyebrow" data-i18n="sites.eyebrow">Also built in</p>
       <h2 data-i18n="sites.h2">Public APIs, ready to go.</h2>
       <p class="section-lede" data-i18n="sites.lede">No recording needed for these: the definitions ship inside <code>itda</code>, so the name is enough. Each one only talks to that site's official API, and <code>itda check</code> confirms every read still answers as declared.</p>
       <div class="packs">

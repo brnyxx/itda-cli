@@ -54,7 +54,7 @@ img { display: block; max-width: 100%; }
 html[lang="ko"] body { word-break: keep-all; }
 html[lang="ko"] h1 { font-size: clamp(36px, 4.6vw, 54px); letter-spacing: -.03em; line-height: 1.15; }
 html[lang="ko"] h2 { letter-spacing: -.02em; line-height: 1.25; }
-html[lang="ko"] :is(.eyebrow, .chip, .term-bar em) { font-family: var(--sans); }
+html[lang="ko"] :is(.chip, .term-bar em) { font-family: var(--sans); }
 .nav-gh {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 7px 14px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--text);
@@ -90,10 +90,11 @@ h1 {
   margin: 22px 0 20px; font-size: clamp(40px, 5.6vw, 66px); line-height: 1.04;
   letter-spacing: -.035em; font-weight: 700;
 }
-.grad {
-  background: linear-gradient(100deg, #FFFFFF 0%, var(--blue-hi) 45%, var(--blue) 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
+.accent { font-style: normal; color: var(--blue-hi); }
+.then { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
+.then code { color: var(--text); font-size: 13.5px; }
+::selection { background: rgba(110, 139, 255, .35); color: var(--text); }
+:focus-visible { outline: 2px solid var(--blue-hi); outline-offset: 3px; border-radius: 6px; }
 .lede { font-size: 18px; color: var(--muted); max-width: 540px; margin: 0 0 28px; }
 
 .install {
@@ -196,7 +197,6 @@ h1 {
 
 /* sections */
 .section { padding: 112px 0 0; }
-.eyebrow { margin: 0 0 12px; font: 500 13px var(--mono); color: var(--blue-hi); letter-spacing: .02em; }
 h2 { margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.1; letter-spacing: -.028em; font-weight: 700; max-width: 760px; }
 .section-lede { color: var(--muted); font-size: 17px; max-width: 640px; margin: 18px 0 0; }
 h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
@@ -308,4 +308,12 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
 @media (prefers-reduced-motion: reduce) {
   .term-body .l { animation: none; opacity: 1; }
   .btn, .pack { transition: none; }
+}
+
+/* The setup transcript has long lines: they scroll inside the window on
+   wide screens and wrap on narrow ones, never widening the page. */
+.term { min-width: 0; overflow: hidden; }
+.term-body { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+@media (max-width: 640px) {
+  .term-body { white-space: pre-wrap; word-break: break-word; }
 }
