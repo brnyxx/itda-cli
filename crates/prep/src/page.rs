@@ -6,7 +6,7 @@
 //! changes. Pages are fetched by the caller with the honest client; nothing
 //! here reaches the network.
 use crate::har::{Kind, action_name, site_name, template, unique};
-use crate::{Draft, Options, reorder, slug};
+use crate::{Draft, Options, Parts, reorder, slug};
 use itda_html::evidence;
 use itda_types::error::{AppResult, usage};
 use itda_types::util::secret_field;
@@ -34,6 +34,18 @@ const SSR_KEYS: &[&str] = &[
 ];
 
 pub fn from_pages(pages: &[Page], options: &Options) -> AppResult<Draft> {
+    let parts = page_parts(pages, options)?;
+    if parts.operations.is_empty() {
+        return Err(usage(
+            "No actions could be drafted",
+            "Check that the pages are under the site's address, or loosen --include.",
+        ));
+    }
+    Ok(parts.finish())
+}
+
+/// The pages as operations, without the final checks.
+pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> {
     let first = pages.first().ok_or_else(|| {
         usage(
             "No page was given",
@@ -196,12 +208,6 @@ pub fn from_pages(pages: &[Page], options: &Options) -> AppResult<Draft> {
             ));
         }
     }
-    if operations.is_empty() {
-        return Err(usage(
-            "No actions could be drafted",
-            "Check that the pages are under the site's address, or loosen --include.",
-        ));
-    }
     let mut auth = Vec::new();
     if sign_in {
         let mut strategy = Mapping::new();
@@ -213,15 +219,14 @@ pub fn from_pages(pages: &[Page], options: &Options) -> AppResult<Draft> {
         ));
     }
     let host = base.host_str().unwrap_or_default().to_owned();
-    Ok(crate::finish(
-        &site,
-        "",
-        &base_url,
+    Ok(Parts {
+        site,
+        base_url,
         auth,
         operations,
         notes,
-        &format!("`itda draft page` from pages on {host}"),
-    ))
+        source: format!("`itda draft page` from pages on {host}"),
+    })
 }
 
 fn page_url(raw: &str) -> AppResult<url::Url> {

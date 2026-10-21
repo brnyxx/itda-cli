@@ -13,6 +13,8 @@ pub use har::from_har;
 pub use openapi::from_openapi;
 pub use page::{Page, from_pages};
 
+use itda_types::error::AppResult;
+
 use serde_norway::{Mapping, Value as Yaml};
 
 /// Choices a person makes about a draft.
@@ -66,6 +68,115 @@ pub fn slug(text: &str) -> String {
         id.pop();
     }
     id
+}
+
+/// A draft before its final checks: what one source found.
+pub(crate) struct Parts {
+    pub site: String,
+    pub base_url: String,
+    pub auth: Vec<Yaml>,
+    pub operations: Vec<Mapping>,
+    pub notes: Vec<String>,
+    pub source: String,
+}
+
+impl Parts {
+    pub(crate) fn finish(self) -> Draft {
+        finish(
+            &self.site,
+            "",
+            &self.base_url,
+            self.auth,
+            self.operations,
+            self.notes,
+            &self.source,
+        )
+    }
+
+    fn key(entry: &Mapping) -> (String, String) {
+        let field = |name: &str| {
+            entry
+                .get(name)
+                .and_then(Yaml::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        };
+        (field("method"), field("path"))
+    }
+
+    /// Add what another source found about the same site: operations the
+    /// first source did not have, auth entries by name, and its notes.
+    fn merge(&mut self, other: Parts) {
+        let seen: std::collections::BTreeSet<_> = self.operations.iter().map(Self::key).collect();
+        for op in other.operations {
+            if !seen.contains(&Self::key(&op)) {
+                self.operations.push(op);
+            }
+        }
+        for strategy in other.auth {
+            let name = strategy.get("name").and_then(Yaml::as_str);
+            let known = self
+                .auth
+                .iter()
+                .any(|a| a.get("name").and_then(Yaml::as_str) == name);
+            if !known {
+                self.auth.push(strategy);
+            }
+        }
+        self.notes.extend(other.notes);
+    }
+}
+
+/// A recording of a person using a site: the calls its pages made, drafted
+/// as `from_har` does, plus the pages themselves, drafted as `from_pages`
+/// does, so a site that renders everything on the server still gets its
+/// lists, forms and feeds. `source` names the command for the header.
+pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult<Draft> {
+    let mut parts = har::har_parts(text, options)?;
+    let doc: serde_json::Value = serde_json::from_slice(text).unwrap_or_default();
+    let mut pages: Vec<Page> = Vec::new();
+    for entry in doc["log"]["entries"].as_array().into_iter().flatten() {
+        if !har::html_page(entry) {
+            continue;
+        }
+        let (Some(url), Some(html)) = (
+            entry["request"]["url"].as_str(),
+            entry["response"]["content"]["text"].as_str(),
+        ) else {
+            continue;
+        };
+        let url = url.split('#').next().unwrap_or(url);
+        if pages.iter().any(|page| page.url == url) || !url.starts_with(&parts.base_url) {
+            continue;
+        }
+        pages.push(Page {
+            url: url.to_owned(),
+            html: html.to_owned(),
+        });
+        if pages.len() == 20 {
+            parts
+                .notes
+                .push("Only the first 20 pages of the recording were analysed.".into());
+            break;
+        }
+    }
+    if !pages.is_empty() {
+        let page_options = Options {
+            name: Some(parts.site.clone()),
+            base_url: Some(parts.base_url.clone()),
+            include: options.include.clone(),
+        };
+        parts.merge(page::page_parts(&pages, &page_options)?);
+    }
+    if parts.operations.is_empty() {
+        return Err(har::no_operations());
+    }
+    let host = url::Url::parse(&parts.base_url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_default();
+    parts.source = format!("{source} from a recording of {host}");
+    Ok(parts.finish())
 }
 
 /// Writes the definition and checks it with the rules `itda` applies at

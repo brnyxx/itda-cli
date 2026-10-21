@@ -4,7 +4,7 @@
 //! the shape of each call is kept: method, path, input names and types, and the
 //! response fields every sample had. No header, cookie, query or body value is
 //! copied into the draft.
-use crate::{Draft, Options, reorder, slug};
+use crate::{Draft, Options, Parts, reorder, slug};
 use itda_types::error::{AppResult, usage};
 use itda_types::util::secret_field;
 use serde_json::Value;
@@ -136,29 +136,52 @@ struct Call {
 }
 
 pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
+    let parts = har_parts(text, options)?;
+    if parts.operations.is_empty() {
+        return Err(no_operations());
+    }
+    Ok(parts.finish())
+}
+
+pub(crate) fn no_operations() -> itda_types::error::AppError {
+    usage(
+        "No operations could be drafted",
+        "Check that the recording has API calls on this address, or loosen --include.",
+    )
+}
+
+/// The calls in a recording as operations, without the final checks; a
+/// recording of only pages gives none.
+pub(crate) fn har_parts(text: &[u8], options: &Options) -> AppResult<Parts> {
     let doc: Value = serde_json::from_slice(text).map_err(|_| not_har())?;
     let entries = doc["log"]["entries"].as_array().ok_or_else(not_har)?;
-    let recorded: Vec<(&Value, url::Url)> = entries
-        .iter()
-        .filter(|entry| api_call(entry))
-        .filter_map(|entry| {
-            Some((
-                entry,
-                url::Url::parse(entry["request"]["url"].as_str()?).ok()?,
-            ))
-        })
-        .filter(|(_, url)| matches!(url.scheme(), "http" | "https"))
-        .collect();
+    let located = |keep: &dyn Fn(&Value) -> bool| -> Vec<(&Value, url::Url)> {
+        entries
+            .iter()
+            .filter(|entry| keep(entry))
+            .filter_map(|entry| {
+                Some((
+                    entry,
+                    url::Url::parse(entry["request"]["url"].as_str()?).ok()?,
+                ))
+            })
+            .filter(|(_, url)| matches!(url.scheme(), "http" | "https"))
+            .collect()
+    };
+    let recorded = located(&api_call);
 
     let base = match &options.base_url {
         Some(base) => url::Url::parse(base.trim_end_matches('/'))
             .map_err(|_| usage("--base-url is not a URL", "Pass an address like https://example.com/api."))?,
-        None => busiest_origin(&recorded).ok_or_else(|| {
-            usage(
-                "The recording has no API calls",
-                "Record again with the browser's network panel open while you use the site, then save it as HAR with content.",
-            )
-        })?,
+        // A recording of pages alone still names the site.
+        None => busiest_origin(&recorded)
+            .or_else(|| busiest_origin(&located(&html_page)))
+            .ok_or_else(|| {
+                usage(
+                    "The recording has no calls",
+                    "Record again with the browser's network panel open while you use the site, then save it as HAR with content.",
+                )
+            })?,
     };
     let origin = base.origin();
     let prefix = base.path().trim_end_matches('/').to_owned();
@@ -461,22 +484,30 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
         }
         operations.push(reorder(entry));
     }
-    if operations.is_empty() {
-        return Err(usage(
-            "No operations could be drafted",
-            "Check that the recording has API calls on this address, or loosen --include.",
-        ));
-    }
     let host = base.host_str().unwrap_or_default().to_owned();
-    Ok(crate::finish(
-        &site,
-        "",
-        &base_url,
+    Ok(Parts {
+        site,
+        base_url,
         auth,
         operations,
         notes,
-        &format!("`itda draft har` from a recording of {host}"),
-    ))
+        source: format!("`itda draft har` from a recording of {host}"),
+    })
+}
+
+/// A page the person saw: a successful `GET` whose answer was HTML with
+/// its text recorded.
+pub(crate) fn html_page(entry: &Value) -> bool {
+    let content = &entry["response"]["content"];
+    entry["request"]["method"].as_str() == Some("GET")
+        && entry["response"]["status"]
+            .as_u64()
+            .is_some_and(|s| (200..300).contains(&s))
+        && content["mimeType"]
+            .as_str()
+            .is_some_and(|m| m.contains("html"))
+        && content["encoding"].as_str() != Some("base64")
+        && content["text"].as_str().is_some_and(|t| !t.is_empty())
 }
 
 fn not_har() -> itda_types::error::AppError {

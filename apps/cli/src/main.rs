@@ -323,7 +323,7 @@ fn main() -> ExitCode {
                 force,
             } => draft(
                 &home,
-                itda_prep::from_har,
+                draft_har,
                 &file,
                 itda_prep::Options {
                     name,
@@ -816,6 +816,12 @@ fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
 
 type Drafter = fn(&[u8], &itda_prep::Options) -> AppResult<itda_prep::Draft>;
 
+/// A saved recording holds the pages the person saw as well as the calls
+/// those pages made; both become actions.
+fn draft_har(text: &[u8], options: &itda_prep::Options) -> AppResult<itda_prep::Draft> {
+    itda_prep::from_recording(text, options, "`itda draft har`")
+}
+
 /// The draft goes to stdout (or the data directory); what to review goes to
 /// stderr, so `itda draft openapi api.json > spec.yaml` keeps them apart.
 fn draft(
@@ -899,7 +905,7 @@ fn record(
             path.display()
         );
     }
-    let draft = itda_prep::from_har(&har, &options)?;
+    let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
     let site = draft.site.clone();
     let code = publish(home, draft, install, force)?;
     if install {
