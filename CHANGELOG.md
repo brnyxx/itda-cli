@@ -14,6 +14,9 @@ change the definition format or the CLI.
   definition the same way `itda draft har` does. The recording stays in
   memory; `--save` keeps it as a HAR file. itda never clicks, types or
   navigates in the window. `ITDA_DEBUG_CDP=1` prints the browser messages.
+- A recorded GraphQL call becomes one action per operation (`exploreProjects`
+  is `explore-projects`): queries are reads, mutations are changes, and the
+  variables are the typed inputs, rendered through a `json_template`.
 - `itda record` and `itda draft har` also draft the pages the recording
   holds, as `itda draft page` does, so a site that renders its lists and
   forms on the server gets actions even when its pages call no API.

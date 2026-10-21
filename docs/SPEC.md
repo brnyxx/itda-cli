@@ -94,6 +94,13 @@ itda draft har session.har --base-url https://intranet.example.com/api
 itda draft har session.har --name board --install
 ```
 
+A page that talks GraphQL sends every call to one path, so each recorded
+operation becomes its own action, named after it (`exploreProjects` is
+`explore-projects`): a query is a read, a mutation a change, the document and
+the operation name are fixed inputs, and the variables are the inputs an agent
+fills in, rendered through a `json_template` into the same JSON the page sent.
+Variables that held objects or lists are listed for you to add by hand.
+
 Either way, the pages you saw are drafted too, the way `itda draft page`
 does it, so a site that renders its lists and forms on the server gets
 actions even when its pages call no API. A recording holds real tokens,
