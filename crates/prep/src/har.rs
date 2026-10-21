@@ -17,7 +17,7 @@ const MAX_OPERATIONS: usize = 200;
 const TOKEN_HEADERS: &[&str] = &["authorization", "x-api-key", "api-key", "x-auth-token"];
 
 #[derive(Clone, Copy, PartialEq)]
-enum Kind {
+pub(crate) enum Kind {
     Int,
     Float,
     Bool,
@@ -35,7 +35,7 @@ impl Kind {
         }
     }
 
-    fn of_text(text: &str) -> Kind {
+    pub(crate) fn of_text(text: &str) -> Kind {
         if text.parse::<i64>().is_ok() && !(text.len() > 1 && text.starts_with('0')) {
             Kind::Int
         } else if text == "true" || text == "false" {
@@ -53,7 +53,7 @@ impl Kind {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Kind::Int => "int",
             Kind::Float => "float",
@@ -642,7 +642,7 @@ fn record_response(call: &mut Call, content: &Value) {
 
 /// Turns ids in a path into `{name}` placeholders named after the segment
 /// before them: `/notices/42` becomes `/notices/{notice_id}`.
-fn template(path: &str) -> (String, Vec<String>) {
+pub(crate) fn template(path: &str) -> (String, Vec<String>) {
     let mut out = Vec::new();
     let mut params: Vec<String> = Vec::new();
     let mut previous = "";
@@ -703,7 +703,7 @@ fn singular(word: &str) -> String {
 
 /// `GET /api/v1/notices` is `list-notices`, `GET /notices/{id}` is
 /// `get-notice`, `POST /notices` is `create-notice`.
-fn action_name(method: &str, path: &str) -> String {
+pub(crate) fn action_name(method: &str, path: &str) -> String {
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     let ends_with_param = segments.last().is_some_and(|s| s.starts_with('{'));
     let resource = segments
@@ -732,7 +732,7 @@ fn is_prefix(segment: &str) -> bool {
             && segment[1..].chars().all(|c| c.is_ascii_digit()))
 }
 
-fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
+pub(crate) fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
     let name = if name.is_empty() { "action" } else { name };
     let mut candidate = name.to_owned();
     let mut n = 2;
@@ -744,7 +744,7 @@ fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
 }
 
 /// `intranet.example.co.kr` becomes `intranet-example`.
-fn site_name(host: &str) -> String {
+pub(crate) fn site_name(host: &str) -> String {
     let labels: Vec<&str> = host
         .split('.')
         .filter(|l| !matches!(*l, "www" | "api" | "co" | "or" | "go" | "ac" | "ne"))

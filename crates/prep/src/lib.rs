@@ -7,9 +7,11 @@
 //! time, so problems show up before anyone runs it.
 mod har;
 mod openapi;
+mod page;
 
 pub use har::from_har;
 pub use openapi::from_openapi;
+pub use page::{Page, from_pages};
 
 use serde_norway::{Mapping, Value as Yaml};
 

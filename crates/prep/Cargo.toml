@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 itda-types.workspace = true
+itda-html.workspace = true
 itda-spec.workspace = true
 itda-policy.workspace = true
 serde_json.workspace = true

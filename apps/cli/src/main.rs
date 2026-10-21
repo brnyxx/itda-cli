@@ -175,6 +175,28 @@ enum DraftSource {
         #[arg(long, requires = "install")]
         force: bool,
     },
+    /// From pages you use: fetches each address and drafts actions from its
+    /// tables, lists, embedded data, forms and feeds
+    Page {
+        /// One or more page addresses on the same site
+        #[arg(required = true)]
+        urls: Vec<String>,
+        /// Site id; taken from the host name when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// The site's address; defaults to the first page's origin
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Keep only pages and forms whose path contains this
+        #[arg(long)]
+        include: Option<String>,
+        /// Install the draft into the data directory instead of printing it
+        #[arg(long)]
+        install: bool,
+        /// Replace an installed definition with the same name
+        #[arg(long, requires = "install")]
+        force: bool,
+    },
     /// From a browser recording (HAR) of you using the site; keeps only the
     /// shape of each call, never the recorded values
     Har {
@@ -245,47 +267,64 @@ fn main() -> ExitCode {
         Command::Approvals { json } => block_on(approvals(&home, json)),
         Command::Approve { id } => block_on(approve(&home, &id)),
         Command::Reject { id } => block_on(reject(&home, &id)),
-        Command::Draft { source } => {
-            let (from, file, options, install, force): (Drafter, _, _, _, _) = match source {
-                DraftSource::Openapi {
-                    file,
+        Command::Draft { source } => match source {
+            DraftSource::Openapi {
+                file,
+                name,
+                base_url,
+                include,
+                install,
+                force,
+            } => draft(
+                &home,
+                itda_prep::from_openapi,
+                &file,
+                itda_prep::Options {
                     name,
                     base_url,
                     include,
-                    install,
-                    force,
-                } => (
-                    itda_prep::from_openapi,
-                    file,
-                    itda_prep::Options {
-                        name,
-                        base_url,
-                        include,
-                    },
-                    install,
-                    force,
-                ),
-                DraftSource::Har {
-                    file,
+                },
+                install,
+                force,
+            ),
+            DraftSource::Har {
+                file,
+                name,
+                base_url,
+                include,
+                install,
+                force,
+            } => draft(
+                &home,
+                itda_prep::from_har,
+                &file,
+                itda_prep::Options {
                     name,
                     base_url,
                     include,
-                    install,
-                    force,
-                } => (
-                    itda_prep::from_har,
-                    file,
-                    itda_prep::Options {
-                        name,
-                        base_url,
-                        include,
-                    },
-                    install,
-                    force,
-                ),
-            };
-            draft(&home, from, &file, options, install, force)
-        }
+                },
+                install,
+                force,
+            ),
+            DraftSource::Page {
+                urls,
+                name,
+                base_url,
+                include,
+                install,
+                force,
+            } => block_on(draft_page(
+                &home,
+                &urls,
+                itda_prep::Options {
+                    name,
+                    base_url,
+                    include,
+                },
+                install,
+                force,
+            )),
+        },
         Command::Audit {
             limit,
             verify,
@@ -741,7 +780,67 @@ fn draft(
     force: bool,
 ) -> AppResult<ExitCode> {
     let text = std::fs::read(file)?;
-    let draft = from(&text, &options)?;
+    publish(home, from(&text, &options)?, install, force)
+}
+
+/// Fetch each page with the honest client, then draft from what they show.
+/// A page that refuses or redirects to a sign-in is reported, never worked
+/// around; `itda record` covers sites that need an account.
+async fn draft_page(
+    home: &Path,
+    urls: &[String],
+    options: itda_prep::Options,
+    install: bool,
+    force: bool,
+) -> AppResult<ExitCode> {
+    const LIMIT: usize = 8 * 1024 * 1024;
+    let net = open(home)?.net;
+    let mut pages = Vec::new();
+    for url in urls {
+        let request = itda_net::Request {
+            limit: LIMIT,
+            ..itda_net::Request::read(url.as_str())
+        };
+        let response = net.fetch(request).await?;
+        if !response.successful() {
+            return Err(AppError::new(
+                itda_types::error::Code::Runtime,
+                format!("{url} answered HTTP {}", response.status),
+                "Open the address in a browser to check it. Pages behind a sign-in: record yourself using them with `itda record`.",
+            ));
+        }
+        let content_type = response.header("content-type").to_owned();
+        if !content_type.contains("html") {
+            return Err(usage(
+                format!("{url} is not an HTML page ({content_type})"),
+                "Pass the address of a page. For an API description, use `itda draft openapi`.",
+            ));
+        }
+        eprintln!(
+            "Fetched {} ({} KB).",
+            response.url,
+            response.bytes.len().div_ceil(1024)
+        );
+        pages.push(itda_prep::Page {
+            url: response.url.clone(),
+            html: String::from_utf8_lossy(&response.bytes).into_owned(),
+        });
+    }
+    publish(
+        home,
+        itda_prep::from_pages(&pages, &options)?,
+        install,
+        force,
+    )
+}
+
+/// Print the draft, or install it, and list what to review on stderr.
+fn publish(
+    home: &Path,
+    draft: itda_prep::Draft,
+    install: bool,
+    force: bool,
+) -> AppResult<ExitCode> {
     for note in &draft.notes {
         eprintln!("note: {note}");
     }
