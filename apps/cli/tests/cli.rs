@@ -810,5 +810,21 @@ async fn setup_goes_from_a_page_to_working_actions_in_one_go() {
     );
     let no_terminal = itda(&home, &["setup", &url], &[]).await;
     assert_eq!(no_terminal.status.code(), Some(2));
+    let one_line = itda(
+        &home,
+        &[
+            &url,
+            "--name",
+            "board2",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[],
+    )
+    .await;
+    assert!(one_line.status.success(), "{one_line:?}");
+    assert!(home.join("specs/board2/spec.yaml").exists());
     std::fs::remove_dir_all(home).ok();
 }

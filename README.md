@@ -1,6 +1,6 @@
-<p align="center"><img src="assets/hero.png" alt="itda: a hand passes a small website card to an AI agent along one thread. The websites you use, handed to your AI." width="100%"></p>
+<p align="center"><img src="assets/hero.png" alt="itda: a hand passes a small website card to an AI agent along one thread. Just type an address after itda and your AI can use the site." width="100%"></p>
 
-<p align="center"><strong>The websites you use, handed to your AI. Safely.</strong></p>
+<p align="center"><strong>Just type an address after itda and your AI can use the site.</strong></p>
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
@@ -22,9 +22,7 @@ and it works on the old intranet behind a login too.
 <summary>The same run as text</summary>
 
 ```console
-$ itda
-itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter. No address in mind? Type github, npm, crates-io or pypi. Enter alone shows the command list.
-Address: news.ycombinator.com
+$ itda news.ycombinator.com
 1/5  Looking at news.ycombinator.com...
     The page opens without signing in.
     Found: a list of 30 records, a form, a feed.
@@ -90,10 +88,10 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then type `itda`, paste the address of a site you use, and press Enter. It
-finds the agent apps on your computer and connects them after one more Enter
-(`ITDA_LANG=ko` makes it speak Korean). `itda setup <address>` does the same
-from a script.
+Then type `itda` and the address of a site you use. It finds the agent apps on
+your computer and connects them after one Enter (`ITDA_LANG=ko` makes it speak
+Korean). A bare `itda` asks for the address; `itda setup <address>` takes flags
+for scripts.
 
 The pieces are commands of their own. For pages you can open without
 signing in, give itda their addresses: tables and lists become records,

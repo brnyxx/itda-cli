@@ -1,6 +1,6 @@
 # itda
 
-**The websites you use, handed to your AI. Safely.**
+**Just type an address after itda and your AI can use the site.**
 
 Give itda one address. It learns what the site can do, tries it, and hands
 your AI agent a short list of actions in plain words. Reads just work.
@@ -10,9 +10,7 @@ and it works on the old intranet behind a login too.
 <img src="https://raw.githubusercontent.com/brnyxx/itda-cli/main/assets/setup.gif" alt="itda setup on news.ycombinator.com: it finds a list of 30 records, a form and a feed, tries both reads, saves the site and adds itda to Claude Desktop, in fourteen seconds" width="100%">
 
 ```console
-$ itda
-itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter. No address in mind? Type github, npm, crates-io or pypi. Enter alone shows the command list.
-Address: news.ycombinator.com
+$ itda news.ycombinator.com
 1/5  Looking at news.ycombinator.com...
     The page opens without signing in.
     Found: a list of 30 records, a form, a feed.

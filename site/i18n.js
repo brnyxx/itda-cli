@@ -1,15 +1,15 @@
 // Korean strings for the landing page; English is the page itself.
 // Keys match the data-i18n attributes in index.html.
 window.ITDA_KO = {
-  "hero.demo": "<span class=\"l\"><b class=\"p\">$</b> itda</span>\n<span class=\"l o\">itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요. 떠오르는 주소가 없으면 github, npm, crates-io, pypi 중 하나를 치세요. 그냥 Enter는 명령 목록.</span>\n<span class=\"l w\">주소: <b class=\"you\">news.ycombinator.com</b></span>\n<span class=\"l o\">1/5  news.ycombinator.com 살펴보는 중...</span>\n<span class=\"l o\">    이 페이지는 로그인 없이 열립니다.</span>\n<span class=\"l o\">    찾은 것: 목록 30건, 폼 1개, 피드.</span>\n<span class=\"l o\">2/5  에이전트가 할 수 있게 되는 일:</span>\n<span class=\"l o\">    읽기   home         Hacker News 목록 읽기  (입력: p)</span>\n<span class=\"l o\">    읽기   feed         RSS 피드 읽기</span>\n<span class=\"l o\">3/5  읽기를 하나씩 실제로 불러보는 중...</span>\n<span class=\"l g\">    ✓ home         30건</span>\n<span class=\"l g\">    ✓ feed         성공</span>\n<span class=\"l o\">4/5  'news-ycombinator'로 저장했습니다.</span>\n<span class=\"l w\">    Claude Desktop에 연결할까요? [Y/n]</span>\n<span class=\"l o\">5/5  Claude Desktop에 itda 추가 중...</span>\n<span class=\"l o\">Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json).</span>\n<span class=\"l o\">Claude Desktop를 열면 itda가 보입니다.</span>\n<span class=\"l g\">끝났습니다. 에이전트에게 'news-ycombinator'에 대해 물어보세요. 예: \"news-ycombinator에서 Hacker News 목록 읽기\".</span>",
-  "hero.then": "그다음 <code>itda</code>라고 치고 내가 쓰는 사이트 주소를 붙여넣으세요",
-  "meta.title": "itda: 내가 쓰는 웹사이트를 AI에게, 안전하게",
+  "hero.demo": "<span class=\"l\"><b class=\"p\">$</b> itda news.ycombinator.com</span>\n<span class=\"l o\">1/5  news.ycombinator.com 살펴보는 중...</span>\n<span class=\"l o\">    이 페이지는 로그인 없이 열립니다.</span>\n<span class=\"l o\">    찾은 것: 목록 30건, 폼 1개, 피드.</span>\n<span class=\"l o\">2/5  에이전트가 할 수 있게 되는 일:</span>\n<span class=\"l o\">    읽기   home         Hacker News 목록 읽기  (입력: p)</span>\n<span class=\"l o\">    읽기   feed         RSS 피드 읽기</span>\n<span class=\"l o\">3/5  읽기를 하나씩 실제로 불러보는 중...</span>\n<span class=\"l g\">    ✓ home         30건</span>\n<span class=\"l g\">    ✓ feed         성공</span>\n<span class=\"l o\">4/5  'news-ycombinator'로 저장했습니다.</span>\n<span class=\"l w\">    Claude Desktop에 연결할까요? [Y/n]</span>\n<span class=\"l o\">5/5  Claude Desktop에 itda 추가 중...</span>\n<span class=\"l o\">Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json).</span>\n<span class=\"l o\">Claude Desktop를 열면 itda가 보입니다.</span>\n<span class=\"l g\">끝났습니다. 에이전트에게 'news-ycombinator'에 대해 물어보세요. 예: \"news-ycombinator에서 Hacker News 목록 읽기\".</span>",
+  "hero.then": "그다음 <code>itda 내가-쓰는-사이트.example</code>",
+  "meta.title": "itda: 뒤에 주소만 쓰면 AI가 사이트를 써요",
   "meta.description": "명령 하나로 내가 쓰는 어떤 웹사이트든 AI 에이전트가 부를 수 있는, 사람 말로 된 짧은 목록이 됩니다. 읽기는 알아서, 사이트를 바꾸는 건 내가 허락할 때만. 내 컴퓨터에서만 돌아갑니다.",
   "nav.docs": "문서",
   "nav.spec": "사이트 정의",
   "nav.changelog": "변경 내역",
   "hero.pill": "<span class=\"pill-dot\"></span>새로 나옴: <code>itda setup</code> 한 번이면 끝",
-  "hero.h1": "내가 쓰는 웹사이트를<br><em class=\"accent\">AI에게 넘겨주세요.</em>",
+  "hero.h1": "itda 뒤에 주소만 쓰면<br><em class=\"accent\">AI가 사이트를 써요.</em>",
   "hero.lede": "주소 하나만 주면 됩니다. itda가 그 사이트에서 할 수 있는 일을 알아내고, 실제로 한 번씩 해 보고, AI 에이전트에게 사람 말로 된 짧은 목록을 넘깁니다. 읽기는 알아서 됩니다. 사이트를 바꾸는 건 내가 허락하기 전엔 하지 않습니다. 로그인해야 하는 오래된 사내 시스템도요.",
   "hero.start": "시작하기",
   "hero.star": "GitHub에서 별 주기",
