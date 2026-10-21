@@ -417,6 +417,13 @@ impl Recorder {
         self.capture.is_empty()
     }
 
+    /// Unexpired cookies the browser would send to `site`'s host: the
+    /// session the person signed in to while recording.
+    pub fn cookies(&mut self, site: &url::Url) -> AppResult<Vec<crate::Cookie>> {
+        let result = self.send(None, "Storage.getCookies", json!({}))?;
+        crate::site_cookies(&result, site)
+    }
+
     /// Close the window and return the recording.
     pub fn finish(mut self) -> Value {
         let _ = self.send(None, "Browser.close", json!({}));

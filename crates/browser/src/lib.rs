@@ -59,18 +59,7 @@ impl SignIn {
     /// Unexpired cookies the browser would send to `site`'s host.
     pub fn cookies(&mut self, site: &url::Url) -> AppResult<Vec<Cookie>> {
         let result = self.send("Storage.getCookies", json!({}))?;
-        let cookies: Vec<Cookie> = serde_json::from_value(result["cookies"].clone())
-            .map_err(|_| AppError::api("browser_unavailable", 502))?;
-        let host = site.host_str().unwrap_or_default().to_ascii_lowercase();
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or_default();
-        Ok(cookies
-            .into_iter()
-            .filter(|c| applies_to(&c.domain, &host))
-            .filter(|c| c.expires <= 0.0 || c.expires > now)
-            .collect())
+        site_cookies(&result, site)
     }
 
     /// True while the person has not closed the browser.
@@ -110,6 +99,23 @@ impl Drop for SignIn {
         let _ = self.send("Browser.close", json!({}));
         close(&mut self.child, &self.profile);
     }
+}
+
+/// The unexpired cookies in a `Storage.getCookies` result that the browser
+/// would send to `site`'s host.
+pub(crate) fn site_cookies(result: &Value, site: &url::Url) -> AppResult<Vec<Cookie>> {
+    let cookies: Vec<Cookie> = serde_json::from_value(result["cookies"].clone())
+        .map_err(|_| AppError::api("browser_unavailable", 502))?;
+    let host = site.host_str().unwrap_or_default().to_ascii_lowercase();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or_default();
+    Ok(cookies
+        .into_iter()
+        .filter(|c| applies_to(&c.domain, &host))
+        .filter(|c| c.expires <= 0.0 || c.expires > now)
+        .collect())
 }
 
 /// Start the browser in a fresh profile at `url` and connect to its DevTools

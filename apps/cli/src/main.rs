@@ -360,7 +360,7 @@ fn main() -> ExitCode {
             install,
             force,
             save,
-        } => record(
+        } => block_on(record(
             &home,
             &url,
             itda_prep::Options {
@@ -371,7 +371,7 @@ fn main() -> ExitCode {
             install,
             force,
             save.as_deref(),
-        ),
+        )),
         Command::Audit {
             limit,
             verify,
@@ -888,8 +888,10 @@ async fn draft_page(
 }
 
 /// Record the site in the person's own browser and draft from the recording,
-/// which stays in memory unless `save` names a file for it.
-fn record(
+/// which stays in memory unless `save` names a file for it. With `--install`,
+/// the token or session the recording used can go straight to the keyring,
+/// each after a yes in the terminal.
+async fn record(
     home: &Path,
     url: &str,
     options: itda_prep::Options,
@@ -897,7 +899,11 @@ fn record(
     force: bool,
     save: Option<&Path>,
 ) -> AppResult<ExitCode> {
-    let har = serde_json::to_vec(&record::browser(url)?)?;
+    let url = url.to_owned();
+    let recording = tokio::task::spawn_blocking(move || record::browser(&url))
+        .await
+        .map_err(|_| AppError::api("internal", 500))??;
+    let har = serde_json::to_vec(&recording.har)?;
     if let Some(path) = save {
         itda_types::util::atomic_file(path, &har)?;
         eprintln!(
@@ -908,12 +914,83 @@ fn record(
     let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
     let site = draft.site.clone();
     let code = publish(home, draft, install, force)?;
-    if install {
+    if !install {
+        return Ok(code);
+    }
+    let spec = sites::load(home, &site)?;
+    let kept = keep_credentials(home, &spec, &recording.har, &recording.cookies).await?;
+    if !kept {
         eprintln!(
             "Sign in once with `itda login {site} --browser` if its actions need an account."
         );
     }
     Ok(code)
+}
+
+/// Offer to keep what the recording signed in with: a header token for each
+/// header `auth` entry, and the browser session for a `browser` one. Values
+/// are never shown; nothing is kept without a yes in a terminal.
+async fn keep_credentials(
+    home: &Path,
+    spec: &itda_spec::Spec,
+    har: &Value,
+    cookies: &[itda_browser::Cookie],
+) -> AppResult<bool> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() || std::env::var("ITDA_SECRET_STORE").is_ok_and(|v| v == "env") {
+        return Ok(false);
+    }
+    let site = &spec.site.name;
+    let account = itda_runtime::DEFAULT_ACCOUNT;
+    let mut offers: Vec<(String, String, Secret)> = Vec::new();
+    for auth in &spec.auth {
+        match auth.kind.as_str() {
+            "header" => {
+                let Some(name) = auth.value_from.strip_prefix(&format!("store:{site}/")) else {
+                    continue;
+                };
+                if let Some(value) =
+                    record::header_value(har, &spec.site.base_url, &auth.header, &auth.prefix)
+                {
+                    offers.push((
+                        format!("the {} header the pages sent", auth.header),
+                        name.to_owned(),
+                        Secret::new(value),
+                    ));
+                }
+            }
+            "browser" if !cookies.is_empty() => offers.push((
+                format!("the browser session ({} cookies)", cookies.len()),
+                itda_runtime::SESSION_SECRET.to_owned(),
+                Secret::new(itda_browser::header(cookies)),
+            )),
+            _ => {}
+        }
+    }
+    if offers.is_empty() {
+        return Ok(false);
+    }
+    KeyringStore::available()?;
+    let parts = open(home)?;
+    let mut kept = false;
+    for (what, name, secret) in offers {
+        eprint!(
+            "Keep {what} as {site}/{account} in the system keyring? Agents only see the account id. [y/N] "
+        );
+        let mut answer = String::new();
+        stdin.lock().read_line(&mut answer)?;
+        if !matches!(answer.trim(), "y" | "Y" | "yes") {
+            continue;
+        }
+        parts.vault.add_account(site, account, "").await?;
+        parts.vault.set_secret(site, account, &name, secret).await?;
+        resume_scopes(home, &parts.net, site, Some(account)).await?;
+        eprintln!(
+            "Saved {name} for {site}/{account}. Tokens expire; record again or use `itda login {site}` when calls answer auth_required."
+        );
+        kept = true;
+    }
+    Ok(kept)
 }
 
 /// Print the draft, or install it, and list what to review on stderr.
