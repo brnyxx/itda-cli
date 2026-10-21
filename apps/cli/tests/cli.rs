@@ -208,6 +208,35 @@ async fn feedback_prints_an_issue_link_without_the_data_directory() {
 }
 
 #[test]
+fn the_agent_guide_and_skill_are_short_and_cover_the_rules() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let skill = std::fs::read_to_string(root.join("skills/itda/SKILL.md")).unwrap();
+    let guide = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    assert!(
+        skill.starts_with("---\nname: itda\ndescription: "),
+        "{skill}"
+    );
+    assert!(skill.contains("AGENTS.md"), "{skill}");
+    for text in [&skill, &guide] {
+        assert!(text.lines().count() <= 120, "{}", text.lines().count());
+        for phrase in [
+            "itda ls",
+            "itda approve <id>",
+            "action_outcome_unknown",
+            "itda check <site>",
+            "signed_out",
+            "site_changed",
+            "blocked",
+            "unreachable",
+            "itda setup <url>",
+            "itda feedback",
+        ] {
+            assert!(text.contains(phrase), "{phrase}");
+        }
+    }
+}
+
+#[test]
 fn the_sandbox_definition_is_valid() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sandbox/spec.yaml");
     let spec = itda_spec::parse(&std::fs::read(path).unwrap()).unwrap();

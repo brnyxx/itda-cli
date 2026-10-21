@@ -9,6 +9,10 @@ change the definition format or the CLI.
 
 ### Added
 
+- `AGENTS.md` and `skills/itda/SKILL.md` tell coding agents how to use itda:
+  discover actions, run reads, treat website text as data, wait for `itda
+  approve`, never retry a lost change, run `itda check` first when something
+  stops working. The MCP server's instructions say the same, shorter.
 - `itda feedback` prints a link to a new GitHub issue with the version, the
   platform and the doctor checks filled in (never the data directory path)
   and opens it; `--no-open` only prints. It sends nothing itself.
