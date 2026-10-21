@@ -156,6 +156,11 @@ impl Capture {
                 let Some(exchange) = self.live.get_mut(&key) else {
                     return Vec::new();
                 };
+                // The headers that went over the wire, when the browser
+                // reports them: all there is for a request never announced.
+                for (name, value) in headers_map(&params["response"]["requestHeaders"]) {
+                    exchange.headers.entry(name).or_insert(value);
+                }
                 exchange.response = Some(response_parts(&params["response"]));
                 if let Some(kind) = params["type"].as_str() {
                     exchange.kept &= KEPT_TYPES.contains(&kind);
@@ -819,7 +824,7 @@ mod tests {
     fn a_response_without_its_request_and_a_load_that_never_ends_are_kept() {
         let mut capture = Capture::default();
         // Seen on Linux: the response arrives for a request never announced.
-        let answer = json!({"requestId": "9", "type": "Fetch", "response": {"url": "https://a.example/api/items?q=x", "status": 200, "mimeType": "application/json", "headers": {}}});
+        let answer = json!({"requestId": "9", "type": "Fetch", "response": {"url": "https://a.example/api/items?q=x", "status": 200, "mimeType": "application/json", "headers": {}, "requestHeaders": {"X-Api-Key": "k"}}});
         let fetches = capture.event("s", "Network.responseReceived", &answer);
         assert!(fetches.is_empty());
         let fetches = capture.event("s", "Network.loadingFinished", &json!({"requestId": "9"}));
@@ -843,6 +848,10 @@ mod tests {
             ["https://a.example/api/items?q=x", "https://a.example/board"]
         );
         assert_eq!(har["log"]["entries"][0]["request"]["method"], "GET");
+        assert_eq!(
+            har["log"]["entries"][0]["request"]["headers"][0]["name"],
+            "X-Api-Key"
+        );
     }
 
     #[test]
