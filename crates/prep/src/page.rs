@@ -334,8 +334,11 @@ fn page_action(
             )
             .into(),
         );
-    } else if let Some((key, pointers)) = embedded(&page.html) {
+    } else if let Some((key, pointer, pointers)) = embedded(&page.html) {
         response.insert("ssr_json".into(), key.clone().into());
+        if !pointer.is_empty() {
+            response.insert("extract_pointer".into(), pointer.clone().into());
+        }
         if !pointers.is_empty() {
             response.insert(
                 "required_pointers".into(),
@@ -346,9 +349,15 @@ fn page_action(
             "evidence".into(),
             format!("{label} embeds its data in the {key} script").into(),
         );
-        notes.push(format!(
-            "{label}: returns the whole {key} payload; add extract_pointer and a model to keep only what agents need."
-        ));
+        notes.push(if pointer.is_empty() {
+            format!(
+                "{label}: returns the whole {key} payload; add extract_pointer and a model to keep only what agents need."
+            )
+        } else {
+            format!(
+                "{label}: returns the list at {pointer} in the {key} payload; add a model to keep only the fields agents need."
+            )
+        });
     } else if let Some(title) = &title {
         response.insert(
             "required_html_fields".into(),
@@ -532,8 +541,9 @@ fn form_action(
     entry
 }
 
-/// The embedded payload to read and up to three pointers that must exist.
-fn embedded(html: &str) -> Option<(String, Vec<String>)> {
+/// The embedded payload to read, the pointer to the list inside it when
+/// there is one, and up to three pointers that must exist.
+fn embedded(html: &str) -> Option<(String, String, Vec<String>)> {
     let map = itda_html::extract_ssr_map(html);
     let key = SSR_KEYS
         .iter()
@@ -541,16 +551,74 @@ fn embedded(html: &str) -> Option<(String, Vec<String>)> {
         .map(|key| (*key).to_owned())
         .or_else(|| map.keys().next().cloned())?;
     let root = map.get(&key)?;
+    let escape = |k: &str| k.replace('~', "~0").replace('/', "~1");
+    if let Some((pointer, records)) = list_in(root, "", 0) {
+        // Keys every record has, so the check holds for any page of them.
+        let shared: Vec<String> = records
+            .iter()
+            .filter_map(serde_json::Value::as_object)
+            .map(|object| object.keys().cloned().collect::<BTreeSet<_>>())
+            .reduce(|a, b| a.intersection(&b).cloned().collect())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|k| !secret_field(k))
+            .take(3)
+            .map(|k| format!("/0/{}", escape(&k)))
+            .collect();
+        return Some((key, pointer, shared));
+    }
     let pointers = match (key.as_str(), root) {
         ("__NEXT_DATA__", _) => vec!["/props".to_owned()],
         (_, serde_json::Value::Object(object)) => object
             .keys()
             .take(3)
-            .map(|k| format!("/{}", k.replace('~', "~0").replace('/', "~1")))
+            .map(|k| format!("/{}", escape(k)))
             .collect(),
         _ => Vec::new(),
     };
-    Some((key, pointers))
+    Some((key, String::new(), pointers))
+}
+
+/// The largest list of at least three records (objects) in the payload, at
+/// its JSON pointer; the shallowest wins a tie.
+fn list_in<'a>(
+    value: &'a serde_json::Value,
+    pointer: &str,
+    depth: usize,
+) -> Option<(String, &'a Vec<serde_json::Value>)> {
+    if depth > 12 {
+        return None;
+    }
+    let escape = |k: &str| k.replace('~', "~0").replace('/', "~1");
+    let mut best: Option<(String, &'a Vec<serde_json::Value>)> = None;
+    let mut consider = |candidate: Option<(String, &'a Vec<serde_json::Value>)>| {
+        if let Some((pointer, list)) = candidate
+            && best.as_ref().is_none_or(|(_, top)| list.len() > top.len())
+        {
+            best = Some((pointer, list));
+        }
+    };
+    match value {
+        serde_json::Value::Array(items) => {
+            if items.len() >= 3 && items.iter().all(serde_json::Value::is_object) {
+                consider(Some((pointer.to_owned(), items)));
+            }
+            for (index, item) in items.iter().enumerate().take(50) {
+                consider(list_in(item, &format!("{pointer}/{index}"), depth + 1));
+            }
+        }
+        serde_json::Value::Object(object) => {
+            for (name, child) in object.iter().take(200) {
+                consider(list_in(
+                    child,
+                    &format!("{pointer}/{}", escape(name)),
+                    depth + 1,
+                ));
+            }
+        }
+        _ => {}
+    }
+    best
 }
 
 /// Only what differs from the defaults, as people write extractions.

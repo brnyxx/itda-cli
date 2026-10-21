@@ -26,7 +26,9 @@ change the definition format or the CLI.
   notices when a page changes. Lists are found by their shape, not only by
   known class names: any run of three or more siblings outside navigation
   that each hold a link at the same place, with the title and link read
-  from that link's own path.
+  from that link's own path. When a page embeds its data for its scripts,
+  the draft points `extract_pointer` at the list inside the payload and
+  checks the keys every record shares.
 - `itda draft har` also handles a token sent as a header, such as
   `X-CSRF-Token`: a preflight step reads it from the page's
   `<meta name="csrf-token">` tag before each call.

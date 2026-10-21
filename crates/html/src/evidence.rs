@@ -212,9 +212,17 @@ fn segment(element: ElementRef<'_>) -> String {
         .unwrap_or_else(|| tag.to_owned())
 }
 
+/// A class or id a selector can use and that will still be there tomorrow:
+/// not a build hash such as `GridStyled-sc-772acff9-0` or `css-1x2y3z4`.
 fn selector_word(word: &str) -> bool {
+    let hashed = word.contains("sc-")
+        || word.starts_with("css-")
+        || word
+            .split(['-', '_'])
+            .any(|part| part.len() >= 5 && part.chars().all(|c| c.is_ascii_hexdigit()));
     !word.is_empty()
         && word.len() <= 40
+        && !hashed
         && word.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
         && word
             .chars()

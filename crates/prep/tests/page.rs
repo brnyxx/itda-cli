@@ -86,7 +86,8 @@ fn an_app_shell_reads_its_embedded_data_and_points_at_recording() {
     let products = spec.op("list-products").unwrap();
     let response = products.response.as_ref().unwrap();
     assert_eq!(response.ssr_json, "__NEXT_DATA__");
-    assert_eq!(response.required_pointers, ["/props"]);
+    assert_eq!(response.extract_pointer, "/props/pageProps/products");
+    assert_eq!(response.required_pointers, ["/0/id", "/0/name"]);
     assert!(!draft.yaml.contains("private-value"));
     assert!(draft.notes.iter().any(|n| n.contains("__NEXT_DATA__")));
 }
