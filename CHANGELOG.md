@@ -15,7 +15,7 @@ change the definition format or the CLI.
   Code, Cursor, Codex, or a project with a `.vscode` folder) and connects them
   all after one Enter; the numbered list only appears when none is found.
 - `itda setup` asks whether the site needs a sign-in only when the page it
-  fetched has a password form; a page that simply opened is used as it is.
+  fetched has a password form; a page without one is used as it is.
 - The installer ends with "Open a new terminal window and type: itda".
 - At the first prompt, a ready-made site's name (`github`, `npm`, `crates-io`,
   `pypi`) installs that site and connects the agent apps found on this
