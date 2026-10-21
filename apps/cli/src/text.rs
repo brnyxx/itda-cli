@@ -118,6 +118,18 @@ pub fn t(key: &str) -> &'static str {
             "에이전트 연결은 언제든: itda mcp install claude-desktop (또는 cursor, vscode, codex, claude-code)",
         ),
         (
+            "ask_connect",
+            "Connect {list}? [Y/n] ",
+            "{list}에 연결할까요? [Y/n] ",
+        ),
+        ("and", " and ", "와(과) "),
+        (
+            "welcome",
+            "itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter (or press Enter alone for the command list).",
+            "itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요 (그냥 Enter는 명령 목록).",
+        ),
+        ("ask_url", "Address: ", "주소: "),
+        (
             "ask_client",
             "Connect an agent? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] later: ",
             "에이전트에 연결할까요? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] 나중에: ",

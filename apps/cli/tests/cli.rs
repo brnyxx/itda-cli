@@ -587,6 +587,17 @@ operations:
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_bare_itda_without_a_terminal_shows_the_command_list() {
+    let home = home();
+    let out = itda(&home, &[], &[]).await;
+    assert!(out.status.success());
+    let shown = String::from_utf8_lossy(&out.stdout);
+    assert!(shown.contains("Usage: itda"), "{shown}");
+    assert!(shown.contains("setup"), "{shown}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn setup_goes_from_a_page_to_working_actions_in_one_go() {
     let home = home();
     let router = Router::new().route(

@@ -53,7 +53,10 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
             Ok(page) => {
                 eprintln!("    {}", t("fetched_page"));
                 eprintln!("    {}", tf("found", &[("what", &describe_page(&page))]));
-                if flags.record.is_none() && ask(t("ask_record_anyway"), false)? {
+                let has_sign_in = evidence::forms(&page.html, &page.url)
+                    .iter()
+                    .any(|form| form.password);
+                if flags.record.is_none() && has_sign_in && ask(t("ask_record_anyway"), false)? {
                     record = true;
                 } else {
                     draft = Some(itda_prep::from_pages(&[page], &options)?);
@@ -175,15 +178,18 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
     step(4, &tf("saved", &[("site", &site)]));
 
     // 5. Connect an agent.
-    let client = match &flags.client {
-        Some(client) => client.clone(),
-        None => choose_client()?,
+    let clients = match &flags.client {
+        Some(client) if client == "none" => Vec::new(),
+        Some(client) => vec![client.clone()],
+        None => choose_clients()?,
     };
-    if client == "none" {
+    if clients.is_empty() {
         step(5, t("later"));
     } else {
-        step(5, &tf("connecting", &[("client", client_label(&client))]));
-        crate::mcp_install(&client, false, false)?;
+        step(5, &tf("connecting", &[("client", &join_labels(&clients))]));
+        for client in &clients {
+            crate::mcp_install(client, false, false)?;
+        }
     }
     let spec = crate::sites::load(home, &site)?;
     let example = spec
@@ -390,11 +396,47 @@ fn ask(question: &str, default: bool) -> AppResult<bool> {
     })
 }
 
-fn choose_client() -> AppResult<String> {
+fn join_labels(clients: &[String]) -> String {
+    let labels: Vec<&str> = clients.iter().map(|c| client_label(c)).collect();
+    match labels.split_last() {
+        Some((last, rest)) if !rest.is_empty() => {
+            format!("{}{}{last}", rest.join(", "), t("and"))
+        }
+        _ => labels.concat(),
+    }
+}
+
+/// The agent apps found on this computer, after one yes; the numbered list
+/// only when none is found.
+fn choose_clients() -> AppResult<Vec<String>> {
     let stdin = std::io::stdin();
     if !stdin.is_terminal() {
-        return Ok("none".into());
+        return Ok(Vec::new());
     }
+    let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(std::path::PathBuf::from)
+        .unwrap_or_default();
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let found: Vec<String> = crate::install::detected(&user_home, &cwd)
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if !found.is_empty() {
+        let list = join_labels(&found);
+        return Ok(if ask(&tf("ask_connect", &[("list", &list)]), true)? {
+            found
+        } else {
+            Vec::new()
+        });
+    }
+    Ok(match choose_client()?.as_str() {
+        "none" => Vec::new(),
+        client => vec![client.to_owned()],
+    })
+}
+
+fn choose_client() -> AppResult<String> {
+    let stdin = std::io::stdin();
     eprint!("    {}", t("ask_client"));
     std::io::stderr().flush()?;
     let mut answer = String::new();

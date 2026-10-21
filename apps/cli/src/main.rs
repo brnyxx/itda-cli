@@ -10,7 +10,7 @@ mod setup;
 mod sites;
 mod text;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use itda_net::{Gate, Network};
 use itda_policy::{Approvals, operation_effect};
 use itda_runtime::{
@@ -23,7 +23,7 @@ use itda_vault::{EnvStore, KeyringStore, Secret, SecretStore, Vault};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
-    io::{BufRead, IsTerminal, Read},
+    io::{BufRead, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -37,7 +37,7 @@ use std::{
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -287,13 +287,17 @@ enum McpCommand {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let as_json = matches!(&cli.command, Command::Ls { json: true, .. })
-        || matches!(&cli.command, Command::Approvals { json: true })
-        || matches!(&cli.command, Command::Accounts { json: true, .. })
-        || matches!(&cli.command, Command::Audit { json: true, .. })
-        || matches!(&cli.command, Command::Check { json: true, .. })
-        || matches!(&cli.command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
-    let result = home().and_then(|home| match cli.command {
+    let Some(command) = cli.command.or_else(welcome) else {
+        Cli::command().print_help().ok();
+        return ExitCode::SUCCESS;
+    };
+    let as_json = matches!(&command, Command::Ls { json: true, .. })
+        || matches!(&command, Command::Approvals { json: true })
+        || matches!(&command, Command::Accounts { json: true, .. })
+        || matches!(&command, Command::Audit { json: true, .. })
+        || matches!(&command, Command::Check { json: true, .. })
+        || matches!(&command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
+    let result = home().and_then(|home| match command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
         Command::Add { source, force } => block_on(add(&home, &source, force)),
         Command::Remove { site } => remove(&home, &site),
@@ -458,6 +462,37 @@ fn main() -> ExitCode {
         Ok(code) => code,
         Err(error) => output::fail(&error, as_json),
     }
+}
+
+/// A bare `itda` in a terminal: say what it is and ask for one address.
+/// `None` when nothing was typed, so the command list shows instead.
+fn welcome() -> Option<Command> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        return None;
+    }
+    eprintln!("{}", text::t("welcome"));
+    eprint!("{}", text::t("ask_url"));
+    std::io::stderr().flush().ok();
+    let mut line = String::new();
+    stdin.lock().read_line(&mut line).ok()?;
+    let url = line.trim();
+    if url.is_empty() {
+        return None;
+    }
+    let url = if url.contains("://") {
+        url.to_owned()
+    } else {
+        format!("https://{url}")
+    };
+    Some(Command::Setup {
+        url,
+        name: None,
+        record: false,
+        no_record: false,
+        client: None,
+        yes: false,
+    })
 }
 
 fn home() -> AppResult<PathBuf> {

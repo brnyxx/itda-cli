@@ -64,6 +64,22 @@ pub fn plan(client: &str, user_home: &Path, cwd: &Path, launch: &Launch) -> AppR
     }
 }
 
+/// The clients that look installed for this person: each one's own
+/// directory exists, or, for VS Code, the project has a `.vscode` folder.
+pub fn detected(user_home: &Path, cwd: &Path) -> Vec<&'static str> {
+    let present = |client: &str| match client {
+        "claude-desktop" => claude_desktop_config(user_home)
+            .parent()
+            .is_some_and(Path::is_dir),
+        "claude-code" => user_home.join(".claude").is_dir(),
+        "cursor" => user_home.join(".cursor").is_dir(),
+        "vscode" => cwd.join(".vscode").is_dir(),
+        "codex" => user_home.join(".codex").is_dir(),
+        _ => false,
+    };
+    CLIENTS.iter().copied().filter(|c| present(c)).collect()
+}
+
 fn claude_desktop_config(user_home: &Path) -> PathBuf {
     if cfg!(target_os = "macos") {
         user_home.join("Library/Application Support/Claude/claude_desktop_config.json")
@@ -190,6 +206,17 @@ pub fn apply(path: &Path, content: &str) -> AppResult<bool> {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+
+    #[test]
+    fn detects_the_clients_whose_folders_exist() {
+        let home = dir();
+        assert!(detected(&home, &home).is_empty());
+        std::fs::create_dir_all(home.join(".cursor")).unwrap();
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::create_dir_all(home.join(".vscode")).unwrap();
+        assert_eq!(detected(&home, &home), ["cursor", "vscode", "codex"]);
+        std::fs::remove_dir_all(home).ok();
+    }
 
     fn launch() -> Launch {
         Launch {
