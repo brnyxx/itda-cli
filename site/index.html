@@ -69,7 +69,7 @@
         <div class="hero-visual" aria-label="An agent reads freely through itda and waits for a person to approve a change">
           <div class="term">
             <div class="term-bar"><span></span><span></span><span></span><em data-i18n="hero.term">agent session</em></div>
-            <pre class="term-body"><span class="l"><b class="p">$</b> itda draft har board.har <i>--install</i></span>
+            <pre class="term-body"><span class="l"><b class="p">$</b> itda record https://board.example <i>--install</i></span>
 <span class="l o">Drafted board: 4 actions (2 reads, 2 changes).</span>
 <span class="l"> </span>
 <span class="l"><b class="p">$</b> itda login board <i>--browser</i></span>
@@ -113,8 +113,8 @@
         <li>
           <span class="step-n">1</span>
           <h3 data-i18n="how.1">Record</h3>
-          <p data-i18n="how.1p">Open your browser's developer tools, use the site as usual (sign in, search, post a form) and save the network log as a HAR file. itda keeps the shape of each request, never the values you typed. An OpenAPI file works too.</p>
-          <code>itda draft har board.har --install</code>
+          <p data-i18n="how.1p">itda opens your own browser in a fresh window. Use the site as usual (sign in, search, post a form) while it watches what the pages ask the server for; it never clicks or types. itda keeps the shape of each request, never the values you typed. A page address, a HAR file or an OpenAPI file works too.</p>
+          <code>itda record https://board.example --install</code>
           <code>itda login board --browser</code>
         </li>
         <li>

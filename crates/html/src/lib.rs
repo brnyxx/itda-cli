@@ -7,6 +7,8 @@
 //! will live with the preparation layer. A site-specific rule for one
 //! marketplace's Remix payload was removed. `resolve_pointer` moved to
 //! `itda_types::json`.
+pub mod evidence;
+
 use itda_types::json::resolve_pointer;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -184,7 +186,7 @@ fn extract_fields(
     Some(output)
 }
 
-fn stable_name(value: &str) -> bool {
+pub(crate) fn stable_name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 80
         && value
@@ -192,7 +194,7 @@ fn stable_name(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"-_:.".contains(&b))
 }
 
-fn element_text(element: scraper::ElementRef<'_>) -> String {
+pub(crate) fn element_text(element: scraper::ElementRef<'_>) -> String {
     element
         .descendants()
         .filter_map(|node| {

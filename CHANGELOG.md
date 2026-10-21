@@ -9,6 +9,32 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda record <url>` opens your own browser in a fresh window and records
+  what the pages ask the server for while you use the site, then drafts a
+  definition the same way `itda draft har` does. The recording stays in
+  memory; `--save` keeps it as a HAR file. itda never clicks, types or
+  navigates in the window. `ITDA_DEBUG_CDP=1` prints the browser messages.
+- `itda record --install` offers to keep the token and the browser session
+  the recording signed in with, each after a yes in the terminal, so a site
+  that sends a bearer token from its scripts works without pasting it.
+- A recorded GraphQL call becomes one action per operation (`exploreProjects`
+  is `explore-projects`): queries are reads, mutations are changes, and the
+  variables are the typed inputs, rendered through a `json_template`.
+- `itda record` and `itda draft har` also draft the pages the recording
+  holds, as `itda draft page` does, so a site that renders its lists and
+  forms on the server gets actions even when its pages call no API.
+- `itda draft page <url>...` drafts a site definition from the pages you
+  use, fetched with the honest client: a table or a list of records becomes
+  `html` fields, data a page embeds for its scripts becomes `ssr_json`, a
+  search form becomes a read, a post form becomes a change with its token
+  read through a preflight step, page links become a `page` input, and RSS or
+  Atom feeds come along. Every read gets a response check, so `itda check`
+  notices when a page changes. Lists are found by their shape, not only by
+  known class names: any run of three or more siblings outside navigation
+  that each hold a link at the same place, with the title and link read
+  from that link's own path. When a page embeds its data for its scripts,
+  the draft points `extract_pointer` at the list inside the payload and
+  checks the keys every record shares.
 - `itda draft har` also handles a token sent as a header, such as
   `X-CSRF-Token`: a preflight step reads it from the page's
   `<meta name="csrf-token">` tag before each call.

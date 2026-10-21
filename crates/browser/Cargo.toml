@@ -16,6 +16,7 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+itda-prep.workspace = true
 axum.workspace = true
 tokio.workspace = true
 

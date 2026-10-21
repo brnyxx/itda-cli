@@ -90,7 +90,7 @@ pub fn browser(spec: &Spec, page: Option<&str>) -> AppResult<Session> {
 }
 
 /// Fires once when the person presses Enter.
-fn enter_pressed() -> mpsc::Receiver<()> {
+pub fn enter_pressed() -> mpsc::Receiver<()> {
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let mut line = String::new();

@@ -375,6 +375,61 @@ async fn a_drafted_definition_runs_against_the_site() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_fetched_page_becomes_actions_that_run() {
+    let home = home();
+    let router = Router::new().route(
+        "/board",
+        get(|| async {
+            axum::response::Html(
+                "<title>Board</title><h1>Notices</h1>
+                 <form action='/board/search' method='get'><input name='q' required></form>
+                 <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                 <tr><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+                 <tr><td>1</td><td><a href='/n/1'>First</a></td></tr></table>
+                 <form action='/board' method='post'><input type='hidden' name='_csrf' value='tok-123'><input name='title'></form>",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let printed = itda(&home, &["draft", "page", &format!("{base}/board")], &[]).await;
+    assert!(printed.status.success(), "{printed:?}");
+    let yaml = String::from_utf8_lossy(&printed.stdout);
+    assert!(yaml.contains("name: get-board"), "{yaml}");
+    assert!(yaml.contains("name: search-board"), "{yaml}");
+    assert!(yaml.contains("name: post-board"), "{yaml}");
+    assert!(!yaml.contains("tok-123"));
+    assert!(String::from_utf8_lossy(&printed.stderr).contains("3 actions (2 reads, 1 changes)"));
+
+    let installed = itda(
+        &home,
+        &[
+            "draft",
+            "page",
+            &format!("{base}/board"),
+            "--name",
+            "board",
+            "--install",
+        ],
+        &[],
+    )
+    .await;
+    assert!(installed.status.success(), "{installed:?}");
+    let called = itda(&home, &["call", "board.get-board", "--json"], &[]).await;
+    assert!(called.status.success(), "{called:?}");
+    let data = &stdout_json(&called)["data"];
+    assert_eq!(data["items"][0]["title"], "Second");
+    assert_eq!(data["items"][1]["link"], format!("{base}/n/1"));
+
+    let missing = itda(&home, &["draft", "page", &format!("{base}/nowhere")], &[]).await;
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("HTTP 404"));
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_recorded_session_becomes_actions() {
     let home = home();
     let base = serve().await;

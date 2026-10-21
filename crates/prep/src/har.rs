@@ -4,7 +4,7 @@
 //! the shape of each call is kept: method, path, input names and types, and the
 //! response fields every sample had. No header, cookie, query or body value is
 //! copied into the draft.
-use crate::{Draft, Options, reorder, slug};
+use crate::{Draft, Options, Parts, reorder, slug};
 use itda_types::error::{AppResult, usage};
 use itda_types::util::secret_field;
 use serde_json::Value;
@@ -17,7 +17,7 @@ const MAX_OPERATIONS: usize = 200;
 const TOKEN_HEADERS: &[&str] = &["authorization", "x-api-key", "api-key", "x-auth-token"];
 
 #[derive(Clone, Copy, PartialEq)]
-enum Kind {
+pub(crate) enum Kind {
     Int,
     Float,
     Bool,
@@ -35,7 +35,7 @@ impl Kind {
         }
     }
 
-    fn of_text(text: &str) -> Kind {
+    pub(crate) fn of_text(text: &str) -> Kind {
         if text.parse::<i64>().is_ok() && !(text.len() > 1 && text.starts_with('0')) {
             Kind::Int
         } else if text == "true" || text == "false" {
@@ -53,7 +53,7 @@ impl Kind {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Kind::Int => "int",
             Kind::Float => "float",
@@ -133,42 +133,156 @@ struct Call {
     header_token: Option<String>,
     /// Position of the first sample in the recording.
     first: Option<usize>,
+    /// The GraphQL operation these samples sent, when the body was one.
+    graphql: Option<Graphql>,
+}
+
+/// One GraphQL operation: a query is a read, a mutation a change, and its
+/// variables are the inputs. The document itself is kept; it is the
+/// request's shape, not a value the person typed.
+#[derive(Default)]
+struct Graphql {
+    name: String,
+    document: String,
+    mutation: bool,
+    variables: Fields,
+    /// Variables that held objects or lists, which inputs cannot express.
+    complex: BTreeSet<String>,
+}
+
+/// The operation a JSON body sends, when it is a GraphQL document.
+fn graphql_operation(post: &Value) -> Option<(String, String, bool)> {
+    use graphql_parser::query::{Definition, OperationDefinition};
+    if !post["mimeType"]
+        .as_str()
+        .is_some_and(|m| m.contains("json"))
+    {
+        return None;
+    }
+    let body: Value = serde_json::from_str(post["text"].as_str()?).ok()?;
+    let document = body["query"].as_str()?;
+    let parsed = graphql_parser::parse_query::<&str>(document).ok()?;
+    let mut name = body["operationName"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let mut mutation = false;
+    for definition in &parsed.definitions {
+        let Definition::Operation(operation) = definition else {
+            continue;
+        };
+        let found = match operation {
+            OperationDefinition::Query(q) => q.name,
+            OperationDefinition::Mutation(m) => {
+                mutation = true;
+                m.name
+            }
+            OperationDefinition::Subscription(s) => {
+                mutation = true;
+                s.name
+            }
+            OperationDefinition::SelectionSet(_) => None,
+        };
+        if name.is_empty()
+            && let Some(found) = found
+        {
+            name = found.to_owned();
+        }
+    }
+    Some((name, document.to_owned(), mutation))
 }
 
 pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
+    let parts = har_parts(text, options)?;
+    if parts.operations.is_empty() {
+        return Err(no_operations());
+    }
+    Ok(parts.finish())
+}
+
+pub(crate) fn no_operations() -> itda_types::error::AppError {
+    usage(
+        "No operations could be drafted",
+        "Check that the recording has API calls on this address, or loosen --include.",
+    )
+}
+
+/// The calls in a recording as operations, without the final checks; a
+/// recording of only pages gives none.
+pub(crate) fn har_parts(text: &[u8], options: &Options) -> AppResult<Parts> {
     let doc: Value = serde_json::from_slice(text).map_err(|_| not_har())?;
     let entries = doc["log"]["entries"].as_array().ok_or_else(not_har)?;
-    let recorded: Vec<(&Value, url::Url)> = entries
-        .iter()
-        .filter(|entry| api_call(entry))
-        .filter_map(|entry| {
-            Some((
-                entry,
-                url::Url::parse(entry["request"]["url"].as_str()?).ok()?,
-            ))
-        })
-        .filter(|(_, url)| matches!(url.scheme(), "http" | "https"))
-        .collect();
-
-    let base = match &options.base_url {
-        Some(base) => url::Url::parse(base.trim_end_matches('/'))
-            .map_err(|_| usage("--base-url is not a URL", "Pass an address like https://example.com/api."))?,
-        None => busiest_origin(&recorded).ok_or_else(|| {
-            usage(
-                "The recording has no API calls",
-                "Record again with the browser's network panel open while you use the site, then save it as HAR with content.",
-            )
-        })?,
+    let located = |keep: &dyn Fn(&Value) -> bool| -> Vec<(&Value, url::Url)> {
+        entries
+            .iter()
+            .filter(|entry| keep(entry))
+            .filter_map(|entry| {
+                Some((
+                    entry,
+                    url::Url::parse(entry["request"]["url"].as_str()?).ok()?,
+                ))
+            })
+            .filter(|(_, url)| matches!(url.scheme(), "http" | "https"))
+            .collect()
     };
+    let recorded = located(&api_call);
+    // The site is where the person's pages came from; when its API lives
+    // elsewhere (a search service, say), the busiest API address is tried
+    // next, and telemetry sent elsewhere never wins by count alone.
+    let candidates: Vec<url::Url> = match &options.base_url {
+        Some(base) => vec![url::Url::parse(base.trim_end_matches('/')).map_err(|_| {
+            usage(
+                "--base-url is not a URL",
+                "Pass an address like https://example.com/api.",
+            )
+        })?],
+        None => {
+            let pages = located(&html_page);
+            let mut candidates = Vec::new();
+            for base in [busiest_origin(&pages), busiest_origin(&recorded)]
+                .into_iter()
+                .flatten()
+            {
+                if !candidates.contains(&base) {
+                    candidates.push(base);
+                }
+            }
+            candidates
+        }
+    };
+    if candidates.is_empty() {
+        return Err(usage(
+            "The recording has no calls",
+            "Record again with the browser's network panel open while you use the site, then save it as HAR with content.",
+        ));
+    }
+    let mut first = None;
+    for base in candidates {
+        let parts = parts_at(entries, &recorded, &base, options)?;
+        if !parts.operations.is_empty() {
+            return Ok(parts);
+        }
+        first.get_or_insert(parts);
+    }
+    first.ok_or_else(no_operations)
+}
+
+/// The operations under one base address.
+fn parts_at(
+    entries: &[Value],
+    recorded: &[(&Value, url::Url)],
+    base: &url::Url,
+    options: &Options,
+) -> AppResult<Parts> {
     let origin = base.origin();
     let prefix = base.path().trim_end_matches('/').to_owned();
     let base_url = format!("{}{prefix}", origin.ascii_serialization());
 
     let mut notes = Vec::new();
     let mut elsewhere = BTreeSet::new();
-    let mut calls: BTreeMap<(String, String), Call> = BTreeMap::new();
+    let mut calls: BTreeMap<(String, String, String), Call> = BTreeMap::new();
     let mut cookies = false;
-    for (entry, url) in &recorded {
+    for (entry, url) in recorded {
         let Some(rest) = url
             .path()
             .strip_prefix(&prefix)
@@ -188,7 +302,20 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
         {
             continue;
         }
-        let call = calls.entry((path.clone(), method.clone())).or_default();
+        let graphql = graphql_operation(&request["postData"]);
+        let operation = graphql
+            .as_ref()
+            .map(|(name, _, _)| name.clone())
+            .unwrap_or_default();
+        let call = calls
+            .entry((path.clone(), method.clone(), operation))
+            .or_default();
+        if let Some((name, document, mutation)) = graphql {
+            let entry = call.graphql.get_or_insert_with(Graphql::default);
+            entry.name = name;
+            entry.document = document;
+            entry.mutation |= mutation;
+        }
         call.first.get_or_insert_with(|| {
             entries
                 .iter()
@@ -283,13 +410,25 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             break;
         }
         let label = format!("{} {}", call.method, call.path);
+        if call.method == "POST" && telemetry(&call.path) {
+            notes.push(format!(
+                "{label}: left out; it looks like telemetry, not something an agent should send."
+            ));
+            continue;
+        }
         if call.multipart {
             notes.push(format!(
                 "{label}: skipped; it uploads files, which drafts do not cover yet."
             ));
             continue;
         }
-        let name = unique(&mut names, &action_name(&call.method, &call.path));
+        let name = match &call.graphql {
+            Some(graphql) if !slug(&graphql.name).is_empty() => {
+                unique(&mut names, &slug(&graphql.name))
+            }
+            Some(_) => unique(&mut names, "graphql"),
+            None => unique(&mut names, &action_name(&call.method, &call.path)),
+        };
         let mut entry = Mapping::new();
         entry.insert("name".into(), name.clone().into());
         entry.insert("method".into(), call.method.clone().into());
@@ -330,9 +469,12 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
             }
             entry.insert("auth".into(), "session".into());
         }
-        let read = matches!(call.method.as_str(), "GET" | "HEAD");
+        let read = match &call.graphql {
+            Some(graphql) => !graphql.mutation,
+            None => matches!(call.method.as_str(), "GET" | "HEAD"),
+        };
         entry.insert("effect".into(), if read { "read" } else { "write" }.into());
-        if name.starts_with("post-") {
+        if name.starts_with("post-") && call.graphql.is_none() {
             notes.push(format!(
                 "{label}: drafted as a change. If it only looks things up, set effect: read."
             ));
@@ -390,7 +532,48 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
         }
         let mut body = Mapping::new();
         let mut left_out = call.left_out.clone();
-        if !call.json.0.is_empty() {
+        if let Some(graphql) = &call.graphql {
+            // The document and its name are fixed; the variables are the
+            // inputs, rendered into the same JSON the page sent.
+            let mut json = Mapping::new();
+            let mut fixed = |key: &str, value: &str| {
+                let mut field = Mapping::new();
+                field.insert("type".into(), "string".into());
+                field.insert("default".into(), value.into());
+                json.insert(key.into(), Yaml::Mapping(field));
+            };
+            fixed("query", &graphql.document);
+            if !graphql.name.is_empty() {
+                fixed("operationName", &graphql.name);
+            }
+            let mut template = serde_json::Map::new();
+            template.insert("query".into(), "{{query}}".into());
+            if !graphql.name.is_empty() {
+                template.insert("operationName".into(), "{{operationName}}".into());
+            }
+            let mut variables = serde_json::Map::new();
+            for (variable, field) in graphql.variables.yaml(call.samples) {
+                let Some(variable) = variable.as_str() else {
+                    continue;
+                };
+                variables.insert(variable.to_owned(), format!("{{{{{variable}}}}}").into());
+                json.insert(variable.into(), field);
+            }
+            if !variables.is_empty() {
+                template.insert("variables".into(), Value::Object(variables));
+            }
+            body.insert("json".into(), Yaml::Mapping(json));
+            body.insert(
+                "json_template".into(),
+                serde_norway::to_value(Value::Object(template)).unwrap_or(Yaml::Null),
+            );
+            if !graphql.complex.is_empty() {
+                notes.push(format!(
+                    "{label} ({name}): left out the variables {}, which hold objects or lists; add them to json_template by hand.",
+                    graphql.complex.iter().cloned().collect::<Vec<_>>().join(", ")
+                ));
+            }
+        } else if !call.json.0.is_empty() {
             body.insert("json".into(), Yaml::Mapping(call.json.yaml(call.samples)));
         } else {
             let mut form = call.form.yaml(call.samples);
@@ -446,7 +629,13 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
                 .iter()
                 .flatten()
                 .take(3)
-                .map(|key| format!("/{}", key.replace('~', "~0").replace('/', "~1")).into())
+                .map(|key| {
+                    if key.starts_with('/') {
+                        key.clone().into()
+                    } else {
+                        format!("/{}", key.replace('~', "~0").replace('/', "~1")).into()
+                    }
+                })
                 .collect();
             if !pointers.is_empty() {
                 response.insert("required_pointers".into(), Yaml::Sequence(pointers));
@@ -461,22 +650,30 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
         }
         operations.push(reorder(entry));
     }
-    if operations.is_empty() {
-        return Err(usage(
-            "No operations could be drafted",
-            "Check that the recording has API calls on this address, or loosen --include.",
-        ));
-    }
     let host = base.host_str().unwrap_or_default().to_owned();
-    Ok(crate::finish(
-        &site,
-        "",
-        &base_url,
+    Ok(Parts {
+        site,
+        base_url,
         auth,
         operations,
         notes,
-        &format!("`itda draft har` from a recording of {host}"),
-    ))
+        source: format!("`itda draft har` from a recording of {host}"),
+    })
+}
+
+/// A page the person saw: a successful `GET` whose answer was HTML with
+/// its text recorded.
+pub(crate) fn html_page(entry: &Value) -> bool {
+    let content = &entry["response"]["content"];
+    entry["request"]["method"].as_str() == Some("GET")
+        && entry["response"]["status"]
+            .as_u64()
+            .is_some_and(|s| (200..300).contains(&s))
+        && content["mimeType"]
+            .as_str()
+            .is_some_and(|m| m.contains("html"))
+        && content["encoding"].as_str() != Some("base64")
+        && content["text"].as_str().is_some_and(|t| !t.is_empty())
 }
 
 fn not_har() -> itda_types::error::AppError {
@@ -546,18 +743,50 @@ fn meta_page(entries: &[Value], call: &Call, origin: &url::Origin) -> Option<(ur
 }
 
 fn csrf_meta(text: &str) -> Option<String> {
-    text.split("<meta").skip(1).find_map(|tag| {
-        let tag = &tag[..tag.find('>')?];
-        let rest = &tag[tag.find("name=")? + 5..];
-        let name = match rest.chars().next()? {
-            quote @ ('"' | '\'') => rest[1..].split(quote).next()?,
-            _ => rest.split([' ', '/']).next()?,
-        };
-        let lower = name.to_ascii_lowercase();
-        let safe = name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-        (safe && (lower.contains("csrf") || lower.contains("xsrf"))).then(|| name.to_owned())
+    let names: Vec<String> = text
+        .split("<meta")
+        .skip(1)
+        .filter_map(|tag| {
+            let tag = &tag[..tag.find('>')?];
+            let rest = &tag[tag.find("name=")? + 5..];
+            let name = match rest.chars().next()? {
+                quote @ ('"' | '\'') => rest[1..].split(quote).next()?,
+                _ => rest.split([' ', '/']).next()?,
+            };
+            let lower = name.to_ascii_lowercase();
+            let safe = name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+            (safe && (lower.contains("csrf") || lower.contains("xsrf"))).then(|| name.to_owned())
+        })
+        .collect();
+    // Rails pages carry both `csrf-param` (a field name) and `csrf-token`.
+    names
+        .iter()
+        .find(|name| name.to_ascii_lowercase().contains("token"))
+        .or_else(|| names.first())
+        .cloned()
+}
+
+/// Paths pages post their own usage to; nothing an agent should repeat.
+fn telemetry(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.split(['/', '.', '-', '_']).any(|part| {
+        matches!(
+            part,
+            "envelope"
+                | "collect"
+                | "beacon"
+                | "analytics"
+                | "telemetry"
+                | "track"
+                | "tracking"
+                | "metrics"
+                | "sentry"
+                | "rum"
+                | "pixel"
+                | "ping"
+        )
     })
 }
 
@@ -592,6 +821,23 @@ fn record_body(call: &mut Call, post: &Value) {
         call.multipart = true;
     } else if mime.contains("json") {
         if let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(text) {
+            if let Some(graphql) = &mut call.graphql {
+                for (name, value) in fields["variables"].as_object().into_iter().flatten() {
+                    match value {
+                        Value::Null => {}
+                        Value::Object(_) | Value::Array(_) => {
+                            graphql.complex.insert(name.clone());
+                        }
+                        _ => add_input(
+                            &mut graphql.variables,
+                            &mut call.left_out,
+                            name,
+                            Kind::of(value),
+                        ),
+                    }
+                }
+                return;
+            }
             for (name, value) in &fields {
                 add_input(&mut call.json, &mut call.left_out, name, Kind::of(value));
             }
@@ -631,6 +877,16 @@ fn record_response(call: &mut Call, content: &Value) {
         return;
     }
     let keys: BTreeSet<String> = match content["text"].as_str().map(serde_json::from_str::<Value>) {
+        // A GraphQL answer is checked inside `data`, where the fields are.
+        Some(Ok(Value::Object(map))) if call.graphql.is_some() => map
+            .get("data")
+            .and_then(Value::as_object)
+            .map(|data| {
+                data.keys()
+                    .map(|k| format!("/data/{}", k.replace('~', "~0").replace('/', "~1")))
+                    .collect()
+            })
+            .unwrap_or_default(),
         Some(Ok(Value::Object(map))) => map.keys().cloned().collect(),
         _ => BTreeSet::new(),
     };
@@ -642,7 +898,7 @@ fn record_response(call: &mut Call, content: &Value) {
 
 /// Turns ids in a path into `{name}` placeholders named after the segment
 /// before them: `/notices/42` becomes `/notices/{notice_id}`.
-fn template(path: &str) -> (String, Vec<String>) {
+pub(crate) fn template(path: &str) -> (String, Vec<String>) {
     let mut out = Vec::new();
     let mut params: Vec<String> = Vec::new();
     let mut previous = "";
@@ -703,7 +959,7 @@ fn singular(word: &str) -> String {
 
 /// `GET /api/v1/notices` is `list-notices`, `GET /notices/{id}` is
 /// `get-notice`, `POST /notices` is `create-notice`.
-fn action_name(method: &str, path: &str) -> String {
+pub(crate) fn action_name(method: &str, path: &str) -> String {
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     let ends_with_param = segments.last().is_some_and(|s| s.starts_with('{'));
     let resource = segments
@@ -732,7 +988,7 @@ fn is_prefix(segment: &str) -> bool {
             && segment[1..].chars().all(|c| c.is_ascii_digit()))
 }
 
-fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
+pub(crate) fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
     let name = if name.is_empty() { "action" } else { name };
     let mut candidate = name.to_owned();
     let mut n = 2;
@@ -744,7 +1000,7 @@ fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
 }
 
 /// `intranet.example.co.kr` becomes `intranet-example`.
-fn site_name(host: &str) -> String {
+pub(crate) fn site_name(host: &str) -> String {
     let labels: Vec<&str> = host
         .split('.')
         .filter(|l| !matches!(*l, "www" | "api" | "co" | "or" | "go" | "ac" | "ne"))

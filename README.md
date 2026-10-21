@@ -27,8 +27,8 @@ change.
 
 > Status: early, and used against real sites. The runtime, CLI, MCP server,
 > approvals (in a terminal or inside the agent app), audit log, drafting from
-> OpenAPI documents or browser recordings, API keys, browser sign-in and CSRF
-> preflight steps work today. Signed site packs are next. See
+> OpenAPI documents, browser recordings or fetched pages, API keys, browser
+> sign-in and CSRF preflight steps work today. Signed site packs are next. See
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Why
@@ -64,17 +64,31 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then turn a website you use into commands. In your browser's developer
-tools, open the Network tab, use the site as usual (sign in, search, post a
-form) and save the log as a HAR file:
+Then turn a website you use into commands. For pages you can open without
+signing in, give itda their addresses: tables and lists become records,
+search forms become reads, post forms become changes, and feeds come along:
 
 ```sh
-itda draft har board.har --name board --install   # shows what it found; never copies values
-itda login board --browser                          # sign in once in your own browser
+itda draft page https://example.com/board --install   # shows what it found on the page
+itda call example.get-board --page 2 --json
+itda check example                                     # does the page still match?
+```
+
+For a site behind a sign-in, record yourself using it. itda opens your own
+browser in a fresh window and watches what the pages ask the server for
+while you sign in, search and post a form; it never clicks or types:
+
+```sh
+itda record https://intranet.example/board --name board --install   # press Enter when done
+                                                    # then say yes to keep the session or token it used
 itda call board.list-notices --json                 # reads run right away
 itda call board.create-notice --title "Server maintenance"   # changes wait for your approval
 itda mcp install claude-desktop                     # or let your agent call them
 ```
+
+The recording stays in memory and only the shape of each call reaches the
+draft: no header, cookie or value you typed. A HAR file saved from the
+browser's developer tools works the same way with `itda draft har`.
 
 Public APIs need no recording. These ready-made sites from
 [sites/](sites/README.md) are built in and need no account:
@@ -94,6 +108,9 @@ prints where the data directory is, and
 [docs/SPEC.md](docs/SPEC.md) explains how to write one.
 
 ```sh
+itda draft page <url>... [--install]     # draft a site from the pages you use
+itda record <url> [--install]            # or from using it in your browser, behind a sign-in
+itda draft har <file> / openapi <file>   # or from a saved recording or an API description
 itda add spec.yaml / remove <site>       # install or remove a site (also a URL or github)
 itda ls                                  # installed sites and their actions
 itda call <site>.<action> --input value  # run one; --json for agents

@@ -194,3 +194,69 @@ fn a_header_token_is_read_from_the_page_meta_tag() {
         "{notes}"
     );
 }
+
+#[test]
+fn graphql_operations_become_one_action_each() {
+    let call = |name: &str, query: &str, variables: serde_json::Value, answer: &str| {
+        serde_json::json!({
+            "request": {"method": "POST", "url": "https://app.example/api/graphql", "headers": [
+                {"name": "Content-Type", "value": "application/json"}
+            ], "postData": {"mimeType": "application/json", "text": serde_json::json!({
+                "operationName": name, "query": query, "variables": variables
+            }).to_string()}},
+            "response": {"status": 200, "content": {"mimeType": "application/json", "text": answer}}
+        })
+    };
+    let har = serde_json::json!({"log": {"entries": [
+        call("exploreProjects", "query exploreProjects($first: Int, $search: String, $after: String, $filter: Filter) { projects(first: $first) { nodes { id } } }",
+             serde_json::json!({"first": 20, "search": "", "after": null, "filter": {"active": true}}),
+             "{\"data\": {\"projects\": {\"nodes\": []}}}"),
+        call("exploreProjects", "query exploreProjects($first: Int, $search: String, $after: String, $filter: Filter) { projects(first: $first) { nodes { id } } }",
+             serde_json::json!({"first": 40, "after": "abc", "filter": {"active": true}}),
+             "{\"data\": {\"projects\": {\"nodes\": []}}}"),
+        call("createIssue", "mutation createIssue($title: String!) { createIssue(title: $title) { id } }",
+             serde_json::json!({"title": "typed by a person"}),
+             "{\"data\": {\"createIssue\": {\"id\": 1}}}"),
+    ]}});
+    let draft = from_har(&serde_json::to_vec(&har).unwrap(), &Options::default()).unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    assert!(!draft.yaml.contains("typed by a person"));
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let names: Vec<&str> = spec.operations.iter().map(|o| o.name.as_str()).collect();
+    assert_eq!(names, ["create-issue", "explore-projects"]);
+
+    let explore = spec.op("explore-projects").unwrap();
+    assert_eq!(
+        itda_policy::operation_effect(explore, &std::collections::BTreeMap::new()),
+        itda_spec::Effect::Read
+    );
+    let body = explore.body.as_ref().unwrap();
+    assert!(
+        body.json["query"]
+            .default
+            .as_ref()
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .starts_with("query exploreProjects")
+    );
+    assert_eq!(body.json["first"].kind, "int");
+    assert!(body.json["first"].required);
+    assert!(!body.json["search"].required, "only one sample sent it");
+    assert!(!body.json.contains_key("filter"), "objects are not inputs");
+    let template = body.json_template.as_ref().unwrap();
+    assert_eq!(template["variables"]["first"], "{{first}}");
+    assert_eq!(template["operationName"], "{{operationName}}");
+    assert_eq!(
+        explore.response.as_ref().unwrap().required_pointers,
+        ["/data/projects"]
+    );
+    assert!(draft.notes.iter().any(|n| n.contains("filter")));
+
+    let create = spec.op("create-issue").unwrap();
+    assert_eq!(
+        itda_policy::operation_effect(create, &std::collections::BTreeMap::new()),
+        itda_spec::Effect::Write
+    );
+    assert!(create.body.as_ref().unwrap().json["title"].required);
+}

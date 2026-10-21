@@ -1417,6 +1417,7 @@ name = "itda-browser"
 version = "0.3.0"
 dependencies = [
  "axum",
+ "itda-prep",
  "itda-types",
  "serde",
  "serde_json",
@@ -1518,6 +1519,8 @@ dependencies = [
 name = "itda-prep"
 version = "0.3.0"
 dependencies = [
+ "graphql-parser",
+ "itda-html",
  "itda-policy",
  "itda-spec",
  "itda-types",

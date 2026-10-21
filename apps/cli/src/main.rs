@@ -5,6 +5,7 @@ mod check;
 mod install;
 mod login;
 mod output;
+mod record;
 mod sites;
 
 use clap::{Parser, Subcommand};
@@ -118,6 +119,32 @@ enum Command {
         #[command(subcommand)]
         source: DraftSource,
     },
+    /// Use a site in your own browser while itda records the requests, then
+    /// draft a site definition from them. Nothing is written to disk unless
+    /// --save asks for it
+    Record {
+        /// The page to open
+        url: String,
+        /// Site id; taken from the host name when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// Only calls under this address (default: the most used one)
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Keep only calls whose path contains this
+        #[arg(long)]
+        include: Option<String>,
+        /// Install the draft into the data directory instead of printing it
+        #[arg(long)]
+        install: bool,
+        /// Replace an installed definition with the same name
+        #[arg(long, requires = "install")]
+        force: bool,
+        /// Also save the recording as a HAR file. It holds your cookies and
+        /// tokens; delete it when you are done
+        #[arg(long)]
+        save: Option<PathBuf>,
+    },
     /// Show what agents did, newest last; --verify checks the log was not changed
     Audit {
         #[arg(long, default_value_t = 20)]
@@ -166,6 +193,28 @@ enum DraftSource {
         #[arg(long)]
         base_url: Option<String>,
         /// Keep only operations whose path, operationId or tag contains this
+        #[arg(long)]
+        include: Option<String>,
+        /// Install the draft into the data directory instead of printing it
+        #[arg(long)]
+        install: bool,
+        /// Replace an installed definition with the same name
+        #[arg(long, requires = "install")]
+        force: bool,
+    },
+    /// From pages you use: fetches each address and drafts actions from its
+    /// tables, lists, embedded data, forms and feeds
+    Page {
+        /// One or more page addresses on the same site
+        #[arg(required = true)]
+        urls: Vec<String>,
+        /// Site id; taken from the host name when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// The site's address; defaults to the first page's origin
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Keep only pages and forms whose path contains this
         #[arg(long)]
         include: Option<String>,
         /// Install the draft into the data directory instead of printing it
@@ -245,47 +294,84 @@ fn main() -> ExitCode {
         Command::Approvals { json } => block_on(approvals(&home, json)),
         Command::Approve { id } => block_on(approve(&home, &id)),
         Command::Reject { id } => block_on(reject(&home, &id)),
-        Command::Draft { source } => {
-            let (from, file, options, install, force): (Drafter, _, _, _, _) = match source {
-                DraftSource::Openapi {
-                    file,
+        Command::Draft { source } => match source {
+            DraftSource::Openapi {
+                file,
+                name,
+                base_url,
+                include,
+                install,
+                force,
+            } => draft(
+                &home,
+                itda_prep::from_openapi,
+                &file,
+                itda_prep::Options {
                     name,
                     base_url,
                     include,
-                    install,
-                    force,
-                } => (
-                    itda_prep::from_openapi,
-                    file,
-                    itda_prep::Options {
-                        name,
-                        base_url,
-                        include,
-                    },
-                    install,
-                    force,
-                ),
-                DraftSource::Har {
-                    file,
+                },
+                install,
+                force,
+            ),
+            DraftSource::Har {
+                file,
+                name,
+                base_url,
+                include,
+                install,
+                force,
+            } => draft(
+                &home,
+                draft_har,
+                &file,
+                itda_prep::Options {
                     name,
                     base_url,
                     include,
-                    install,
-                    force,
-                } => (
-                    itda_prep::from_har,
-                    file,
-                    itda_prep::Options {
-                        name,
-                        base_url,
-                        include,
-                    },
-                    install,
-                    force,
-                ),
-            };
-            draft(&home, from, &file, options, install, force)
-        }
+                },
+                install,
+                force,
+            ),
+            DraftSource::Page {
+                urls,
+                name,
+                base_url,
+                include,
+                install,
+                force,
+            } => block_on(draft_page(
+                &home,
+                &urls,
+                itda_prep::Options {
+                    name,
+                    base_url,
+                    include,
+                },
+                install,
+                force,
+            )),
+        },
+        Command::Record {
+            url,
+            name,
+            base_url,
+            include,
+            install,
+            force,
+            save,
+        } => block_on(record(
+            &home,
+            &url,
+            itda_prep::Options {
+                name,
+                base_url,
+                include,
+            },
+            install,
+            force,
+            save.as_deref(),
+        )),
         Command::Audit {
             limit,
             verify,
@@ -730,6 +816,12 @@ fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
 
 type Drafter = fn(&[u8], &itda_prep::Options) -> AppResult<itda_prep::Draft>;
 
+/// A saved recording holds the pages the person saw as well as the calls
+/// those pages made; both become actions.
+fn draft_har(text: &[u8], options: &itda_prep::Options) -> AppResult<itda_prep::Draft> {
+    itda_prep::from_recording(text, options, "`itda draft har`")
+}
+
 /// The draft goes to stdout (or the data directory); what to review goes to
 /// stderr, so `itda draft openapi api.json > spec.yaml` keeps them apart.
 fn draft(
@@ -741,7 +833,173 @@ fn draft(
     force: bool,
 ) -> AppResult<ExitCode> {
     let text = std::fs::read(file)?;
-    let draft = from(&text, &options)?;
+    publish(home, from(&text, &options)?, install, force)
+}
+
+/// Fetch each page with the honest client, then draft from what they show.
+/// A page that refuses or redirects to a sign-in is reported, never worked
+/// around; `itda record` covers sites that need an account.
+async fn draft_page(
+    home: &Path,
+    urls: &[String],
+    options: itda_prep::Options,
+    install: bool,
+    force: bool,
+) -> AppResult<ExitCode> {
+    const LIMIT: usize = 8 * 1024 * 1024;
+    let net = open(home)?.net;
+    let mut pages = Vec::new();
+    for url in urls {
+        let request = itda_net::Request {
+            limit: LIMIT,
+            ..itda_net::Request::read(url.as_str())
+        };
+        let response = net.fetch(request).await?;
+        if !response.successful() {
+            return Err(AppError::new(
+                itda_types::error::Code::Runtime,
+                format!("{url} answered HTTP {}", response.status),
+                "Open the address in a browser to check it. Pages behind a sign-in: record yourself using them with `itda record`.",
+            ));
+        }
+        let content_type = response.header("content-type").to_owned();
+        if !content_type.contains("html") {
+            return Err(usage(
+                format!("{url} is not an HTML page ({content_type})"),
+                "Pass the address of a page. For an API description, use `itda draft openapi`.",
+            ));
+        }
+        eprintln!(
+            "Fetched {} ({} KB).",
+            response.url,
+            response.bytes.len().div_ceil(1024)
+        );
+        pages.push(itda_prep::Page {
+            url: response.url.clone(),
+            html: String::from_utf8_lossy(&response.bytes).into_owned(),
+        });
+    }
+    publish(
+        home,
+        itda_prep::from_pages(&pages, &options)?,
+        install,
+        force,
+    )
+}
+
+/// Record the site in the person's own browser and draft from the recording,
+/// which stays in memory unless `save` names a file for it. With `--install`,
+/// the token or session the recording used can go straight to the keyring,
+/// each after a yes in the terminal.
+async fn record(
+    home: &Path,
+    url: &str,
+    options: itda_prep::Options,
+    install: bool,
+    force: bool,
+    save: Option<&Path>,
+) -> AppResult<ExitCode> {
+    let url = url.to_owned();
+    let recording = tokio::task::spawn_blocking(move || record::browser(&url))
+        .await
+        .map_err(|_| AppError::api("internal", 500))??;
+    let har = serde_json::to_vec(&recording.har)?;
+    if let Some(path) = save {
+        itda_types::util::atomic_file(path, &har)?;
+        eprintln!(
+            "Saved the recording at {}. It holds your cookies and tokens; delete it when you are done.",
+            path.display()
+        );
+    }
+    let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
+    let site = draft.site.clone();
+    let code = publish(home, draft, install, force)?;
+    if !install {
+        return Ok(code);
+    }
+    let spec = sites::load(home, &site)?;
+    let kept = keep_credentials(home, &spec, &recording.har, &recording.cookies).await?;
+    if !kept {
+        eprintln!(
+            "Sign in once with `itda login {site} --browser` if its actions need an account."
+        );
+    }
+    Ok(code)
+}
+
+/// Offer to keep what the recording signed in with: a header token for each
+/// header `auth` entry, and the browser session for a `browser` one. Values
+/// are never shown; nothing is kept without a yes in a terminal.
+async fn keep_credentials(
+    home: &Path,
+    spec: &itda_spec::Spec,
+    har: &Value,
+    cookies: &[itda_browser::Cookie],
+) -> AppResult<bool> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() || std::env::var("ITDA_SECRET_STORE").is_ok_and(|v| v == "env") {
+        return Ok(false);
+    }
+    let site = &spec.site.name;
+    let account = itda_runtime::DEFAULT_ACCOUNT;
+    let mut offers: Vec<(String, String, Secret)> = Vec::new();
+    for auth in &spec.auth {
+        match auth.kind.as_str() {
+            "header" => {
+                let Some(name) = auth.value_from.strip_prefix(&format!("store:{site}/")) else {
+                    continue;
+                };
+                if let Some(value) =
+                    record::header_value(har, &spec.site.base_url, &auth.header, &auth.prefix)
+                {
+                    offers.push((
+                        format!("the {} header the pages sent", auth.header),
+                        name.to_owned(),
+                        Secret::new(value),
+                    ));
+                }
+            }
+            "browser" if !cookies.is_empty() => offers.push((
+                format!("the browser session ({} cookies)", cookies.len()),
+                itda_runtime::SESSION_SECRET.to_owned(),
+                Secret::new(itda_browser::header(cookies)),
+            )),
+            _ => {}
+        }
+    }
+    if offers.is_empty() {
+        return Ok(false);
+    }
+    KeyringStore::available()?;
+    let parts = open(home)?;
+    let mut kept = false;
+    for (what, name, secret) in offers {
+        eprint!(
+            "Keep {what} as {site}/{account} in the system keyring? Agents only see the account id. [y/N] "
+        );
+        let mut answer = String::new();
+        stdin.lock().read_line(&mut answer)?;
+        if !matches!(answer.trim(), "y" | "Y" | "yes") {
+            continue;
+        }
+        parts.vault.add_account(site, account, "").await?;
+        parts.vault.set_secret(site, account, &name, secret).await?;
+        resume_scopes(home, &parts.net, site, Some(account)).await?;
+        eprintln!(
+            "Saved {name} for {site}/{account}. Tokens expire; record again or use `itda login {site}` when calls answer auth_required."
+        );
+        kept = true;
+    }
+    Ok(kept)
+}
+
+/// Print the draft, or install it, and list what to review on stderr.
+fn publish(
+    home: &Path,
+    draft: itda_prep::Draft,
+    install: bool,
+    force: bool,
+) -> AppResult<ExitCode> {
     for note in &draft.notes {
         eprintln!("note: {note}");
     }

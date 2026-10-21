@@ -81,6 +81,9 @@ real website, so consecutive calls take a moment.
 
 | Command | What it does |
 |---|---|
+| `itda draft page <url>… [--name id] [--base-url url] [--include text] [--install] [--force]` | Draft a site definition from the pages you use: tables, lists, embedded data, forms and feeds |
+| `itda record <url> [--name id] [--install] [--save file.har]` | Use a site in your own browser while itda records what its pages ask for, then draft a definition from that |
+| `itda draft openapi <file> [--install]` · `itda draft har <file> [--install]` | Draft one from an API description or a saved browser recording |
 | `itda add <file\|url\|name\|-> [--force]` | Install a site definition (a file, an https URL, stdin, or a ready-made site such as `github`) after showing where it sends requests and which actions change the site |
 | `itda remove <site>` | Remove an installed site definition; its accounts stay until `itda logout` |
 | `itda ls [site] [--json]` | Installed sites and their actions |
