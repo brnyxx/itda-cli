@@ -108,10 +108,27 @@ impl Parts {
     /// first source did not have, auth entries by name, and its notes.
     fn merge(&mut self, other: Parts) {
         let seen: std::collections::BTreeSet<_> = self.operations.iter().map(Self::key).collect();
-        for op in other.operations {
-            if !seen.contains(&Self::key(&op)) {
-                self.operations.push(op);
+        let mut names: std::collections::BTreeSet<String> = self
+            .operations
+            .iter()
+            .filter_map(|op| op.get("name").and_then(Yaml::as_str).map(str::to_owned))
+            .collect();
+        for mut op in other.operations {
+            if seen.contains(&Self::key(&op)) {
+                continue;
             }
+            // `GET /api/crates/serde` and the page `/crates/serde` both want
+            // `get-serde`; the second becomes `get-serde-2`.
+            let name = op
+                .get("name")
+                .and_then(Yaml::as_str)
+                .unwrap_or("action")
+                .to_owned();
+            let unique = har::unique(&mut names, &name);
+            if unique != name {
+                op.insert("name".into(), unique.into());
+            }
+            self.operations.push(op);
         }
         for strategy in other.auth {
             let name = strategy.get("name").and_then(Yaml::as_str);

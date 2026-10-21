@@ -226,27 +226,54 @@ pub(crate) fn har_parts(text: &[u8], options: &Options) -> AppResult<Parts> {
             .collect()
     };
     let recorded = located(&api_call);
-
-    let base = match &options.base_url {
-        Some(base) => url::Url::parse(base.trim_end_matches('/'))
-            .map_err(|_| usage("--base-url is not a URL", "Pass an address like https://example.com/api."))?,
-        // The site is where the person's pages came from, when those pages
-        // made calls there; telemetry sent elsewhere must not win by count.
-        // A recording of pages alone still names the site.
+    // The site is where the person's pages came from; when its API lives
+    // elsewhere (a search service, say), the busiest API address is tried
+    // next, and telemetry sent elsewhere never wins by count alone.
+    let candidates: Vec<url::Url> = match &options.base_url {
+        Some(base) => vec![url::Url::parse(base.trim_end_matches('/')).map_err(|_| {
+            usage(
+                "--base-url is not a URL",
+                "Pass an address like https://example.com/api.",
+            )
+        })?],
         None => {
             let pages = located(&html_page);
-            busiest_origin(&pages)
-                .filter(|site| recorded.iter().any(|(_, url)| url.origin() == site.origin()))
-                .or_else(|| busiest_origin(&recorded))
-                .or_else(|| busiest_origin(&pages))
+            let mut candidates = Vec::new();
+            for base in [busiest_origin(&pages), busiest_origin(&recorded)]
+                .into_iter()
+                .flatten()
+            {
+                if !candidates.contains(&base) {
+                    candidates.push(base);
+                }
+            }
+            candidates
         }
-        .ok_or_else(|| {
-                usage(
-                    "The recording has no calls",
-                    "Record again with the browser's network panel open while you use the site, then save it as HAR with content.",
-                )
-            })?,
     };
+    if candidates.is_empty() {
+        return Err(usage(
+            "The recording has no calls",
+            "Record again with the browser's network panel open while you use the site, then save it as HAR with content.",
+        ));
+    }
+    let mut first = None;
+    for base in candidates {
+        let parts = parts_at(entries, &recorded, &base, options)?;
+        if !parts.operations.is_empty() {
+            return Ok(parts);
+        }
+        first.get_or_insert(parts);
+    }
+    first.ok_or_else(no_operations)
+}
+
+/// The operations under one base address.
+fn parts_at(
+    entries: &[Value],
+    recorded: &[(&Value, url::Url)],
+    base: &url::Url,
+    options: &Options,
+) -> AppResult<Parts> {
     let origin = base.origin();
     let prefix = base.path().trim_end_matches('/').to_owned();
     let base_url = format!("{}{prefix}", origin.ascii_serialization());
@@ -255,7 +282,7 @@ pub(crate) fn har_parts(text: &[u8], options: &Options) -> AppResult<Parts> {
     let mut elsewhere = BTreeSet::new();
     let mut calls: BTreeMap<(String, String, String), Call> = BTreeMap::new();
     let mut cookies = false;
-    for (entry, url) in &recorded {
+    for (entry, url) in recorded {
         let Some(rest) = url
             .path()
             .strip_prefix(&prefix)

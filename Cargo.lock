@@ -1519,6 +1519,7 @@ dependencies = [
 name = "itda-prep"
 version = "0.3.0"
 dependencies = [
+ "graphql-parser",
  "itda-html",
  "itda-policy",
  "itda-spec",
