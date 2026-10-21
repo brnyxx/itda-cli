@@ -2,6 +2,7 @@
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
 mod check;
+mod feedback;
 mod install;
 mod login;
 mod output;
@@ -181,6 +182,13 @@ enum Command {
     },
     /// Check the data directory, the keyring and the installed sites
     Doctor,
+    /// Report a problem: print a link to a new GitHub issue with the version,
+    /// the platform and the doctor checks filled in, and open it. Sends nothing
+    Feedback {
+        /// Only print the link
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Run every read that needs no input and report whether the site still
     /// answers the way its definition says. Changes are never sent
     Check {
@@ -447,6 +455,7 @@ fn main() -> ExitCode {
             json,
         } => audit(&home, limit, verify, json),
         Command::Doctor => Ok(doctor(&home)),
+        Command::Feedback { no_open } => Ok(feedback(&home, no_open)),
         Command::Check {
             site,
             account,
@@ -1513,12 +1522,41 @@ fn tilde(path: &Path, home: &Path) -> String {
 }
 
 fn doctor(home: &Path) -> ExitCode {
-    let mut healthy = true;
-    let mut report = |ok: bool, what: &str, detail: String| {
-        healthy &= ok;
-        println!("{}  {what:<16} {detail}", if ok { "ok  " } else { "FAIL" });
-    };
     println!("itda {}", env!("CARGO_PKG_VERSION"));
+    let checks = doctor_checks(home);
+    for (ok, what, detail) in &checks {
+        println!("{}  {what:<16} {detail}", if *ok { "ok  " } else { "FAIL" });
+    }
+    if checks.iter().all(|(ok, _, _)| *ok) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// The issue link is printed first, so it is there even when nothing opens:
+/// without a terminal, or with --no-open.
+fn feedback(home: &Path, no_open: bool) -> ExitCode {
+    let url = feedback::issue_url(
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        &doctor_checks(home),
+    );
+    println!("{url}");
+    if !no_open && std::io::stdin().is_terminal() {
+        feedback::open(&url);
+    }
+    ExitCode::SUCCESS
+}
+
+/// Each doctor check: whether it passed, what it checked, and the detail
+/// people read. The detail can hold a path.
+fn doctor_checks(home: &Path) -> Vec<(bool, &'static str, String)> {
+    let mut checks = Vec::new();
+    let mut report = |ok: bool, what: &'static str, detail: String| {
+        checks.push((ok, what, detail));
+    };
     match Store::open(&home.join("itda.db")) {
         Ok(_) => report(true, "data directory", home.display().to_string()),
         Err(error) => report(false, "data directory", error.to_string()),
@@ -1576,11 +1614,7 @@ fn doctor(home: &Path) -> ExitCode {
         }
         .into(),
     );
-    if healthy {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
+    checks
 }
 
 #[cfg(test)]

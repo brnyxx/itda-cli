@@ -170,6 +170,43 @@ async fn doctor_reports_the_setup() {
     std::fs::remove_dir_all(home).ok();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn feedback_prints_an_issue_link_without_the_data_directory() {
+    let home = home();
+    let output = itda(&home, &["feedback", "--no-open"], &[]).await;
+    assert!(output.status.success(), "{output:?}");
+    let text = String::from_utf8_lossy(&output.stdout);
+    let link = text.trim();
+    assert!(
+        link.starts_with("https://github.com/brnyxx/itda-cli/issues/new?"),
+        "{link}"
+    );
+    let url = url::Url::parse(link).unwrap();
+    let params: std::collections::BTreeMap<String, String> =
+        url.query_pairs().into_owned().collect();
+    assert_eq!(
+        params["title"],
+        format!(
+            "itda {} on {}/{}: ",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        )
+    );
+    assert!(
+        params["body"].contains("data directory"),
+        "{}",
+        params["body"]
+    );
+    assert!(
+        !params["body"].contains(&home.display().to_string()),
+        "{}",
+        params["body"]
+    );
+    assert!(!params["body"].contains("itda-cli-"), "{}", params["body"]);
+    std::fs::remove_dir_all(home).ok();
+}
+
 #[test]
 fn the_sandbox_definition_is_valid() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sandbox/spec.yaml");
