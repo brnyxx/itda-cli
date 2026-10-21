@@ -7,6 +7,13 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+One address is enough: `itda setup` looks at a page, or watches you use the
+site in your own browser, names what agents will be able to do in plain words,
+tries every read, and connects an agent. Any website, not only the ones with an
+API description.
+
 ### Added
 
 - `itda setup <url>` sets a site up in one go: it looks at the page, or
@@ -151,7 +158,8 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/brnyxx/itda-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/brnyxx/itda-cli/releases/tag/v0.1.0
