@@ -1,9 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
-    <img src="assets/wordmark-light.svg" alt="itda" width="240">
-  </picture>
-</p>
+<p align="center"><img src="assets/hero.ko.png" alt="itda: 손이 작은 웹사이트 카드를 한 가닥 실을 따라 AI 에이전트에게 건넵니다. 내가 쓰는 웹사이트를 AI에게 넘겨주세요." width="100%"></p>
 
 <p align="center"><strong>내가 쓰는 웹사이트를 AI에게. 안전하게.</strong></p>
 

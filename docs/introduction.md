@@ -1,45 +1,55 @@
 # itda
 
-**Don't drive the browser. Compile the site.**
+**The websites you use, handed to your AI. Safely.**
 
-<img src="https://raw.githubusercontent.com/brnyxx/itda-cli/main/assets/hero.png" alt="itda drafts actions from a browser recording, reads freely, and waits for a person to approve a change" width="100%">
+Give itda one address. It learns what the site can do, tries it, and hands
+your AI agent a short list of actions in plain words. Reads just work.
+Nothing changes on the site until you say yes. It runs on your own computer,
+and it works on the old intranet behind a login too.
 
-itda turns a website into a small set of verified, typed actions that an AI
-agent can call from the command line or over MCP. It runs on your own machine,
-reads by default, and never changes anything on a site until you approve that
-exact change.
+<img src="https://raw.githubusercontent.com/brnyxx/itda-cli/main/assets/setup.gif" alt="itda setup on news.ycombinator.com: it finds a list of 30 records, a form and a feed, tries both reads, saves the site and adds itda to Claude Desktop, in fourteen seconds" width="100%">
 
 ```console
-$ itda call sandbox.list-notices --q 점검
-{
-  "items": [
-    {"author": "운영팀", "date": "2026-10-01", "id": 1, "title": "10월 정기 점검 안내"}
-  ],
-  "total": 1
-}
+$ itda setup https://news.ycombinator.com/
+1/5  Looking at news.ycombinator.com...
+    The page opens without signing in.
+    Found: a list of 30 records, a form, a feed.
+2/5  What agents will be able to do:
+    read   home         List what Hacker News shows  (inputs: p)
+    read   feed         Read the RSS feed
+3/5  Trying every read once...
+    ✓ home         30 records
+    ✓ feed         ok
+4/5  Saved as 'news-ycombinator'.
+5/5  Adding itda to Claude Desktop...
 ```
+
+Then ask your agent: *"use news-ycombinator to list what Hacker News shows"*.
+A site behind a sign-in opens in your own browser instead; you sign in and use
+it as usual while itda watches, and what you type never leaves your computer.
 
 ## Why
 
 Agents that drive a browser re-read every page, spend thousands of tokens on
-each screenshot or accessibility snapshot, follow whatever the page tells
-them, and break silently when a layout changes. itda moves that work to an
-install step. A site definition says which actions exist, what they send, what
-a correct answer looks like and whether they change anything. After that,
-every call is small, typed and checked.
+each screenshot, follow whatever the page tells them, and break silently when
+a layout changes. itda moves that work to a setup step. A site definition says
+which actions exist, what they send, what a correct answer looks like and
+whether they change anything. After that, every call is small, typed and
+checked.
 
-- **Verified.** A signed-out page or a redesigned site is an error
-  (`auth_required`, `response_mismatch`), never data.
+- **Checked.** A signed-out page or a redesigned site comes back as an error
+  with what to do next, never as data.
 - **Read-only by default.** Changes wait for a person to approve the exact
-  request in a terminal. No agent tool can approve.
+  request, in a terminal or in the agent app. No agent tool can approve.
 - **Honest.** itda says who it is, never imitates a browser, and stops when a
   site refuses it.
-- **Accountable.** Every call, approval and change goes into a hash-chained
-  audit log you can verify.
+- **Accountable.** Every call, approval and change goes into a local log
+  where each entry seals the one before it, so edits show.
 - **Local.** No server, account or telemetry. Secrets stay in your OS keyring.
 
 ## Where to go next
 
-- [Quick start](quickstart.md): install and try it on the bundled sandbox.
+- [Quick start](quickstart.md): install, set up a site you use, and try the
+  bundled sandbox.
 - [Use it from an agent](agents.md): connect Claude, Cursor, VS Code or Codex.
-- [Writing a site definition](SPEC.md): add your own site.
+- [Writing a site definition](SPEC.md): add your own site by hand.

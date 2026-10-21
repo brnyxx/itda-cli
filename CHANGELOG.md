@@ -60,6 +60,11 @@ change the definition format or the CLI.
 - The README and the landing page open with a recording of `itda setup` as
   it ran on Hacker News (`assets/setup.gif`, Korean in `assets/setup.ko.gif`,
   rebuilt from `assets/src/setup.*.tape` with vhs).
+- A new key visual, a hand passing a website card to an agent
+  (`assets/handoff.png`), on the README banners and the link preview
+  (`assets/hero.png`, `assets/hero.ko.png`, `assets/social.png`, rendered from
+  `assets/src/banner.html`), and the docs introduction says the same thing the
+  README does.
 
 ## [0.3.0] - 2026-10-20
 
