@@ -94,9 +94,12 @@ itda draft har session.har --base-url https://intranet.example.com/api
 itda draft har session.har --name board --install
 ```
 
-Either way, a recording holds real tokens, cookies and personal data, so the
-draft keeps only the shape of each call: method, path, input names and types,
-and the response fields every sample returned. Numbers and ids in paths become
+Either way, the pages you saw are drafted too, the way `itda draft page`
+does it, so a site that renders its lists and forms on the server gets
+actions even when its pages call no API. A recording holds real tokens,
+cookies and personal data, so the draft keeps only the shape of each call:
+method, path, input names and types, and the response fields every sample
+returned. Numbers and ids in paths become
 placeholders (`/notices/42` becomes `/notices/{notice_id}`). Inputs every
 sample sent are marked required. Token headers become `auth` entries whose
 values you add with `itda login`. Calls that sent a sign-in cookie (by name,
