@@ -7,6 +7,13 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+One address is enough: `itda setup` looks at a page, or watches you use the
+site in your own browser, names what agents will be able to do in plain words,
+tries every read, and connects an agent. Any website, not only the ones with an
+API description.
+
 ### Added
 
 - `itda setup <url>` sets a site up in one go: it looks at the page, or
@@ -60,6 +67,11 @@ change the definition format or the CLI.
 - The README and the landing page open with a recording of `itda setup` as
   it ran on Hacker News (`assets/setup.gif`, Korean in `assets/setup.ko.gif`,
   rebuilt from `assets/src/setup.*.tape` with vhs).
+- A new key visual, a hand passing a website card to an agent
+  (`assets/handoff.png`), on the README banners and the link preview
+  (`assets/hero.png`, `assets/hero.ko.png`, `assets/social.png`, rendered from
+  `assets/src/banner.html`), and the docs introduction says the same thing the
+  README does.
 
 ## [0.3.0] - 2026-10-20
 
@@ -146,7 +158,8 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/brnyxx/itda-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/brnyxx/itda-cli/releases/tag/v0.1.0

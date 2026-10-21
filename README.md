@@ -1,9 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
-    <img src="assets/wordmark-light.svg" alt="itda" width="240">
-  </picture>
-</p>
+<p align="center"><img src="assets/hero.png" alt="itda: a hand passes a small website card to an AI agent along one thread. The websites you use, handed to your AI." width="100%"></p>
 
 <p align="center"><strong>The websites you use, handed to your AI. Safely.</strong></p>
 
