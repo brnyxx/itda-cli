@@ -422,6 +422,8 @@ pub struct Recorder {
 
 enum Pending {
     Fetch(Fetch),
+    /// `Network.enable` on this session; open `url` there once it answers.
+    Navigate(String, String),
     Ignore,
 }
 
@@ -545,6 +547,11 @@ impl Recorder {
         if let Some(id) = reply["id"].as_u64() {
             match self.pending.remove(&id) {
                 Some(Pending::Fetch(fetch)) => self.capture.fetched(&fetch, reply.get("result")),
+                // Tracking is on only once the browser says so; a page that
+                // started loading before that would miss its first events.
+                Some(Pending::Navigate(session, url)) => {
+                    self.send_async(Some(&session), "Page.navigate", json!({"url": url}))?;
+                }
                 Some(Pending::Ignore) | None => {}
             }
             return Ok(());
@@ -564,18 +571,18 @@ impl Recorder {
                     Some("page" | "iframe" | "webview")
                 );
                 if page && !session.is_empty() && self.sessions.insert(session.clone()) {
-                    self.send_async(Some(&session), "Network.enable", json!({}))?;
-                    // Commands on one session run in order, so the page's
-                    // first request is already being watched. Only the empty
+                    let enabled = self.send_async(Some(&session), "Network.enable", json!({}))?;
+                    // The page is opened only once the browser confirms
+                    // tracking is on; sent together, a load could start
+                    // before its first events were reported. Only the empty
                     // tab is sent there; extensions open pages of their own.
                     let blank =
                         reply["params"]["targetInfo"]["url"].as_str() == Some("about:blank");
                     if blank && let Some(start) = self.start.take() {
-                        self.send_async(
-                            Some(&session),
-                            "Page.navigate",
-                            json!({"url": start.as_str()}),
-                        )?;
+                        self.pending.insert(
+                            enabled,
+                            Pending::Navigate(session.clone(), start.to_string()),
+                        );
                     }
                 }
             }
