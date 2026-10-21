@@ -7,6 +7,13 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `itda check` ends each site with a verdict and what to do: `ok`,
+  `signed_out`, `site_changed`, `blocked` or `unreachable`. The exit code
+  follows the worst verdict, and `--json` carries it as `verdict` and per
+  site under `sites`.
+
 ### Changed
 
 - `action_outcome_unknown` now says that itda never resends a change on its

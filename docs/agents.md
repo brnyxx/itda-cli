@@ -62,6 +62,26 @@ on its own, and an agent must not either. Check the site first; only a person
 decides whether to ask for the change again. Reads keep their ordinary codes
 (`timeout`, `request_failed`) and may be retried.
 
+## When something that worked stops working
+
+Run `itda check <site>` before retrying or re-drafting. It runs every read
+that needs no input, never sends a change, and ends each site with one
+verdict and what to do:
+
+| Verdict | Meaning | What to do |
+|---|---|---|
+| `ok` | every read still matches | retry the action; the failure was not the site |
+| `signed_out` | the account is no longer accepted | ask the user to run `itda login <site>` |
+| `site_changed` | a page or answer no longer matches its definition | ask the user to set the site up again (`itda setup <url>`) |
+| `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site and run `itda resume <site>` |
+| `unreachable` | the site did not answer | wait, then run `itda check` again |
+
+A site with several problems gets one verdict, in this order: `signed_out`,
+then `site_changed`, `blocked`, `unreachable`. The exit code follows the
+worst verdict across the sites checked: 10, 11, 12 or 30 as in the table
+below, or 0 for `ok`. `--json` adds `verdict`, one entry per
+site under `sites`, and every action under `results`.
+
 ## Shell agents
 
 Agents that only have a shell can call `itda call <site>.<action> --json` and
