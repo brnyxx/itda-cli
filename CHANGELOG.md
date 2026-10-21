@@ -20,7 +20,10 @@ change the definition format or the CLI.
   search form becomes a read, a post form becomes a change with its token
   read through a preflight step, page links become a `page` input, and RSS or
   Atom feeds come along. Every read gets a response check, so `itda check`
-  notices when a page changes.
+  notices when a page changes. Lists are found by their shape, not only by
+  known class names: any run of three or more siblings outside navigation
+  that each hold a link at the same place, with the title and link read
+  from that link's own path.
 - `itda draft har` also handles a token sent as a header, such as
   `X-CSRF-Token`: a preflight step reads it from the page's
   `<meta name="csrf-token">` tag before each call.

@@ -46,6 +46,7 @@ notices when the page changes:
 |---|---|
 | A table with a header row | `html.items` per row, one field per column named after its header, plus `link` |
 | A list of similar elements with a title and a link (cards, posts, `tr.athing`) | `html.items` with `title`, `link` and, when present, `id`, `summary`, `meta`, `published_at` |
+| Any run of three or more siblings of one shape, outside navigation, sidebars, headers and footers, each holding one link at the same place (`ol.stories > li.story`, `#articles > dt`, a `dl` per section) | The same, with the title and link read from that link's own path in the page |
 | Data embedded for its scripts (`__NEXT_DATA__`, `__NUXT_DATA__`, `__remixContext`, `__APOLLO_STATE__`, `ld+json`) | `ssr_json` with `required_pointers` |
 | Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
 | Links to `?page=2` on the same path | A `page` query input (`int`, default 1) |
