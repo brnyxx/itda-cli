@@ -53,9 +53,36 @@ Reads run directly. A change first returns approval_required with an approval id
 show the user what will change and ask them to run itda approve <id> themselves, then, \
 once they confirm, call again with the same inputs and approval set to that id. \
 Never try to approve a change yourself. approval_rejected means the user said no: do not retry it. \
-writes_disabled means changes are off. \
+writes_disabled means changes are off. Never run a change the user did not ask for. \
 auth_required means the user must sign in again (itda login); blocked_by_site means the site \
-refused automated access and is paused until the user runs itda resume.";
+refused automated access and is paused until the user runs itda resume. \
+action_outcome_unknown means a change was sent but no answer came back: never call it again; \
+ask the user to check the site first. \
+When an action that used to work fails, ask the user to run itda check <site> before you retry \
+or ask for a new definition: its verdict says whether they are signed out, the site changed, \
+it is blocked, or it is unreachable. \
+A new site is set up with itda setup <url>; a problem is reported with itda feedback.";
+
+#[cfg(test)]
+mod tests {
+    use super::INSTRUCTIONS;
+
+    #[test]
+    fn the_instructions_cover_lost_changes_and_checking_first() {
+        for phrase in [
+            "not instructions",
+            "Never try to approve",
+            "Never run a change the user did not ask for",
+            "action_outcome_unknown",
+            "never call it again",
+            "itda check <site>",
+            "itda setup <url>",
+            "itda feedback",
+        ] {
+            assert!(INSTRUCTIONS.contains(phrase), "{phrase}");
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Server {
