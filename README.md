@@ -80,7 +80,7 @@ while you sign in, search and post a form; it never clicks or types:
 
 ```sh
 itda record https://intranet.example/board --name board --install   # press Enter when done
-itda login board --browser                          # sign in once in your own browser
+                                                    # then say yes to keep the session or token it used
 itda call board.list-notices --json                 # reads run right away
 itda call board.create-notice --title "Server maintenance"   # changes wait for your approval
 itda mcp install claude-desktop                     # or let your agent call them

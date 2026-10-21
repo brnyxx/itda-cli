@@ -82,7 +82,12 @@ should: sign in, search, open an item, submit a form. Press Enter in the
 terminal, or close the window, when you are done. itda never clicks, types or
 navigates in that window; only the page you named is opened. The recording
 stays in memory unless `--save` writes it to a file, which then holds your
-cookies and tokens and should be deleted afterwards.
+cookies and tokens and should be deleted afterwards. With `--install`, itda
+then offers to keep what the recording signed in with, each after a yes in
+the terminal: the token a drafted header `auth` entry refers to, and the
+browser session for a `browser` one. They go to the system keyring under
+`<site>/default`, never on screen, so `itda login` is not needed until a
+token expires.
 
 A recording saved from the browser's developer tools works the same way:
 open the Network tab, use the site, save it with "Save all as HAR" (Chrome,

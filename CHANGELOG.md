@@ -14,6 +14,9 @@ change the definition format or the CLI.
   definition the same way `itda draft har` does. The recording stays in
   memory; `--save` keeps it as a HAR file. itda never clicks, types or
   navigates in the window. `ITDA_DEBUG_CDP=1` prints the browser messages.
+- `itda record --install` offers to keep the token and the browser session
+  the recording signed in with, each after a yes in the terminal, so a site
+  that sends a bearer token from its scripts works without pasting it.
 - A recorded GraphQL call becomes one action per operation (`exploreProjects`
   is `explore-projects`): queries are reads, mutations are changes, and the
   variables are the typed inputs, rendered through a `json_template`.

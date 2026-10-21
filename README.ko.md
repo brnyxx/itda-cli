@@ -80,7 +80,7 @@ itda check example                                     # 페이지가 아직 정
 
 ```sh
 itda record https://intranet.example/board --name board --install   # 끝나면 Enter
-itda login board --browser                          # 내 브라우저로 한 번 로그인
+                                                    # 녹화에 쓴 세션/토큰을 보관할지 물어봄, y면 끝
 itda call board.list-notices --json                 # 읽기는 바로 실행
 itda call board.create-notice --title "서버 점검 안내"   # 변경은 내 승인을 기다림
 itda mcp install claude-desktop                     # 에이전트가 호출하게 연결
