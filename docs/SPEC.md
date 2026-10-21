@@ -68,10 +68,24 @@ Most internal and older sites publish no API description, but their pages
 still call one. Record yourself using the site and let itda draft from the
 recording:
 
-1. Open the browser's developer tools on the Network tab.
-2. Use the site the way an agent should: search, open an item, submit a form.
-3. Save the recording with "Save all as HAR" (Chrome, Edge) or "Save All As
-   HAR" (Firefox).
+```sh
+itda record https://intranet.example.com/board                  # print the draft
+itda record https://intranet.example.com/board --name board --install
+itda record https://intranet.example.com/board --save session.har   # keep the recording too
+```
+
+itda opens Chrome, Edge or Chromium (or `ITDA_BROWSER`) in a fresh, empty
+profile at that page and watches, through the browser's own DevTools
+protocol, what every page asks the server for. Use the site the way an agent
+should: sign in, search, open an item, submit a form. Press Enter in the
+terminal, or close the window, when you are done. itda never clicks, types or
+navigates in that window; only the page you named is opened. The recording
+stays in memory unless `--save` writes it to a file, which then holds your
+cookies and tokens and should be deleted afterwards.
+
+A recording saved from the browser's developer tools works the same way:
+open the Network tab, use the site, save it with "Save all as HAR" (Chrome,
+Edge) or "Save All As HAR" (Firefox), and draft from the file:
 
 ```sh
 itda draft har session.har > spec.yaml                  # print the draft
@@ -79,9 +93,9 @@ itda draft har session.har --base-url https://intranet.example.com/api
 itda draft har session.har --name board --install
 ```
 
-A recording holds real tokens, cookies and personal data, so the draft keeps
-only the shape of each call: method, path, input names and types, and the
-response fields every sample returned. Numbers and ids in paths become
+Either way, a recording holds real tokens, cookies and personal data, so the
+draft keeps only the shape of each call: method, path, input names and types,
+and the response fields every sample returned. Numbers and ids in paths become
 placeholders (`/notices/42` becomes `/notices/{notice_id}`). Inputs every
 sample sent are marked required. Token headers become `auth` entries whose
 values you add with `itda login`. Calls that sent a sign-in cookie (by name,

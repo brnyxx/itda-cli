@@ -9,6 +9,11 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda record <url>` opens your own browser in a fresh window and records
+  what the pages ask the server for while you use the site, then drafts a
+  definition the same way `itda draft har` does. The recording stays in
+  memory; `--save` keeps it as a HAR file. itda never clicks, types or
+  navigates in the window. `ITDA_DEBUG_CDP=1` prints the browser messages.
 - `itda draft page <url>...` drafts a site definition from the pages you
   use, fetched with the honest client: a table or a list of records becomes
   `html` fields, data a page embeds for its scripts becomes `ssr_json`, a

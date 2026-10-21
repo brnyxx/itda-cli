@@ -17,6 +17,7 @@ rules are fixed. Pull requests that weaken them are declined.
 | Changes need a single-use approval bound to the exact inputs. Reads are the default. | `itda-policy` classification and `Approvals`, `itda-runtime` |
 | A change is sent once: no automatic retries or redirects. | `itda-runtime` write path |
 | Every call, approval and change is recorded in a hash-chained log on the user's device. | `itda-runtime` `audit` |
+| The browser window itda opens for sign-in or recording is the person's own: itda opens the page they named, watches, and never clicks, types or navigates. | `itda-browser` `SignIn`, `Recorder` |
 
 ## What itda will not do
 

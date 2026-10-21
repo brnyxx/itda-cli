@@ -74,17 +74,21 @@ itda call example.get-board --page 2 --json
 itda check example                                     # does the page still match?
 ```
 
-For a site behind a sign-in, record yourself using it. In your browser's
-developer tools, open the Network tab, use the site as usual (sign in,
-search, post a form) and save the log as a HAR file:
+For a site behind a sign-in, record yourself using it. itda opens your own
+browser in a fresh window and watches what the pages ask the server for
+while you sign in, search and post a form; it never clicks or types:
 
 ```sh
-itda draft har board.har --name board --install   # shows what it found; never copies values
+itda record https://intranet.example/board --name board --install   # press Enter when done
 itda login board --browser                          # sign in once in your own browser
 itda call board.list-notices --json                 # reads run right away
 itda call board.create-notice --title "Server maintenance"   # changes wait for your approval
 itda mcp install claude-desktop                     # or let your agent call them
 ```
+
+The recording stays in memory and only the shape of each call reaches the
+draft: no header, cookie or value you typed. A HAR file saved from the
+browser's developer tools works the same way with `itda draft har`.
 
 Public APIs need no recording. These ready-made sites from
 [sites/](sites/README.md) are built in and need no account:
@@ -105,7 +109,8 @@ prints where the data directory is, and
 
 ```sh
 itda draft page <url>... [--install]     # draft a site from the pages you use
-itda draft har <file> / openapi <file>   # or from a recording or an API description
+itda record <url> [--install]            # or from using it in your browser, behind a sign-in
+itda draft har <file> / openapi <file>   # or from a saved recording or an API description
 itda add spec.yaml / remove <site>       # install or remove a site (also a URL or github)
 itda ls                                  # installed sites and their actions
 itda call <site>.<action> --input value  # run one; --json for agents

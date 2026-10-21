@@ -74,17 +74,21 @@ itda call example.get-board --page 2 --json
 itda check example                                     # 페이지가 아직 정의와 맞는가?
 ```
 
-로그인이 필요한 사이트는 쓰는 모습을 녹화합니다. 브라우저 개발자 도구의
-Network 탭을 열고 평소처럼 사이트를 쓴 뒤(로그인, 검색, 폼 전송) 기록을 HAR
-파일로 저장합니다.
+로그인이 필요한 사이트는 쓰는 모습을 녹화합니다. itda가 내 브라우저를 새
+창으로 열고, 내가 로그인하고 검색하고 글을 올리는 동안 페이지가 서버에
+요청하는 것만 지켜봅니다. 클릭이나 입력은 절대 하지 않습니다.
 
 ```sh
-itda draft har board.har --name board --install   # 찾은 내용을 보여줌, 값은 절대 복사 안 함
+itda record https://intranet.example/board --name board --install   # 끝나면 Enter
 itda login board --browser                          # 내 브라우저로 한 번 로그인
 itda call board.list-notices --json                 # 읽기는 바로 실행
 itda call board.create-notice --title "서버 점검 안내"   # 변경은 내 승인을 기다림
 itda mcp install claude-desktop                     # 에이전트가 호출하게 연결
 ```
+
+녹화는 메모리에만 있고, 초안에는 호출의 모양만 들어갑니다. 헤더, 쿠키, 내가
+입력한 값은 들어가지 않습니다. 브라우저 개발자 도구에서 저장한 HAR 파일도
+`itda draft har`로 똑같이 됩니다.
 
 공개 API는 녹화가 필요 없습니다. [sites/](sites/README.md)의 기본 사이트는
 itda에 들어 있고 계정도 필요 없습니다.
@@ -104,7 +108,8 @@ itda call github.repo --owner rust-lang --repo rust
 
 ```sh
 itda draft page <url>... [--install]     # 내가 쓰는 페이지로 사이트 초안 만들기
-itda draft har <file> / openapi <file>   # 또는 녹화나 API 설명서로
+itda record <url> [--install]            # 또는 로그인이 필요한 사이트를 브라우저로 써서
+itda draft har <file> / openapi <file>   # 또는 저장한 녹화나 API 설명서로
 itda add spec.yaml / remove <site>       # 사이트 설치·삭제 (URL이나 github 같은 이름도 가능)
 itda ls                                  # 설치된 사이트와 액션
 itda call <site>.<action> --input value  # 하나 실행, 에이전트용은 --json

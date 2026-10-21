@@ -18,7 +18,7 @@ Each crate depends only on crates in a lower layer. Cargo rejects cycles;
 | 3 | `itda-policy` | Read/write classification, definition safety checks, single-use approvals | SQLite |
 | 4 | `itda-net` | Bounded HTTP, pacing and budgets, block detection and pauses, private-address guard | network, SQLite |
 | 5 | `itda-vault` | Accounts and secrets: OS keyring, environment variables, or memory | keyring, SQLite |
-| 6 | `itda-browser` | Opens the user's own browser in a fresh profile for sign-in, and reads its cookies over DevTools | browser |
+| 6 | `itda-browser` | Opens the user's own browser in a fresh profile: for sign-in, reading its cookies over DevTools; for `itda record`, watching the requests its pages make | browser |
 | 7 | `itda-runtime` | Runs an action end to end; approvals for changes; audit log | files |
 | 8 | `itda-prep` | Drafts definitions from OpenAPI documents, recordings and fetched pages; no I/O, the CLI fetches | none |
 | 9 | `itda-mcp` | MCP server over stdio | stdio |
