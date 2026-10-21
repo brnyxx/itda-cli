@@ -294,8 +294,11 @@ enum McpCommand {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
-    let command = match cli.command.map(First::Run).or_else(welcome) {
+    let first = match shortcut(std::env::args_os().collect()) {
+        Shortcut::Args(args) => Cli::parse_from(args).command.map(First::Run),
+        Shortcut::Bundled(name) => Some(First::Bundled(name)),
+    };
+    let command = match first.or_else(welcome) {
         Some(First::Run(command)) => command,
         Some(First::Bundled(name)) => {
             return match home().and_then(|home| {
@@ -484,6 +487,43 @@ fn main() -> ExitCode {
         Ok(code) => code,
         Err(error) => output::fail(&error, as_json),
     }
+}
+
+/// `itda <address>` is `itda setup <address>`, and `itda github` adds the
+/// ready-made site, so the one line people read is the one line they type.
+enum Shortcut {
+    Args(Vec<std::ffi::OsString>),
+    Bundled(String),
+}
+
+fn shortcut(args: Vec<std::ffi::OsString>) -> Shortcut {
+    let Some(first) = args.get(1).and_then(|a| a.to_str()) else {
+        return Shortcut::Args(args);
+    };
+    let known = first.starts_with('-')
+        || first == "help"
+        || Cli::command()
+            .get_subcommands()
+            .any(|c| c.get_name() == first || c.get_all_aliases().any(|a| a == first));
+    if known {
+        return Shortcut::Args(args);
+    }
+    if args.len() == 2 && sites::bundled(first).is_some() {
+        return Shortcut::Bundled(first.to_owned());
+    }
+    let address = first.contains("://") || first.contains('.') || first.starts_with("localhost");
+    if !address {
+        return Shortcut::Args(args);
+    }
+    let url = if first.contains("://") {
+        first.to_owned()
+    } else {
+        format!("https://{first}")
+    };
+    let mut out = args.clone();
+    out[1] = url.into();
+    out.insert(1, "setup".into());
+    Shortcut::Args(out)
 }
 
 /// What a bare `itda` turns into.
@@ -1619,8 +1659,41 @@ fn doctor_checks(home: &Path) -> Vec<(bool, &'static str, String)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, First, first_command, tilde};
+    use super::{Command, First, Shortcut, first_command, shortcut, tilde};
     use std::path::Path;
+
+    fn argv(parts: &[&str]) -> Vec<std::ffi::OsString> {
+        parts.iter().map(|p| (*p).into()).collect()
+    }
+
+    #[test]
+    fn an_address_after_itda_runs_setup_on_it() {
+        match shortcut(argv(&["itda", "news.ycombinator.com", "--yes"])) {
+            Shortcut::Args(args) => assert_eq!(
+                args,
+                argv(&["itda", "setup", "https://news.ycombinator.com", "--yes"])
+            ),
+            Shortcut::Bundled(_) => panic!("an address is not a ready-made site"),
+        }
+        match shortcut(argv(&["itda", "http://intranet.local/board"])) {
+            Shortcut::Args(args) => assert_eq!(args[2], "http://intranet.local/board"),
+            Shortcut::Bundled(_) => panic!(),
+        }
+        for same in [
+            &["itda", "ls"][..],
+            &["itda", "--help"],
+            &["itda"],
+            &["itda", "setup", "x.y"],
+        ] {
+            match shortcut(argv(same)) {
+                Shortcut::Args(args) => assert_eq!(args, argv(same)),
+                Shortcut::Bundled(_) => panic!("{same:?}"),
+            }
+        }
+        assert!(
+            matches!(shortcut(argv(&["itda", "github"])), Shortcut::Bundled(n) if n == "github")
+        );
+    }
 
     #[test]
     fn the_first_prompt_takes_an_address_or_a_ready_made_site() {
