@@ -490,6 +490,17 @@ async fn check_runs_reads_that_need_no_input_and_reports_each() {
     assert_eq!(status("list-items"), "ok");
     assert_eq!(status("create-item"), "skipped");
     assert_eq!(status("me"), "auth_required");
+    assert_eq!(report["verdict"], "signed_out");
+    assert_eq!(report["sites"][0]["site"], "fixture");
+    assert_eq!(report["sites"][0]["verdict"], "signed_out");
+
+    let human = itda(&home, &["check", "fixture"], &[]).await;
+    assert_eq!(human.status.code(), Some(10));
+    let text = String::from_utf8_lossy(&human.stdout);
+    assert!(
+        text.contains("verdict  signed_out: sign in again with itda login fixture"),
+        "{text}"
+    );
 
     let signed_in = itda(
         &home,
@@ -499,7 +510,67 @@ async fn check_runs_reads_that_need_no_input_and_reports_each() {
     .await;
     assert_eq!(signed_in.status.code(), Some(0));
     let text = String::from_utf8_lossy(&signed_in.stdout);
+    assert!(
+        text.contains("verdict  ok: every read still matches"),
+        "{text}"
+    );
     assert!(text.contains("2 ok, 0 failed, 1 skipped."), "{text}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn check_gives_each_site_a_verdict_and_a_changed_site_exits_11() {
+    let home = home();
+    let base = serve().await;
+    install(&home, &base);
+    let dir = home.join("specs/changed");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.yaml"),
+        format!(
+            "spec_version: 1
+site:
+  name: changed
+  base_url: {base}
+operations:
+  - name: profile
+    method: GET
+    path: /me
+    effect: read
+    evidence: doc
+    response: {{format: json, required_pointers: [/name]}}
+"
+        ),
+    )
+    .unwrap();
+
+    let alone = itda(&home, &["check", "changed", "--json"], &[]).await;
+    assert_eq!(alone.status.code(), Some(11));
+    let report = stdout_json(&alone);
+    assert_eq!(report["verdict"], "site_changed");
+    assert_eq!(report["sites"][0]["verdict"], "site_changed");
+    assert_eq!(report["results"][0]["status"], "response_mismatch");
+
+    let human = itda(&home, &["check", "changed"], &[]).await;
+    let text = String::from_utf8_lossy(&human.stdout);
+    assert!(text.contains("verdict  site_changed: "), "{text}");
+
+    // A signed-out account outranks a changed site when both are checked.
+    let both = itda(&home, &["check", "--json"], &[]).await;
+    assert_eq!(both.status.code(), Some(10));
+    let report = stdout_json(&both);
+    assert_eq!(report["verdict"], "signed_out");
+    let verdict = |site: &str| {
+        report["sites"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["site"] == site)
+            .unwrap()["verdict"]
+            .clone()
+    };
+    assert_eq!(verdict("fixture"), "signed_out");
+    assert_eq!(verdict("changed"), "site_changed");
     std::fs::remove_dir_all(home).ok();
 }
 

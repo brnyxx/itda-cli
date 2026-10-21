@@ -756,11 +756,17 @@ async fn check(
             .collect(),
     };
     let outcomes = check::run(&open(home)?.runtime(), &specs, account).await;
-    let worst = check::worst(&outcomes);
+    let verdicts = check::verdicts(&outcomes);
+    let status = check::exit_status(&outcomes);
     if as_json {
         println!(
             "{}",
-            json!({"status": worst.unwrap_or("ok"), "results": outcomes})
+            json!({
+                "status": status,
+                "verdict": check::Verdict::of(&outcomes),
+                "sites": verdicts,
+                "results": outcomes,
+            })
         );
     } else {
         let width = outcomes
@@ -768,17 +774,20 @@ async fn check(
             .map(|o| o.site.len() + o.action.len() + 1)
             .max()
             .unwrap_or(0);
-        for o in &outcomes {
-            let time = o
-                .duration_ms
-                .map(|ms| format!(" {ms} ms"))
-                .unwrap_or_default();
-            println!(
-                "{:<width$}  {:<18} {}{time}",
-                format!("{}.{}", o.site, o.action),
-                o.status,
-                o.detail
-            );
+        for site in &verdicts {
+            for o in outcomes.iter().filter(|o| o.site == site.site) {
+                let time = o
+                    .duration_ms
+                    .map(|ms| format!(" {ms} ms"))
+                    .unwrap_or_default();
+                println!(
+                    "{:<width$}  {:<18} {}{time}",
+                    format!("{}.{}", o.site, o.action),
+                    o.status,
+                    o.detail
+                );
+            }
+            println!("verdict  {}: {}", site.verdict.as_str(), site.hint);
         }
         let count = |status: &str| outcomes.iter().filter(|o| o.status == status).count();
         let failed = outcomes.iter().filter(|o| o.failed()).count();
@@ -788,7 +797,7 @@ async fn check(
             count("skipped")
         );
     }
-    Ok(ExitCode::from(worst.map_or(0, output::exit_code)))
+    Ok(ExitCode::from(output::exit_code(status)))
 }
 
 async fn login(
