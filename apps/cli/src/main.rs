@@ -287,9 +287,22 @@ enum McpCommand {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let Some(command) = cli.command.or_else(welcome) else {
-        Cli::command().print_help().ok();
-        return ExitCode::SUCCESS;
+    let command = match cli.command.map(First::Run).or_else(welcome) {
+        Some(First::Run(command)) => command,
+        Some(First::Bundled(name)) => {
+            return match home().and_then(|home| {
+                block_on(add(&home, &name, false))?;
+                setup::connect_detected()?;
+                Ok(ExitCode::SUCCESS)
+            }) {
+                Ok(code) => code,
+                Err(error) => output::fail(&error, false),
+            };
+        }
+        None => {
+            Cli::command().print_help().ok();
+            return ExitCode::SUCCESS;
+        }
     };
     let as_json = matches!(&command, Command::Ls { json: true, .. })
         || matches!(&command, Command::Approvals { json: true })
@@ -464,9 +477,16 @@ fn main() -> ExitCode {
     }
 }
 
+/// What a bare `itda` turns into.
+enum First {
+    Run(Command),
+    /// A ready-made site's name was typed: add it, then connect the agents.
+    Bundled(String),
+}
+
 /// A bare `itda` in a terminal: say what it is and ask for one address.
 /// `None` when nothing was typed, so the command list shows instead.
-fn welcome() -> Option<Command> {
+fn welcome() -> Option<First> {
     let stdin = std::io::stdin();
     if !stdin.is_terminal() {
         return None;
@@ -476,23 +496,30 @@ fn welcome() -> Option<Command> {
     std::io::stderr().flush().ok();
     let mut line = String::new();
     stdin.lock().read_line(&mut line).ok()?;
-    let url = line.trim();
-    if url.is_empty() {
+    first_command(&line)
+}
+
+fn first_command(typed: &str) -> Option<First> {
+    let typed = typed.trim();
+    if typed.is_empty() {
         return None;
     }
-    let url = if url.contains("://") {
-        url.to_owned()
+    if sites::bundled(typed).is_some() {
+        return Some(First::Bundled(typed.to_owned()));
+    }
+    let url = if typed.contains("://") {
+        typed.to_owned()
     } else {
-        format!("https://{url}")
+        format!("https://{typed}")
     };
-    Some(Command::Setup {
+    Some(First::Run(Command::Setup {
         url,
         name: None,
         record: false,
         no_record: false,
         client: None,
         yes: false,
-    })
+    }))
 }
 
 fn home() -> AppResult<PathBuf> {
@@ -1363,7 +1390,22 @@ fn mcp_install(client: &str, dry_run: bool, approve_in_client: bool) -> AppResul
     };
     match install::plan(client, &user_home, &std::env::current_dir()?, &launch)? {
         install::Plan::Run(command) => {
-            println!("{client} keeps its own configuration. Run:\n\n  {command}");
+            let label = text::client_label(client);
+            if !dry_run && std::io::stdin().is_terminal() && client_binary(client) {
+                println!("{}", text::tf("running", &[("command", &command)]));
+                let status = shell(&command)?;
+                if !status.success() {
+                    return Err(usage(
+                        format!("{label} did not accept the command"),
+                        format!("Run it yourself:\n\n  {command}"),
+                    ));
+                }
+            } else {
+                println!(
+                    "{}\n\n  {command}",
+                    text::tf("run_yourself", &[("client", label)])
+                );
+            }
         }
         install::Plan::Write { path, content } if dry_run => {
             println!("Would write {}:\n\n{content}", path.display());
@@ -1380,9 +1422,78 @@ fn mcp_install(client: &str, dry_run: bool, approve_in_client: bool) -> AppResul
                 "already_client"
             };
             println!("{}", text::tf(key, &fields));
+            let handled = client == "claude-desktop" && relaunch_claude_desktop()?;
+            if !handled {
+                println!("{}", text::tf("restart_hint", &[("client", fields[0].1)]));
+            }
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// On macOS, where the app can be told to quit and reopened: restart Claude
+/// Desktop after a yes when it is open, or say that opening it is enough.
+/// `false` when nothing was said, so the caller gives the restart hint.
+fn relaunch_claude_desktop() -> AppResult<bool> {
+    if !cfg!(target_os = "macos") || !std::io::stdin().is_terminal() {
+        return Ok(false);
+    }
+    let label = text::client_label("claude-desktop");
+    let open = std::process::Command::new("pgrep")
+        .args(["-x", "Claude"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !open {
+        println!("{}", text::tf("open_app", &[("client", label)]));
+        return Ok(true);
+    }
+    if !setup::ask(&text::tf("restart_ask", &[("client", label)]), true)? {
+        return Ok(false);
+    }
+    std::process::Command::new("osascript")
+        .args(["-e", "tell application \"Claude\" to quit"])
+        .status()?;
+    for _ in 0..50 {
+        let still = std::process::Command::new("pgrep")
+            .args(["-x", "Claude"])
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !still {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    std::process::Command::new("open")
+        .args(["-a", "Claude"])
+        .status()?;
+    println!("{}", text::tf("restarted", &[("client", label)]));
+    Ok(true)
+}
+
+/// Whether the client's own command-line tool is on the PATH.
+fn client_binary(client: &str) -> bool {
+    let name = match client {
+        "claude-code" => "claude",
+        _ => return false,
+    };
+    let exe = if cfg!(windows) { "where" } else { "which" };
+    std::process::Command::new(exe)
+        .arg(name)
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+fn shell(command: &str) -> AppResult<std::process::ExitStatus> {
+    let status = if cfg!(windows) {
+        std::process::Command::new("cmd")
+            .args(["/C", command])
+            .status()?
+    } else {
+        std::process::Command::new("sh")
+            .args(["-c", command])
+            .status()?
+    };
+    Ok(status)
 }
 
 fn tilde(path: &Path, home: &Path) -> String {
@@ -1428,6 +1539,24 @@ fn doctor(home: &Path) -> ExitCode {
         "sites",
         format!("{} installed, {invalid} invalid", installed.len()),
     );
+    let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let agents = install::connected(&user_home, &cwd);
+    report(
+        true,
+        "agents",
+        if agents.is_empty() {
+            "none connected (itda setup <url>, or itda mcp install <client>)".into()
+        } else {
+            agents
+                .iter()
+                .map(|c| text::client_label(c))
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+    );
     report(
         true,
         "local addresses",
@@ -1447,8 +1576,26 @@ fn doctor(home: &Path) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::tilde;
+    use super::{Command, First, first_command, tilde};
     use std::path::Path;
+
+    #[test]
+    fn the_first_prompt_takes_an_address_or_a_ready_made_site() {
+        assert!(first_command("  \n").is_none());
+        assert!(matches!(first_command("github\n"), Some(First::Bundled(n)) if n == "github"));
+        match first_command("news.ycombinator.com\n") {
+            Some(First::Run(Command::Setup { url, .. })) => {
+                assert_eq!(url, "https://news.ycombinator.com");
+            }
+            _ => panic!("an address starts setup"),
+        }
+        match first_command("http://intranet.local/board") {
+            Some(First::Run(Command::Setup { url, .. })) => {
+                assert_eq!(url, "http://intranet.local/board");
+            }
+            _ => panic!("a full address is kept"),
+        }
+    }
 
     #[test]
     fn shortens_the_home_directory_to_a_tilde() {

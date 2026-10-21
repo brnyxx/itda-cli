@@ -80,6 +80,21 @@ pub fn detected(user_home: &Path, cwd: &Path) -> Vec<&'static str> {
     CLIENTS.iter().copied().filter(|c| present(c)).collect()
 }
 
+/// The clients whose configuration already starts itda.
+pub fn connected(user_home: &Path, cwd: &Path) -> Vec<&'static str> {
+    let has_itda =
+        |path: PathBuf| std::fs::read_to_string(path).is_ok_and(|text| text.contains("itda"));
+    let present = |client: &str| match client {
+        "claude-desktop" => has_itda(claude_desktop_config(user_home)),
+        "claude-code" => has_itda(user_home.join(".claude.json")),
+        "cursor" => has_itda(user_home.join(".cursor/mcp.json")),
+        "vscode" => has_itda(cwd.join(".vscode/mcp.json")),
+        "codex" => has_itda(user_home.join(".codex/config.toml")),
+        _ => false,
+    };
+    CLIENTS.iter().copied().filter(|c| present(c)).collect()
+}
+
 fn claude_desktop_config(user_home: &Path) -> PathBuf {
     if cfg!(target_os = "macos") {
         user_home.join("Library/Application Support/Claude/claude_desktop_config.json")
@@ -215,6 +230,19 @@ mod tests {
         std::fs::create_dir_all(home.join(".codex")).unwrap();
         std::fs::create_dir_all(home.join(".vscode")).unwrap();
         assert_eq!(detected(&home, &home), ["cursor", "vscode", "codex"]);
+        std::fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn reports_the_clients_that_already_start_itda() {
+        let home = dir();
+        std::fs::create_dir_all(home.join(".cursor")).unwrap();
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), "[mcp_servers.other]\n").unwrap();
+        assert!(connected(&home, &home).is_empty());
+        let (path, content) = write_plan(plan("cursor", &home, &home, &launch()).unwrap());
+        apply(&path, &content).unwrap();
+        assert_eq!(connected(&home, &home), ["cursor"]);
         std::fs::remove_dir_all(home).ok();
     }
 

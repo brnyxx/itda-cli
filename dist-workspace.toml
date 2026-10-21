@@ -15,5 +15,7 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
+# What the shell and PowerShell installers say at the end
+install-success-msg = "itda is installed. Open a new terminal window and type: itda"
 # Start releases from the Actions tab; the workflow creates the tag
 dispatch-releases = true
