@@ -5,6 +5,7 @@ mod check;
 mod install;
 mod login;
 mod output;
+mod record;
 mod sites;
 
 use clap::{Parser, Subcommand};
@@ -117,6 +118,32 @@ enum Command {
     Draft {
         #[command(subcommand)]
         source: DraftSource,
+    },
+    /// Use a site in your own browser while itda records the requests, then
+    /// draft a site definition from them. Nothing is written to disk unless
+    /// --save asks for it
+    Record {
+        /// The page to open
+        url: String,
+        /// Site id; taken from the host name when left out
+        #[arg(long)]
+        name: Option<String>,
+        /// Only calls under this address (default: the most used one)
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Keep only calls whose path contains this
+        #[arg(long)]
+        include: Option<String>,
+        /// Install the draft into the data directory instead of printing it
+        #[arg(long)]
+        install: bool,
+        /// Replace an installed definition with the same name
+        #[arg(long, requires = "install")]
+        force: bool,
+        /// Also save the recording as a HAR file. It holds your cookies and
+        /// tokens; delete it when you are done
+        #[arg(long)]
+        save: Option<PathBuf>,
     },
     /// Show what agents did, newest last; --verify checks the log was not changed
     Audit {
@@ -325,6 +352,26 @@ fn main() -> ExitCode {
                 force,
             )),
         },
+        Command::Record {
+            url,
+            name,
+            base_url,
+            include,
+            install,
+            force,
+            save,
+        } => record(
+            &home,
+            &url,
+            itda_prep::Options {
+                name,
+                base_url,
+                include,
+            },
+            install,
+            force,
+            save.as_deref(),
+        ),
         Command::Audit {
             limit,
             verify,
@@ -832,6 +879,35 @@ async fn draft_page(
         install,
         force,
     )
+}
+
+/// Record the site in the person's own browser and draft from the recording,
+/// which stays in memory unless `save` names a file for it.
+fn record(
+    home: &Path,
+    url: &str,
+    options: itda_prep::Options,
+    install: bool,
+    force: bool,
+    save: Option<&Path>,
+) -> AppResult<ExitCode> {
+    let har = serde_json::to_vec(&record::browser(url)?)?;
+    if let Some(path) = save {
+        itda_types::util::atomic_file(path, &har)?;
+        eprintln!(
+            "Saved the recording at {}. It holds your cookies and tokens; delete it when you are done.",
+            path.display()
+        );
+    }
+    let draft = itda_prep::from_har(&har, &options)?;
+    let site = draft.site.clone();
+    let code = publish(home, draft, install, force)?;
+    if install {
+        eprintln!(
+            "Sign in once with `itda login {site} --browser` if its actions need an account."
+        );
+    }
+    Ok(code)
 }
 
 /// Print the draft, or install it, and list what to review on stderr.

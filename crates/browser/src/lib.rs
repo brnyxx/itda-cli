@@ -6,6 +6,14 @@
 //! sign-in left for that one site through the DevTools protocol. The profile
 //! is deleted afterwards, so nothing else from the user's browsing is ever
 //! visible, and cookies for other sites are dropped.
+//!
+//! [`record`] opens the same kind of window and watches the requests the
+//! person's own use of the site makes, so a definition can be drafted without
+//! the browser's developer tools.
+pub mod record;
+
+pub use record::{Capture, Recorder};
+
 use itda_types::error::{AppError, AppResult, usage};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -39,51 +47,13 @@ pub struct SignIn {
 impl SignIn {
     /// Open `browser` at `url` in a new temporary profile.
     pub fn open(browser: &Path, url: &url::Url) -> AppResult<Self> {
-        let profile = std::env::temp_dir().join(format!("itda-sign-in-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&profile)?;
-        let child = Command::new(browser)
-            .arg(format!("--user-data-dir={}", profile.display()))
-            .args([
-                "--remote-debugging-port=0",
-                "--remote-allow-origins=http://127.0.0.1",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--new-window",
-                url.as_str(),
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| {
-                usage(
-                    format!("Could not open {}", browser.display()),
-                    "Set ITDA_BROWSER to the path of Chrome, Edge or Chromium.",
-                )
-            })?;
-        let mut child = child;
-        let connected = endpoint(&mut child, &profile).and_then(|(port, endpoint)| {
-            let lost = |_| AppError::api("browser_unavailable", 502);
-            let stream = TcpStream::connect(("127.0.0.1", port)).map_err(lost)?;
-            stream
-                .set_read_timeout(Some(Duration::from_secs(15)))
-                .map_err(lost)?;
-            tungstenite::client(endpoint.as_str(), stream)
-                .map(|(socket, _)| socket)
-                .map_err(|_| AppError::api("browser_unavailable", 502))
-        });
-        match connected {
-            Ok(socket) => Ok(Self {
-                child,
-                profile,
-                socket,
-                next_id: 0,
-            }),
-            Err(error) => {
-                close(&mut child, &profile);
-                Err(error)
-            }
-        }
+        let (child, profile, socket) = launch(browser, url, Duration::from_secs(15))?;
+        Ok(Self {
+            child,
+            profile,
+            socket,
+            next_id: 0,
+        })
     }
 
     /// Unexpired cookies the browser would send to `site`'s host.
@@ -142,6 +112,59 @@ impl Drop for SignIn {
     }
 }
 
+/// Start the browser in a fresh profile at `url` and connect to its DevTools
+/// socket. `read_timeout` bounds how long one read waits for a message.
+pub(crate) fn launch(
+    browser: &Path,
+    url: &url::Url,
+    read_timeout: Duration,
+) -> AppResult<(Child, PathBuf, WebSocket<TcpStream>)> {
+    let profile = std::env::temp_dir().join(format!("itda-browser-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&profile)?;
+    let mut child = Command::new(browser)
+        .arg(format!("--user-data-dir={}", profile.display()))
+        .args([
+            "--remote-debugging-port=0",
+            "--remote-allow-origins=http://127.0.0.1",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--new-window",
+            url.as_str(),
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| {
+            usage(
+                format!("Could not open {}", browser.display()),
+                "Set ITDA_BROWSER to the path of Chrome, Edge or Chromium.",
+            )
+        })?;
+    let connected = endpoint(&mut child, &profile).and_then(|(port, endpoint)| {
+        let lost = |_| AppError::api("browser_unavailable", 502);
+        let stream = TcpStream::connect(("127.0.0.1", port)).map_err(lost)?;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(15)))
+            .map_err(lost)?;
+        // The handshake needs whole reads; the bound applies to messages after it.
+        let (socket, _) = tungstenite::client(endpoint.as_str(), stream)
+            .map_err(|_| AppError::api("browser_unavailable", 502))?;
+        socket
+            .get_ref()
+            .set_read_timeout(Some(read_timeout))
+            .map_err(lost)?;
+        Ok(socket)
+    });
+    match connected {
+        Ok(socket) => Ok((child, profile, socket)),
+        Err(error) => {
+            close(&mut child, &profile);
+            Err(error)
+        }
+    }
+}
+
 /// The browser-level DevTools address the browser writes once it is ready.
 fn endpoint(child: &mut Child, profile: &Path) -> AppResult<(u16, String)> {
     let file = profile.join("DevToolsActivePort");
@@ -164,7 +187,7 @@ fn endpoint(child: &mut Child, profile: &Path) -> AppResult<(u16, String)> {
     Err(AppError::api("browser_unavailable", 502))
 }
 
-fn close(child: &mut Child, profile: &Path) {
+pub(crate) fn close(child: &mut Child, profile: &Path) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(100));
