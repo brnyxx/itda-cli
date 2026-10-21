@@ -51,6 +51,16 @@ change the definition format or the CLI.
 - `itda add` also takes an https URL, or the name of a ready-made site
   (`itda add github`); the four definitions in `sites/` are built in.
 
+### Changed
+
+- `itda setup` names the agent app it connects ("Adding itda to Claude
+  Desktop..."), shows the settings file it wrote with `~` for your home
+  folder, says so in Korean too, lines the action names up only as wide as
+  they need, and writes its example request mid-sentence.
+- The README and the landing page open with a recording of `itda setup` as
+  it ran on Hacker News (`assets/setup.gif`, Korean in `assets/setup.ko.gif`,
+  rebuilt from `assets/src/setup.*.tape` with vhs).
+
 ## [0.3.0] - 2026-10-20
 
 Install ready-made sites with one command, and work with old intranet forms
