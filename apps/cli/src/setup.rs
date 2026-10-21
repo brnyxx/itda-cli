@@ -2,7 +2,7 @@
 //! use the site. Each step is one of the existing commands; this only asks
 //! the questions and keeps what works.
 use crate::check;
-use crate::text::{t, tf};
+use crate::text::{client_label, t, tf};
 use itda_html::evidence;
 use itda_policy::{Effect, operation_effect};
 use itda_spec::Spec;
@@ -117,6 +117,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
     .await;
     let mut failed = Vec::new();
     let mut worked = 0;
+    let width = name_width(&spec);
     for o in &outcomes {
         let op = spec.op(&o.action)?;
         let line = match o.status.as_str() {
@@ -124,18 +125,18 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
                 worked += 1;
                 match o.records {
                     Some(n) => format!(
-                        "✓ {:<28} {}",
+                        "✓ {:<width$} {}",
                         o.action,
                         tf("ok_records", &[("n", &n.to_string())])
                     ),
-                    None => format!("✓ {:<28} {}", o.action, t("ok")),
+                    None => format!("✓ {:<width$} {}", o.action, t("ok")),
                 }
             }
             "skipped" if operation_effect(op, &BTreeMap::new()) != Effect::Read => {
-                format!("· {:<28} {}", o.action, t("skipped_change"))
+                format!("· {:<width$} {}", o.action, t("skipped_change"))
             }
             "skipped" => format!(
-                "· {:<28} {}",
+                "· {:<width$} {}",
                 o.action,
                 tf(
                     "skipped_needs",
@@ -151,7 +152,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
                     "blocked_by_site" => t("why_blocked"),
                     _ => o.detail.as_str(),
                 };
-                format!("✗ {:<28} {}", o.action, tf("removed", &[("why", why)]))
+                format!("✗ {:<width$} {}", o.action, tf("removed", &[("why", why)]))
             }
         };
         eprintln!("    {line}");
@@ -181,7 +182,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
     if client == "none" {
         step(5, t("later"));
     } else {
-        step(5, "");
+        step(5, &tf("connecting", &[("client", client_label(&client))]));
         crate::mcp_install(&client, false, false)?;
     }
     let spec = crate::sites::load(home, &site)?;
@@ -189,7 +190,12 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
         .operations
         .iter()
         .find(|op| operation_effect(op, &BTreeMap::new()) == Effect::Read)
-        .map(|op| tf("example_read", &[("site", &site), ("desc", &op.desc)]))
+        .map(|op| {
+            tf(
+                "example_read",
+                &[("site", &site), ("desc", &mid_sentence(&op.desc))],
+            )
+        })
         .unwrap_or_default();
     eprintln!();
     eprintln!("{}", tf("done", &[("site", &site), ("example", &example)]));
@@ -201,6 +207,34 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
         eprintln!("{}", t("approve_note"));
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn name_width(spec: &Spec) -> usize {
+    spec.operations
+        .iter()
+        .map(|op| op.name.len())
+        .max()
+        .unwrap_or(0)
+        .max(12)
+}
+
+fn mid_sentence(desc: &str) -> String {
+    if crate::text::lang() != "en" {
+        return desc.to_owned();
+    }
+    mid_sentence_en(desc)
+}
+
+fn mid_sentence_en(desc: &str) -> String {
+    let mut chars = desc.chars();
+    match (chars.next(), chars.next()) {
+        (Some(first), Some(second))
+            if first.is_ascii_uppercase() && second.is_ascii_lowercase() =>
+        {
+            first.to_ascii_lowercase().to_string() + &desc[1..]
+        }
+        _ => desc.to_owned(),
+    }
 }
 
 fn step(n: u8, text: &str) {
@@ -285,6 +319,7 @@ fn describe_page(page: &itda_prep::Page) -> String {
 }
 
 fn list_actions(spec: &Spec) {
+    let width = name_width(spec);
     for op in &spec.operations {
         let read = operation_effect(op, &BTreeMap::new()) == Effect::Read;
         let inputs: Vec<&str> = op
@@ -304,7 +339,7 @@ fn list_actions(spec: &Spec) {
             .filter(|n| !matches!(*n, "query" | "operationName"))
             .collect();
         let mut line = format!(
-            "    {} {:<28} {}",
+            "    {} {:<width$} {}",
             if read { t("read") } else { t("change") },
             op.name,
             op.desc
@@ -373,4 +408,20 @@ fn choose_client() -> AppResult<String> {
         _ => "none",
     }
     .into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mid_sentence_en;
+
+    #[test]
+    fn lowercases_a_leading_word_but_not_an_acronym() {
+        assert_eq!(
+            mid_sentence_en("List what Hacker News shows"),
+            "list what Hacker News shows"
+        );
+        assert_eq!(mid_sentence_en("RSS feed"), "RSS feed");
+        assert_eq!(mid_sentence_en("목록 읽기"), "목록 읽기");
+        assert_eq!(mid_sentence_en(""), "");
+    }
 }

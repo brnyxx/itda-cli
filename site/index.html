@@ -14,7 +14,7 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Schibsted+Grotesk:wght@400;500;600&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -37,6 +37,9 @@
   <main>
     <section class="hero">
       <div class="glow" aria-hidden="true"></div>
+      <svg class="thread" viewBox="0 0 1440 640" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M-20 628 C 300 628, 540 600, 700 420 S 900 60, 1460 90" />
+      </svg>
       <div class="wrap hero-grid">
         <div class="hero-copy">
           <a class="pill" href="#how" data-i18n="hero.pill"><span class="pill-dot"></span>New: <code>itda setup</code> does it all in one go</a>
@@ -72,17 +75,20 @@
             <div class="term-bar"><span></span><span></span><span></span><em data-i18n="hero.term">itda setup, as it ran</em></div>
             <pre class="term-body" data-i18n="hero.demo"><span class="l"><b class="p">$</b> itda setup https://news.ycombinator.com/</span>
 <span class="l o">1/5  Looking at news.ycombinator.com...</span>
-<span class="l o">     Found: a list of 30 records, a form, a feed.</span>
+<span class="l o">    The page opens without signing in.</span>
+<span class="l o">    Found: a list of 30 records, a form, a feed.</span>
+<span class="l w">    Does the site need a sign-in to be useful? Record in the browser instead of fetching the page. [y/N]</span>
 <span class="l o">2/5  What agents will be able to do:</span>
-<span class="l o">     read  home   List what Hacker News shows  (inputs: p)</span>
-<span class="l o">     read  feed   Read the RSS feed</span>
+<span class="l o">    read   home         List what Hacker News shows  (inputs: p)</span>
+<span class="l o">    read   feed         Read the RSS feed</span>
 <span class="l o">3/5  Trying every read once...</span>
-<span class="l g">     ✓ home   30 records</span>
-<span class="l g">     ✓ feed   ok</span>
+<span class="l g">    ✓ home         30 records</span>
+<span class="l g">    ✓ feed         ok</span>
 <span class="l o">4/5  Saved as 'news-ycombinator'.</span>
-<span class="l w">5/5  Connect an agent? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] later:</span>
-<span class="l"><b class="p you">you</b> 1</span>
-<span class="l g">Done. Ask your agent for something on 'news-ycombinator', for example "use news-ycombinator to List what Hacker News shows".</span></pre>
+<span class="l w">    Connect an agent? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] later: 1</span>
+<span class="l o">5/5  Adding itda to Claude Desktop...</span>
+<span class="l o">Added itda to Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json). Restart Claude Desktop to load it.</span>
+<span class="l g">Done. Ask your agent for something on 'news-ycombinator', for example "use news-ycombinator to list what Hacker News shows".</span></pre>
           </div>
           <div class="chips" aria-hidden="true">
             <span class="chip read" data-i18n="chip.read">reads · just work</span>
@@ -153,8 +159,8 @@
       <h2 data-i18n="cmp.h2">Same website, very different risks.</h2>
       <div class="compare" role="table">
         <div class="row head" role="row"><span role="columnheader"></span><span role="columnheader" data-i18n="cmp.browser">Browser-driving agent</span><span role="columnheader">itda</span></div>
-        <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r1">What the agent sees</span><span data-i18n="cmp.r1a">Whole pages, every step</span><span data-i18n="cmp.r1b">One action's typed result, capped at 24 KB</span></div>
-        <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r2">A redesigned or signed-out page</span><span data-i18n="cmp.r2a">Read as data</span><span data-i18n="cmp.r2b">An error: <code>response_mismatch</code>, <code>auth_required</code></span></div>
+        <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r1">What the agent sees</span><span data-i18n="cmp.r1a">Whole pages, every step</span><span data-i18n="cmp.r1b">Only the answer to one action, kept short</span></div>
+        <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r2">A redesigned or signed-out page</span><span data-i18n="cmp.r2a">Read as data</span><span data-i18n="cmp.r2b">Noticed and reported, with what to do next</span></div>
         <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r3">Changes on the site</span><span data-i18n="cmp.r3a">Whatever the model decides</span><span data-i18n="cmp.r3b">Single-use approval for exact inputs, given by a person</span></div>
         <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r4">"Ignore previous instructions" on a page</span><span data-i18n="cmp.r4a">In the prompt</span><span data-i18n="cmp.r4b">Marked untrusted data, never a tool</span></div>
         <div class="row" role="row"><span role="rowheader" data-i18n="cmp.r5">Passwords and keys</span><span data-i18n="cmp.r5a">Typed into the page by the model</span><span data-i18n="cmp.r5b">In the OS keyring; agents see account ids</span></div>
@@ -224,8 +230,8 @@
     </section>
 
     <section class="section wrap" id="sites">
-      <h2 data-i18n="sites.h2">Public APIs, ready to go.</h2>
-      <p class="section-lede" data-i18n="sites.lede">No recording needed for these: the definitions ship inside <code>itda</code>, so the name is enough. Each one only talks to that site's official API, and <code>itda check</code> confirms every read still answers as declared.</p>
+      <h2 data-i18n="sites.h2">Four sites come already set up.</h2>
+      <p class="section-lede" data-i18n="sites.lede">GitHub, npm, crates.io and PyPI work the moment itda is installed, with nothing to record. Each one talks only to that site's official interface, and <code>itda check</code> confirms every read still answers the way it should.</p>
       <div class="packs">
         <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/github.yaml">
           <img src="assets/brands/github.svg" width="44" height="44" alt="">
@@ -236,19 +242,19 @@
         <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/npm.yaml">
           <img src="assets/brands/npm.svg" width="44" height="44" alt="">
           <h3>npm</h3>
-          <p data-i18n="sites.npm">Packages, versions and weekly downloads. No account needed.</p>
+          <p data-i18n="sites.npm">Packages, versions and weekly downloads, without an account.</p>
           <code>itda add npm</code>
         </a>
         <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/crates-io.yaml">
           <img src="assets/brands/crates-io.svg" width="44" height="44" alt="">
           <h3>crates.io</h3>
-          <p data-i18n="sites.crates">Crates, versions and search. No account needed.</p>
+          <p data-i18n="sites.crates">Crates, versions and search, open to anyone.</p>
           <code>itda add crates-io</code>
         </a>
         <a class="pack" href="https://github.com/brnyxx/itda-cli/blob/main/sites/pypi.yaml">
           <img src="assets/brands/pypi.svg" width="44" height="44" alt="">
           <h3>PyPI</h3>
-          <p data-i18n="sites.pypi">Packages and releases with known vulnerabilities. No account needed.</p>
+          <p data-i18n="sites.pypi">Packages and releases, including the ones with known vulnerabilities, and nothing to sign up for.</p>
           <code>itda add pypi</code>
         </a>
       </div>

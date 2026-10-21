@@ -1334,17 +1334,27 @@ fn mcp_install(client: &str, dry_run: bool, approve_in_client: bool) -> AppResul
             println!("Would write {}:\n\n{content}", path.display());
         }
         install::Plan::Write { path, content } => {
-            if install::apply(&path, &content)? {
-                println!(
-                    "Added itda to {client} ({}). Restart {client} to load it.",
-                    path.display()
-                );
+            let shown = tilde(&path, &user_home);
+            let fields = [
+                ("client", text::client_label(client)),
+                ("path", shown.as_str()),
+            ];
+            let key = if install::apply(&path, &content)? {
+                "added_client"
             } else {
-                println!("{client} already runs itda ({}).", path.display());
-            }
+                "already_client"
+            };
+            println!("{}", text::tf(key, &fields));
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn tilde(path: &Path, home: &Path) -> String {
+    match path.strip_prefix(home) {
+        Ok(rest) => format!("~/{}", rest.display()),
+        Err(_) => path.display().to_string(),
+    }
 }
 
 fn doctor(home: &Path) -> ExitCode {
@@ -1397,5 +1407,21 @@ fn doctor(home: &Path) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tilde;
+    use std::path::Path;
+
+    #[test]
+    fn shortens_the_home_directory_to_a_tilde() {
+        let home = Path::new("/Users/someone");
+        assert_eq!(
+            tilde(&home.join("Library/Claude/config.json"), home),
+            "~/Library/Claude/config.json"
+        );
+        assert_eq!(tilde(Path::new("/etc/itda.json"), home), "/etc/itda.json");
     }
 }

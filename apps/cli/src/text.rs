@@ -123,6 +123,21 @@ pub fn t(key: &str) -> &'static str {
             "에이전트에 연결할까요? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] 나중에: ",
         ),
         (
+            "connecting",
+            "Adding itda to {client}...",
+            "{client}에 itda 추가 중...",
+        ),
+        (
+            "added_client",
+            "Added itda to {client} ({path}). Restart {client} to load it.",
+            "{client}에 itda를 추가했습니다 ({path}). {client}를 다시 시작하면 적용됩니다.",
+        ),
+        (
+            "already_client",
+            "{client} already runs itda ({path}).",
+            "{client}에는 itda가 이미 들어 있습니다 ({path}).",
+        ),
+        (
             "done",
             "Done. Ask your agent for something on '{site}', for example \"{example}\".",
             "끝났습니다. 에이전트에게 '{site}'에 대해 물어보세요. 예: \"{example}\".",
@@ -145,6 +160,18 @@ pub fn t(key: &str) -> &'static str {
         .find(|(k, _, _)| *k == key)
         .map(|(_, en, ko)| if lang == "ko" { *ko } else { *en })
         .unwrap_or("?")
+}
+
+/// How people say the client's name, from the slug `itda mcp install` takes.
+pub fn client_label(slug: &str) -> &str {
+    match slug {
+        "claude-desktop" => "Claude Desktop",
+        "claude-code" => "Claude Code",
+        "cursor" => "Cursor",
+        "vscode" => "VS Code",
+        "codex" => "Codex",
+        other => other,
+    }
 }
 
 /// `t(key)` with `{name}` fields filled in.

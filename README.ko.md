@@ -22,19 +22,32 @@
 읽기는 알아서 됩니다. 사이트를 바꾸는 건 내가 허락하기 전엔 절대 안 합니다.
 내 컴퓨터에서만 돌아가고, 로그인해야 하는 오래된 사내 시스템도 됩니다.
 
+<p align="center"><img src="assets/setup.ko.gif" alt="news.ycombinator.com에 itda setup을 실행한 모습: 목록 30건과 폼, 피드를 찾아 읽기 둘을 실제로 불러보고, 사이트를 저장한 뒤 Claude Desktop에 itda를 추가하기까지 14초" width="860"></p>
+
+<details>
+<summary>같은 실행을 글로 보기</summary>
+
 ```console
 $ itda setup https://news.ycombinator.com/
 1/5  news.ycombinator.com 살펴보는 중...
-     찾은 것: 목록 30건, 폼 1개, 피드.
+    이 페이지는 로그인 없이 열립니다.
+    찾은 것: 목록 30건, 폼 1개, 피드.
+    제대로 쓰려면 로그인이 필요한 사이트인가요? 페이지를 가져오는 대신 브라우저로 녹화합니다. [y/N]
 2/5  에이전트가 할 수 있게 되는 일:
-     읽기   home   Hacker News 목록 읽기  (입력: p)
-     읽기   feed   RSS 피드 읽기
+    읽기   home         Hacker News 목록 읽기  (입력: p)
+    읽기   feed         RSS 피드 읽기
 3/5  읽기를 하나씩 실제로 불러보는 중...
-     ✓ home   30건
-     ✓ feed   성공
+    ✓ home         30건
+    ✓ feed         성공
 4/5  'news-ycombinator'로 저장했습니다.
-5/5  에이전트에 연결할까요? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] 나중에:
+    에이전트에 연결할까요? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] 나중에: 1
+5/5  Claude Desktop에 itda 추가 중...
+Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json). Claude Desktop를 다시 시작하면 적용됩니다.
+
+끝났습니다. 에이전트에게 'news-ycombinator'에 대해 물어보세요. 예: "news-ycombinator에서 Hacker News 목록 읽기".
 ```
+
+</details>
 
 그다음 에이전트에게 말하면 됩니다: *"news-ycombinator에서 Hacker News 목록 읽어줘"*.
 로그인이 필요한 사이트는 대신 내 브라우저가 열립니다. 평소처럼 로그인하고
