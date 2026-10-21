@@ -21,6 +21,7 @@ pub fn t(key: &str) -> &'static str {
         ),
         ("found", "Found: {what}.", "찾은 것: {what}."),
         ("found_list", "a list of {n} records", "목록 {n}건"),
+        ("found_form", "a form", "폼 1개"),
         ("found_forms", "{n} forms", "폼 {n}개"),
         ("found_feed", "a feed", "피드"),
         ("found_data", "data the page embeds", "페이지에 담긴 데이터"),
