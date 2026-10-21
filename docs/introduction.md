@@ -10,7 +10,9 @@ and it works on the old intranet behind a login too.
 <img src="https://raw.githubusercontent.com/brnyxx/itda-cli/main/assets/setup.gif" alt="itda setup on news.ycombinator.com: it finds a list of 30 records, a form and a feed, tries both reads, saves the site and adds itda to Claude Desktop, in fourteen seconds" width="100%">
 
 ```console
-$ itda setup https://news.ycombinator.com/
+$ itda
+itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter (or press Enter alone for the command list).
+Address: news.ycombinator.com
 1/5  Looking at news.ycombinator.com...
     The page opens without signing in.
     Found: a list of 30 records, a form, a feed.
@@ -21,6 +23,7 @@ $ itda setup https://news.ycombinator.com/
     ✓ home         30 records
     ✓ feed         ok
 4/5  Saved as 'news-ycombinator'.
+    Connect Claude Desktop? [Y/n]
 5/5  Adding itda to Claude Desktop...
 ```
 

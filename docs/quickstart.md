@@ -30,6 +30,15 @@ ok    sites            0 installed, 0 invalid
 ok    local addresses  refused (ITDA_ALLOW_LOCAL=1 allows them)
 ```
 
+## Set up a site you use
+
+Type `itda`, paste the address of a site you use, and press Enter. itda looks
+at the page (or opens your browser and watches when the page needs a sign-in),
+shows what agents will be able to do, tries every read, and connects the agent
+apps it finds on your computer after one more Enter. From then on, ask your
+agent for things on that site. `itda setup <address>` does the same from a
+script; `itda setup --help` lists the flags.
+
 ## Try the sandbox
 
 The repository includes a small fake intranet that only listens on

@@ -157,21 +157,22 @@ h1 {
 }
 .term-body .l { display: inline-block; min-width: 100%; opacity: 0; animation: line .35s ease forwards; }
 .term-body .l:nth-child(1) { animation-delay: 0.2s; }
-.term-body .l:nth-child(2) { animation-delay: 0.9s; }
+.term-body .l:nth-child(2) { animation-delay: 0.8s; }
 .term-body .l:nth-child(3) { animation-delay: 1.6s; }
-.term-body .l:nth-child(4) { animation-delay: 1.7s; }
-.term-body .l:nth-child(5) { animation-delay: 1.8s; }
-.term-body .l:nth-child(6) { animation-delay: 2.8s; }
-.term-body .l:nth-child(7) { animation-delay: 2.9s; }
-.term-body .l:nth-child(8) { animation-delay: 3.0s; }
-.term-body .l:nth-child(9) { animation-delay: 3.4s; }
-.term-body .l:nth-child(10) { animation-delay: 4.1s; }
-.term-body .l:nth-child(11) { animation-delay: 4.4s; }
-.term-body .l:nth-child(12) { animation-delay: 4.6s; }
-.term-body .l:nth-child(13) { animation-delay: 4.7s; }
-.term-body .l:nth-child(14) { animation-delay: 5.8s; }
-.term-body .l:nth-child(15) { animation-delay: 6.0s; }
-.term-body .l:nth-child(16) { animation-delay: 6.2s; }
+.term-body .l:nth-child(4) { animation-delay: 2.4s; }
+.term-body .l:nth-child(5) { animation-delay: 3.1s; }
+.term-body .l:nth-child(6) { animation-delay: 3.2s; }
+.term-body .l:nth-child(7) { animation-delay: 3.3s; }
+.term-body .l:nth-child(8) { animation-delay: 4.2s; }
+.term-body .l:nth-child(9) { animation-delay: 4.3s; }
+.term-body .l:nth-child(10) { animation-delay: 4.4s; }
+.term-body .l:nth-child(11) { animation-delay: 4.8s; }
+.term-body .l:nth-child(12) { animation-delay: 5.5s; }
+.term-body .l:nth-child(13) { animation-delay: 5.8s; }
+.term-body .l:nth-child(14) { animation-delay: 6.0s; }
+.term-body .l:nth-child(15) { animation-delay: 6.9s; }
+.term-body .l:nth-child(16) { animation-delay: 7.1s; }
+.term-body .l:nth-child(17) { animation-delay: 7.3s; }
 @keyframes line { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .term-body b.p { color: var(--blue-hi); font-weight: 500; }
 .term-body b.you { color: var(--green); }

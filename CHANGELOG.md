@@ -7,6 +7,16 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Changed
+
+- A bare `itda` in a terminal says what it is and asks for one address, then
+  runs `itda setup` on it, so the first run is: type `itda`, paste, Enter.
+- `itda setup` finds the agent apps on this computer (Claude Desktop, Claude
+  Code, Cursor, Codex, or a project with a `.vscode` folder) and connects them
+  all after one Enter; the numbered list only appears when none is found.
+- `itda setup` asks whether the site needs a sign-in only when the page it
+  fetched has a password form; a page that simply opened is used as it is.
+
 ## [0.4.0] - 2026-10-22
 
 One address is enough: `itda setup` looks at a page, or watches you use the

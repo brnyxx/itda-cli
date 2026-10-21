@@ -16,17 +16,18 @@ your AI agent a short list of actions in plain words. Reads just work.
 Nothing changes on the site until you say yes. It runs on your own computer,
 and it works on the old intranet behind a login too.
 
-<p align="center"><img src="assets/setup.gif" alt="itda setup on news.ycombinator.com: it finds a list of 30 records, a form and a feed, tries both reads, saves the site and adds itda to Claude Desktop, in fourteen seconds" width="860"></p>
+<p align="center"><img src="assets/setup.gif" alt="A first run: itda asks for an address, news.ycombinator.com is pasted, it finds a list of 30 records, a form and a feed, tries both reads, saves the site and connects Claude Desktop after one Enter" width="860"></p>
 
 <details>
 <summary>The same run as text</summary>
 
 ```console
-$ itda setup https://news.ycombinator.com/
+$ itda
+itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter (or press Enter alone for the command list).
+Address: news.ycombinator.com
 1/5  Looking at news.ycombinator.com...
     The page opens without signing in.
     Found: a list of 30 records, a form, a feed.
-    Does the site need a sign-in to be useful? Record in the browser instead of fetching the page. [y/N]
 2/5  What agents will be able to do:
     read   home         List what Hacker News shows  (inputs: p)
     read   feed         Read the RSS feed
@@ -34,7 +35,7 @@ $ itda setup https://news.ycombinator.com/
     ✓ home         30 records
     ✓ feed         ok
 4/5  Saved as 'news-ycombinator'.
-    Connect an agent? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] later: 1
+    Connect Claude Desktop? [Y/n]
 5/5  Adding itda to Claude Desktop...
 Added itda to Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json). Restart Claude Desktop to load it.
 
@@ -88,8 +89,10 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then run `itda setup <address>` on a site you use. It asks a few questions
-(`ITDA_LANG=ko` makes it speak Korean) and ends with your agent connected.
+Then type `itda`, paste the address of a site you use, and press Enter. It
+finds the agent apps on your computer and connects them after one more Enter
+(`ITDA_LANG=ko` makes it speak Korean). `itda setup <address>` does the same
+from a script.
 
 The pieces are commands of their own. For pages you can open without
 signing in, give itda their addresses: tables and lists become records,
