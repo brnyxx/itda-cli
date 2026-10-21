@@ -7,6 +7,13 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Changed
+
+- `itda <address>` sets that site up, and `itda github` (or npm, crates-io,
+  pypi) adds the ready-made site and connects the agent apps found on this
+  computer; the README's one line is the one line you type. The tagline and
+  the landing page say so.
+
 ### Added
 
 - `AGENTS.md` and `skills/itda/SKILL.md` tell coding agents how to use itda:

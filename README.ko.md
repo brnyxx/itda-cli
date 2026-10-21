@@ -1,6 +1,6 @@
-<p align="center"><img src="assets/hero.ko.png" alt="itda: 손이 작은 웹사이트 카드를 한 가닥 실을 따라 AI 에이전트에게 건넵니다. 내가 쓰는 웹사이트를 AI에게 넘겨주세요." width="100%"></p>
+<p align="center"><img src="assets/hero.ko.png" alt="itda: 손이 작은 웹사이트 카드를 한 가닥 실을 따라 AI 에이전트에게 건넵니다. itda 뒤에 주소만 쓰면 AI가 사이트를 써요." width="100%"></p>
 
-<p align="center"><strong>내가 쓰는 웹사이트를 AI에게. 안전하게.</strong></p>
+<p align="center"><strong>itda 뒤에 주소만 쓰면 AI가 사이트를 써요.</strong></p>
 
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
 
@@ -23,9 +23,7 @@
 <summary>같은 실행을 글로 보기</summary>
 
 ```console
-$ itda
-itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요. 떠오르는 주소가 없으면 github, npm, crates-io, pypi 중 하나를 치세요. 그냥 Enter는 명령 목록.
-주소: news.ycombinator.com
+$ itda news.ycombinator.com
 1/5  news.ycombinator.com 살펴보는 중...
     이 페이지는 로그인 없이 열립니다.
     찾은 것: 목록 30건, 폼 1개, 피드.
@@ -92,9 +90,10 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
-그다음 `itda`라고 치고, 내가 쓰는 사이트 주소를 붙여넣고 Enter. 내 컴퓨터에
-있는 에이전트 앱을 찾아 Enter 한 번 더에 연결까지 끝납니다(한국어 환경이면
-한국어로 말합니다). 스크립트에서는 `itda setup <주소>`가 같은 일을 합니다.
+그다음 `itda` 뒤에 내가 쓰는 사이트 주소를 쓰면 됩니다. 내 컴퓨터에 있는
+에이전트 앱을 찾아 Enter 한 번에 연결까지 끝납니다(한국어 환경이면 한국어로
+말합니다). 그냥 `itda`만 치면 주소를 물어보고, 스크립트에서는 `itda setup <주소>`에
+옵션을 줍니다.
 
 조각 명령도 따로 있습니다. 로그인 없이 열리는 페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
 폼은 변경으로, 피드도 함께 초안이 됩니다.

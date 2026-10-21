@@ -1,4 +1,4 @@
-# A real first run: `itda`, one address, one Enter. Rendered with vhs
+# A real first run: itda and one address, one Enter. Rendered with vhs
 # (https://github.com/charmbracelet/vhs). Rebuild from the repository root:
 #   DEMO_HOME=$(mktemp -d) vhs assets/src/setup.ko.tape
 # The run uses a throwaway HOME (with a Claude Desktop folder in it, so the
@@ -12,7 +12,7 @@ Set Shell "bash"
 Set FontFamily "D2Coding"
 Set FontSize 17
 Set Width 1400
-Set Height 640
+Set Height 580
 Set Padding 28
 Set LineHeight 1.3
 Set TypingSpeed 45ms
@@ -26,13 +26,8 @@ Enter
 Show
 
 Sleep 600ms
-Type "itda"
-Sleep 500ms
-Enter
-Wait+Screen@10s /(Address|주소):/
-Sleep 900ms
-Type "news.ycombinator.com"
-Sleep 600ms
+Type "itda news.ycombinator.com"
+Sleep 700ms
 Enter
 Wait+Screen@60s /\[Y\/n\]/
 Sleep 1500ms

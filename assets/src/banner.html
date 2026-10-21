@@ -35,15 +35,15 @@
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 28%);
   }
   .hero .art { right: -40px; height: 106%; }
-  .copy { position: absolute; left: 72px; top: 50%; transform: translateY(-50%); width: 500px; }
-  .hero .copy { left: 96px; width: 620px; }
+  .copy { position: absolute; left: 72px; top: 50%; transform: translateY(-50%); width: 540px; }
+  .hero .copy { left: 96px; width: 700px; }
   .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
   .brand img { height: 36px; }
   h1 {
-    margin: 0 0 18px; font: 700 56px/1.02 var(--display); letter-spacing: -.035em;
+    margin: 0 0 18px; font: 700 36px/1.08 var(--display); letter-spacing: -.035em;
     font-variation-settings: "opsz" 96;
   }
-  .hero h1 { font-size: 66px; }
+  .hero h1 { font-size: 48px; }
   html[lang="ko"] h1 { font-size: 52px; letter-spacing: -.03em; line-height: 1.15; word-break: keep-all; }
   html[lang="ko"] .hero h1 { font-size: 60px; }
   h1 em { font-style: normal; color: var(--blue-hi); }
@@ -58,7 +58,7 @@
   <img class="art" src="../handoff.png" alt="">
   <div class="copy">
     <div class="brand"><img src="../wordmark-dark.svg" alt="itda"></div>
-    <h1 id="h1">The websites you use,<br><em>handed to your AI.</em></h1>
+    <h1 id="h1">Just type an address<br>after itda<br><em>and your AI can use the site.</em></h1>
     <p id="p">One address in. A short list of things your agent can do out. Reads just work, changes wait for your yes, and it all runs on your own computer.</p>
   </div>
 </div>
@@ -67,7 +67,7 @@
   if (q.get("v") === "hero") document.getElementById("frame").classList.add("hero");
   if (q.get("lang") === "ko") {
     document.documentElement.lang = "ko";
-    document.getElementById("h1").innerHTML = "내가 쓰는 웹사이트를<br><em>AI에게 넘겨주세요.</em>";
+    document.getElementById("h1").innerHTML = "itda 뒤에 주소만 쓰면<br><em>AI가 사이트를 써요.</em>";
     document.getElementById("p").textContent = "주소 하나를 넣으면, 에이전트가 할 수 있는 일의 짧은 목록이 나옵니다. 읽기는 알아서 되고, 변경은 내 허락을 기다리고, 전부 내 컴퓨터에서 돌아갑니다.";
   }
 </script>
