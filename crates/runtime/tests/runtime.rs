@@ -468,3 +468,70 @@ fn preflight_steps_only_read() {
     let text = format!("{} {}", error.msg, error.remedy);
     assert!(text.contains("preflight"), "{text}");
 }
+
+/// A server that takes the request and then drops the connection, so the
+/// client never learns what happened to it.
+async fn dropping_site() -> Site {
+    use tokio::io::AsyncReadExt;
+    let hits = Arc::new(AtomicUsize::new(0));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let counter = hits.clone();
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            counter.fetch_add(1, Ordering::SeqCst);
+            let mut buffer = [0u8; 4096];
+            let _ = socket.read(&mut buffer).await;
+            drop(socket);
+        }
+    });
+    Site { base, hits }
+}
+
+#[tokio::test]
+async fn a_change_whose_answer_is_lost_has_an_unknown_outcome_and_is_not_resent() {
+    use itda_runtime::audit::AuditLog;
+    let site = dropping_site().await;
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let dir = std::env::temp_dir().join(format!("itda-runtime-lost-{}", itda_types::util::id()));
+    let log = Arc::new(AuditLog::new(dir.join("audit.jsonl")));
+    let runtime = Runtime::new(Arc::new(Network::new(gate, true)), vault)
+        .with_approvals(approvals.clone())
+        .with_audit(log.clone());
+    let spec = spec(&site.base);
+
+    let error = runtime
+        .call(&spec, call("create-item", &[("title", "hello")]))
+        .await
+        .unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
+    let mut approved = call("create-item", &[("title", "hello")]);
+    approved.approval = Some(id);
+    let error = runtime.call(&spec, approved).await.unwrap_err();
+    assert_eq!(error.public_code, "action_outcome_unknown");
+    assert!(error.remedy.contains("never resends"), "{}", error.remedy);
+    assert_eq!(site.hits.load(Ordering::SeqCst), 1);
+
+    let records = log.records().unwrap();
+    let last = records.last().unwrap();
+    assert_eq!(last.kind, "call");
+    assert_eq!(last.outcome, "action_outcome_unknown");
+    assert_eq!(records[records.len() - 2].outcome, "sending");
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test]
+async fn a_read_whose_answer_is_lost_keeps_its_network_code() {
+    let site = dropping_site().await;
+    let (runtime, _) = runtime().await;
+    let error = runtime
+        .call(&spec(&site.base), call("list-items", &[]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "request_failed");
+}
