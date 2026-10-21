@@ -17,17 +17,18 @@
 읽기는 알아서 됩니다. 사이트를 바꾸는 건 내가 허락하기 전엔 절대 안 합니다.
 내 컴퓨터에서만 돌아가고, 로그인해야 하는 오래된 사내 시스템도 됩니다.
 
-<p align="center"><img src="assets/setup.ko.gif" alt="news.ycombinator.com에 itda setup을 실행한 모습: 목록 30건과 폼, 피드를 찾아 읽기 둘을 실제로 불러보고, 사이트를 저장한 뒤 Claude Desktop에 itda를 추가하기까지 14초" width="860"></p>
+<p align="center"><img src="assets/setup.ko.gif" alt="첫 실행: itda가 주소를 묻고, news.ycombinator.com을 붙여넣자 목록 30건과 폼, 피드를 찾아 읽기 둘을 실제로 불러보고, 사이트를 저장한 뒤 Enter 한 번에 Claude Desktop을 연결합니다" width="860"></p>
 
 <details>
 <summary>같은 실행을 글로 보기</summary>
 
 ```console
-$ itda setup https://news.ycombinator.com/
+$ itda
+itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요 (그냥 Enter는 명령 목록).
+주소: news.ycombinator.com
 1/5  news.ycombinator.com 살펴보는 중...
     이 페이지는 로그인 없이 열립니다.
     찾은 것: 목록 30건, 폼 1개, 피드.
-    제대로 쓰려면 로그인이 필요한 사이트인가요? 페이지를 가져오는 대신 브라우저로 녹화합니다. [y/N]
 2/5  에이전트가 할 수 있게 되는 일:
     읽기   home         Hacker News 목록 읽기  (입력: p)
     읽기   feed         RSS 피드 읽기
@@ -35,7 +36,7 @@ $ itda setup https://news.ycombinator.com/
     ✓ home         30건
     ✓ feed         성공
 4/5  'news-ycombinator'로 저장했습니다.
-    에이전트에 연결할까요? [1] Claude Desktop  [2] Claude Code  [3] Cursor  [4] VS Code  [5] Codex  [0] 나중에: 1
+    Claude Desktop에 연결할까요? [Y/n]
 5/5  Claude Desktop에 itda 추가 중...
 Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json). Claude Desktop를 다시 시작하면 적용됩니다.
 
@@ -90,8 +91,9 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
-그다음 내가 쓰는 사이트에서 `itda setup <주소>`를 실행하세요. 질문 몇 개에
-답하면(한국어 환경이면 한국어로 물어봅니다) 에이전트 연결까지 끝납니다.
+그다음 `itda`라고 치고, 내가 쓰는 사이트 주소를 붙여넣고 Enter. 내 컴퓨터에
+있는 에이전트 앱을 찾아 Enter 한 번 더에 연결까지 끝납니다(한국어 환경이면
+한국어로 말합니다). 스크립트에서는 `itda setup <주소>`가 같은 일을 합니다.
 
 조각 명령도 따로 있습니다. 로그인 없이 열리는 페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
 폼은 변경으로, 피드도 함께 초안이 됩니다.
