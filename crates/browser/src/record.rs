@@ -130,9 +130,37 @@ impl Capture {
                 }
             }
             "Network.responseReceived" => {
+                // Linux builds have been seen to report a response for a
+                // request they never announced; the response names the
+                // address, so the exchange starts here, as a GET.
+                if !self.live.contains_key(&key) {
+                    let url = params["response"]["url"].as_str().unwrap_or_default();
+                    if !recordable(url) {
+                        return Vec::new();
+                    }
+                    self.seq += 1;
+                    let headers = self.early_headers.remove(&key).unwrap_or_default();
+                    self.live.insert(
+                        key.clone(),
+                        Exchange {
+                            seq: self.seq,
+                            started: wall_time(None),
+                            url: url.to_owned(),
+                            method: "GET".into(),
+                            headers,
+                            kept: true,
+                            ..Exchange::default()
+                        },
+                    );
+                }
                 let Some(exchange) = self.live.get_mut(&key) else {
                     return Vec::new();
                 };
+                // The headers that went over the wire, when the browser
+                // reports them: all there is for a request never announced.
+                for (name, value) in headers_map(&params["response"]["requestHeaders"]) {
+                    exchange.headers.entry(name).or_insert(value);
+                }
                 exchange.response = Some(response_parts(&params["response"]));
                 if let Some(kind) = params["type"].as_str() {
                     exchange.kept &= KEPT_TYPES.contains(&kind);
@@ -239,11 +267,12 @@ impl Capture {
     }
 
     /// The recording as a HAR document, in request order. An exchange that
-    /// loaded but whose body never came back is kept without it.
+    /// got its response but never the end of its load, or whose body never
+    /// came back, is kept without the body.
     pub fn har(mut self) -> Value {
         let late: Vec<Exchange> = std::mem::take(&mut self.live)
             .into_values()
-            .filter(|exchange| exchange.finished && exchange.response.is_some())
+            .filter(|exchange| exchange.response.is_some())
             .collect();
         for exchange in late {
             self.finish(exchange);
@@ -306,6 +335,15 @@ impl Capture {
             }),
         ));
     }
+}
+
+/// An address worth recording: a web address that is not the favicon.
+fn recordable(url: &str) -> bool {
+    (url.starts_with("http://") || url.starts_with("https://"))
+        && !url
+            .split(['?', '#'])
+            .next()
+            .is_some_and(|p| p.ends_with("/favicon.ico"))
 }
 
 fn response_parts(response: &Value) -> (u16, BTreeMap<String, String>, String) {
@@ -377,10 +415,15 @@ pub struct Recorder {
     /// The page to open once the first tab is being watched, so its own
     /// document request is recorded too.
     start: Option<url::Url>,
+    /// The last events seen, for a test or a bug report: method, session
+    /// and request id only, never a value.
+    trace: std::collections::VecDeque<String>,
 }
 
 enum Pending {
     Fetch(Fetch),
+    /// `Network.enable` on this session; open `url` there once it answers.
+    Navigate(String, String),
     Ignore,
 }
 
@@ -401,6 +444,7 @@ impl Recorder {
             sessions: BTreeSet::new(),
             capture: Capture::default(),
             start: Some(url.clone()),
+            trace: std::collections::VecDeque::new(),
         };
         let attached = recorder.send(
             None,
@@ -452,6 +496,11 @@ impl Recorder {
         crate::site_cookies(&result, site)
     }
 
+    /// What the browser sent, newest last: one line per event or reply.
+    pub fn trace(&self) -> Vec<String> {
+        self.trace.iter().cloned().collect()
+    }
+
     /// Close the window and return the recording.
     pub fn finish(mut self) -> Value {
         let _ = self.send(None, "Browser.close", json!({}));
@@ -467,9 +516,42 @@ impl Recorder {
         let Ok(reply) = serde_json::from_str::<Value>(text) else {
             return Ok(());
         };
+        let line = match reply["id"].as_u64() {
+            Some(id) => format!(
+                "reply {id} {}",
+                if reply.get("error").is_some() {
+                    "error"
+                } else {
+                    "ok"
+                }
+            ),
+            None => format!(
+                "{} {} {}",
+                reply["method"].as_str().unwrap_or_default(),
+                reply["sessionId"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .chars()
+                    .take(6)
+                    .collect::<String>(),
+                reply["params"]["requestId"]
+                    .as_str()
+                    .or_else(|| reply["params"]["targetInfo"]["type"].as_str())
+                    .unwrap_or_default()
+            ),
+        };
+        if self.trace.len() == 400 {
+            self.trace.pop_front();
+        }
+        self.trace.push_back(line);
         if let Some(id) = reply["id"].as_u64() {
             match self.pending.remove(&id) {
                 Some(Pending::Fetch(fetch)) => self.capture.fetched(&fetch, reply.get("result")),
+                // Tracking is on only once the browser says so; a page that
+                // started loading before that would miss its first events.
+                Some(Pending::Navigate(session, url)) => {
+                    self.send_async(Some(&session), "Page.navigate", json!({"url": url}))?;
+                }
                 Some(Pending::Ignore) | None => {}
             }
             return Ok(());
@@ -489,18 +571,18 @@ impl Recorder {
                     Some("page" | "iframe" | "webview")
                 );
                 if page && !session.is_empty() && self.sessions.insert(session.clone()) {
-                    self.send_async(Some(&session), "Network.enable", json!({}))?;
-                    // Commands on one session run in order, so the page's
-                    // first request is already being watched. Only the empty
+                    let enabled = self.send_async(Some(&session), "Network.enable", json!({}))?;
+                    // The page is opened only once the browser confirms
+                    // tracking is on; sent together, a load could start
+                    // before its first events were reported. Only the empty
                     // tab is sent there; extensions open pages of their own.
                     let blank =
                         reply["params"]["targetInfo"]["url"].as_str() == Some("about:blank");
                     if blank && let Some(start) = self.start.take() {
-                        self.send_async(
-                            Some(&session),
-                            "Page.navigate",
-                            json!({"url": start.as_str()}),
-                        )?;
+                        self.pending.insert(
+                            enabled,
+                            Pending::Navigate(session.clone(), start.to_string()),
+                        );
                     }
                 }
             }
@@ -743,6 +825,40 @@ mod tests {
         let entries = har["log"]["entries"].as_array().unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries[1]["response"]["content"].get("text").is_none());
+    }
+
+    #[test]
+    fn a_response_without_its_request_and_a_load_that_never_ends_are_kept() {
+        let mut capture = Capture::default();
+        // Seen on Linux: the response arrives for a request never announced.
+        let answer = json!({"requestId": "9", "type": "Fetch", "response": {"url": "https://a.example/api/items?q=x", "status": 200, "mimeType": "application/json", "headers": {}, "requestHeaders": {"X-Api-Key": "k"}}});
+        let fetches = capture.event("s", "Network.responseReceived", &answer);
+        assert!(fetches.is_empty());
+        let fetches = capture.event("s", "Network.loadingFinished", &json!({"requestId": "9"}));
+        assert_eq!(fetches.len(), 1);
+        capture.fetched(
+            &fetches[0],
+            Some(&json!({"body": "{}", "base64Encoded": false})),
+        );
+        // And a document whose load is never reported as finished.
+        capture.event("s", "Network.requestWillBeSent", &json!({"requestId": "d", "type": "Document", "wallTime": 2.0, "request": {"url": "https://a.example/board", "method": "GET", "headers": {}}}));
+        capture.event("s", "Network.responseReceived", &json!({"requestId": "d", "type": "Document", "response": {"url": "https://a.example/board", "status": 200, "mimeType": "text/html", "headers": {}}}));
+        let har = capture.har();
+        let urls: Vec<&str> = har["log"]["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["request"]["url"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            urls,
+            ["https://a.example/api/items?q=x", "https://a.example/board"]
+        );
+        assert_eq!(har["log"]["entries"][0]["request"]["method"], "GET");
+        assert_eq!(
+            har["log"]["entries"][0]["request"]["headers"][0]["name"],
+            "X-Api-Key"
+        );
     }
 
     #[test]

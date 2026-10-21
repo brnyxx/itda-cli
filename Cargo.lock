@@ -1434,6 +1434,7 @@ dependencies = [
  "axum",
  "clap",
  "itda-browser",
+ "itda-html",
  "itda-mcp",
  "itda-net",
  "itda-policy",
@@ -1445,6 +1446,7 @@ dependencies = [
  "itda-vault",
  "serde",
  "serde_json",
+ "serde_norway",
  "tokio",
  "url",
 ]

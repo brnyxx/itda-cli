@@ -55,7 +55,7 @@ async fn records_the_calls_a_page_makes_with_their_bodies() {
     std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let page = url::Url::parse(&format!("{base}/board")).unwrap();
-    let har = tokio::task::spawn_blocking(move || {
+    let (har, trace) = tokio::task::spawn_blocking(move || {
         let mut recorder = itda_browser::Recorder::open(&wrapper, &page).unwrap();
         for _ in 0..60 {
             recorder.poll(Duration::from_millis(250)).unwrap();
@@ -64,7 +64,8 @@ async fn records_the_calls_a_page_makes_with_their_bodies() {
             }
         }
         recorder.poll(Duration::from_millis(500)).unwrap();
-        recorder.finish()
+        let trace = recorder.trace();
+        (recorder.finish(), trace)
     })
     .await
     .unwrap();
@@ -86,7 +87,13 @@ async fn records_the_calls_a_page_makes_with_their_bodies() {
             format!("GET {base}/api/items?q=x"),
             format!("POST {base}/api/items"),
         ],
-        "{urls:?}"
+        "{urls:?}\n--- events ---\n{}",
+        trace
+            .iter()
+            .filter(|l| !l.contains("dataReceived"))
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
     );
     let list = &entries[1];
     assert!(

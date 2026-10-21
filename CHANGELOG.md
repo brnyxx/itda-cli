@@ -9,6 +9,16 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda setup <url>` sets a site up in one go: it looks at the page, or
+  opens your browser and records when the page refuses, needs a sign-in or
+  is drawn by scripts; shows what agents will be able to do in plain words;
+  tries every read once and keeps the ones that work; saves the site; and
+  connects an agent. It asks before each step; `--record`/`--no-record`,
+  `--client` and `--yes` answer for scripts. `ITDA_LANG=ko` (or a Korean
+  `LANG`) makes it, and the drafted descriptions, speak Korean.
+- Drafted actions carry a description a person would say (`List what
+  Notices shows`, `공지사항 목록 읽기`), taken from the page's title or the
+  call's name, in English or Korean.
 - `itda record <url>` opens your own browser in a fresh window and records
   what the pages ask the server for while you use the site, then drafts a
   definition the same way `itda draft har` does. The recording stays in
