@@ -125,8 +125,8 @@ pub fn t(key: &str) -> &'static str {
         ("and", " and ", "와(과) "),
         (
             "welcome",
-            "itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter (or press Enter alone for the command list).",
-            "itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요 (그냥 Enter는 명령 목록).",
+            "itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter. No address in mind? Type github, npm, crates-io or pypi. Enter alone shows the command list.",
+            "itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요. 떠오르는 주소가 없으면 github, npm, crates-io, pypi 중 하나를 치세요. 그냥 Enter는 명령 목록.",
         ),
         ("ask_url", "Address: ", "주소: "),
         (
@@ -141,13 +141,39 @@ pub fn t(key: &str) -> &'static str {
         ),
         (
             "added_client",
-            "Added itda to {client} ({path}). Restart {client} to load it.",
-            "{client}에 itda를 추가했습니다 ({path}). {client}를 다시 시작하면 적용됩니다.",
+            "Added itda to {client} ({path}).",
+            "{client}에 itda를 추가했습니다 ({path}).",
         ),
         (
             "already_client",
             "{client} already runs itda ({path}).",
             "{client}에는 itda가 이미 들어 있습니다 ({path}).",
+        ),
+        (
+            "restart_hint",
+            "Restart {client} to load it.",
+            "{client}를 다시 시작하면 적용됩니다.",
+        ),
+        (
+            "restart_ask",
+            "{client} is open. Restart it now so itda shows up? [Y/n] ",
+            "{client}가 열려 있습니다. itda가 보이도록 지금 다시 시작할까요? [Y/n] ",
+        ),
+        (
+            "restarted",
+            "{client} restarted; itda is in it.",
+            "{client}를 다시 시작했습니다. itda가 들어 있습니다.",
+        ),
+        (
+            "open_app",
+            "Open {client} and itda will be there.",
+            "{client}를 열면 itda가 보입니다.",
+        ),
+        ("running", "Running: {command}", "실행 중: {command}"),
+        (
+            "run_yourself",
+            "{client} keeps its own configuration. Run:",
+            "{client}는 설정을 직접 관리합니다. 이 명령을 실행하세요:",
         ),
         (
             "done",

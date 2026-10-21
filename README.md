@@ -23,7 +23,7 @@ and it works on the old intranet behind a login too.
 
 ```console
 $ itda
-itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter (or press Enter alone for the command list).
+itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter. No address in mind? Type github, npm, crates-io or pypi. Enter alone shows the command list.
 Address: news.ycombinator.com
 1/5  Looking at news.ycombinator.com...
     The page opens without signing in.
@@ -37,7 +37,8 @@ Address: news.ycombinator.com
 4/5  Saved as 'news-ycombinator'.
     Connect Claude Desktop? [Y/n]
 5/5  Adding itda to Claude Desktop...
-Added itda to Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json). Restart Claude Desktop to load it.
+Added itda to Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json).
+Open Claude Desktop and itda will be there.
 
 Done. Ask your agent for something on 'news-ycombinator', for example "use news-ycombinator to list what Hacker News shows".
 ```

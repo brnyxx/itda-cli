@@ -380,7 +380,7 @@ fn without(yaml: &str, names: &[String]) -> AppResult<String> {
 }
 
 /// A yes or no in the terminal; `default` answers an empty line.
-fn ask(question: &str, default: bool) -> AppResult<bool> {
+pub(crate) fn ask(question: &str, default: bool) -> AppResult<bool> {
     let stdin = std::io::stdin();
     if !stdin.is_terminal() {
         return Ok(default);
@@ -394,6 +394,24 @@ fn ask(question: &str, default: bool) -> AppResult<bool> {
         "y" | "yes" | "ㅇ" | "네" | "예" => true,
         _ => false,
     })
+}
+
+/// After a ready-made site was added from the welcome prompt: connect the
+/// agent apps found on this computer, the way `itda setup` ends.
+pub(crate) fn connect_detected() -> AppResult<()> {
+    let clients = choose_clients()?;
+    if clients.is_empty() {
+        eprintln!("{}", t("later"));
+        return Ok(());
+    }
+    eprintln!(
+        "{}",
+        tf("connecting", &[("client", &join_labels(&clients))])
+    );
+    for client in &clients {
+        crate::mcp_install(client, false, false)?;
+    }
+    Ok(())
 }
 
 fn join_labels(clients: &[String]) -> String {

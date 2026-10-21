@@ -11,7 +11,7 @@ and it works on the old intranet behind a login too.
 
 ```console
 $ itda
-itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter (or press Enter alone for the command list).
+itda hands the websites you use to your AI agent. Paste the address of a site you use and press Enter. No address in mind? Type github, npm, crates-io or pypi. Enter alone shows the command list.
 Address: news.ycombinator.com
 1/5  Looking at news.ycombinator.com...
     The page opens without signing in.

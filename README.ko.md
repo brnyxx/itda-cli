@@ -14,7 +14,7 @@
 
 주소 하나만 주면 됩니다. itda가 그 사이트에서 할 수 있는 일을 알아내고,
 실제로 한 번씩 해 보고, AI 에이전트에게 사람 말로 된 짧은 목록을 넘깁니다.
-읽기는 알아서 됩니다. 사이트를 바꾸는 건 내가 허락하기 전엔 절대 안 합니다.
+읽기는 알아서 됩니다. 사이트를 바꾸는 건 내가 허락하기 전엔 하지 않습니다.
 내 컴퓨터에서만 돌아가고, 로그인해야 하는 오래된 사내 시스템도 됩니다.
 
 <p align="center"><img src="assets/setup.ko.gif" alt="첫 실행: itda가 주소를 묻고, news.ycombinator.com을 붙여넣자 목록 30건과 폼, 피드를 찾아 읽기 둘을 실제로 불러보고, 사이트를 저장한 뒤 Enter 한 번에 Claude Desktop을 연결합니다" width="860"></p>
@@ -24,7 +24,7 @@
 
 ```console
 $ itda
-itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요 (그냥 Enter는 명령 목록).
+itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요. 떠오르는 주소가 없으면 github, npm, crates-io, pypi 중 하나를 치세요. 그냥 Enter는 명령 목록.
 주소: news.ycombinator.com
 1/5  news.ycombinator.com 살펴보는 중...
     이 페이지는 로그인 없이 열립니다.
@@ -38,7 +38,8 @@ itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내
 4/5  'news-ycombinator'로 저장했습니다.
     Claude Desktop에 연결할까요? [Y/n]
 5/5  Claude Desktop에 itda 추가 중...
-Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json). Claude Desktop를 다시 시작하면 적용됩니다.
+Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json).
+Claude Desktop를 열면 itda가 보입니다.
 
 끝났습니다. 에이전트에게 'news-ycombinator'에 대해 물어보세요. 예: "news-ycombinator에서 Hacker News 목록 읽기".
 ```

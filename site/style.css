@@ -172,7 +172,8 @@ h1 {
 .term-body .l:nth-child(14) { animation-delay: 6.0s; }
 .term-body .l:nth-child(15) { animation-delay: 6.9s; }
 .term-body .l:nth-child(16) { animation-delay: 7.1s; }
-.term-body .l:nth-child(17) { animation-delay: 7.3s; }
+.term-body .l:nth-child(17) { animation-delay: 7.2s; }
+.term-body .l:nth-child(18) { animation-delay: 7.4s; }
 @keyframes line { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .term-body b.p { color: var(--blue-hi); font-weight: 500; }
 .term-body b.you { color: var(--green); }
