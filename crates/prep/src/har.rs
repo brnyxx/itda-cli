@@ -4,6 +4,7 @@
 //! the shape of each call is kept: method, path, input names and types, and the
 //! response fields every sample had. No header, cookie, query or body value is
 //! copied into the draft.
+use crate::label::{Label, describe, language};
 use crate::{Draft, Options, Parts, reorder, slug};
 use itda_types::error::{AppResult, usage};
 use itda_types::util::secret_field;
@@ -431,6 +432,25 @@ fn parts_at(
         };
         let mut entry = Mapping::new();
         entry.insert("name".into(), name.clone().into());
+        let lang = language(&options.lang, "");
+        let desc = match &call.graphql {
+            Some(graphql) => describe(
+                &Label::Graphql {
+                    name: if graphql.name.is_empty() {
+                        &name
+                    } else {
+                        &graphql.name
+                    },
+                    mutation: graphql.mutation,
+                },
+                &lang,
+            ),
+            None => {
+                let (verb, resource) = name.split_once('-').unwrap_or(("get", &name));
+                describe(&Label::Api { verb, resource }, &lang)
+            }
+        };
+        entry.insert("desc".into(), desc.into());
         entry.insert("method".into(), call.method.clone().into());
         entry.insert("path".into(), call.path.clone().into());
         if let Some((header, bearer)) = &call.token {

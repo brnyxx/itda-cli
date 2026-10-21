@@ -6,6 +6,7 @@
 //! guessed. The draft is checked with the same rules `itda` applies at install
 //! time, so problems show up before anyone runs it.
 mod har;
+pub mod label;
 mod openapi;
 mod page;
 
@@ -26,6 +27,9 @@ pub struct Options {
     pub base_url: Option<String>,
     /// Keep only operations whose path, name or tag contains this text.
     pub include: Option<String>,
+    /// `ko` or `en` for the descriptions people read; the page's own
+    /// language, or English, when left empty.
+    pub lang: String,
 }
 
 /// A drafted definition and what the person should review.
@@ -182,6 +186,7 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
             name: Some(parts.site.clone()),
             base_url: Some(parts.base_url.clone()),
             include: options.include.clone(),
+            lang: options.lang.clone(),
         };
         parts.merge(page::page_parts(&pages, &page_options)?);
     }

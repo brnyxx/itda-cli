@@ -6,6 +6,7 @@
 //! changes. Pages are fetched by the caller with the honest client; nothing
 //! here reaches the network.
 use crate::har::{Kind, action_name, site_name, template, unique};
+use crate::label::{Label, describe, language};
 use crate::{Draft, Options, Parts, reorder, slug};
 use itda_html::evidence;
 use itda_types::error::{AppResult, usage};
@@ -123,8 +124,10 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
             operations.push(reorder(entry));
         };
 
+        let lang = language(&options.lang, &page_lang(&page.html));
+        let page_title = title_of(&page.html);
         push(
-            page_action(page, &url, &path, &params, &mut names, &mut notes),
+            page_action(page, &url, &path, &params, &mut names, &mut notes, &lang),
             &mut notes,
         );
         for form in evidence::forms(&page.html, url.as_str()) {
@@ -163,7 +166,16 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
             // A form that changes the site almost always wants an account.
             sign_in |= form.method == "POST";
             push(
-                form_action(&form, &url, &path, &params, &mut names, &mut notes),
+                form_action(
+                    &form,
+                    &url,
+                    &path,
+                    &params,
+                    &mut names,
+                    &mut notes,
+                    &page_title,
+                    &lang,
+                ),
                 &mut notes,
             );
         }
@@ -182,12 +194,7 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
             entry.insert("name".into(), unique(&mut names, "feed").into());
             entry.insert(
                 "desc".into(),
-                if feed.title.is_empty() {
-                    "Read the site's feed".to_owned()
-                } else {
-                    format!("Read the {} feed", feed.title)
-                }
-                .into(),
+                describe(&Label::Feed { title: &feed.title }, &lang).into(),
             );
             entry.insert("method".into(), "GET".into());
             entry.insert("path".into(), rest.into());
@@ -243,6 +250,37 @@ fn page_url(raw: &str) -> AppResult<url::Url> {
 
 /// The page itself as a read: its records, its embedded data, or at least
 /// its title, so the action fails when the page changes.
+/// The page's `<title>`, trimmed of a site suffix such as ` - Example`.
+fn title_of(html: &str) -> String {
+    let title = itda_html::Field {
+        selector: "title".into(),
+        attribute: String::new(),
+    }
+    .extract(&itda_html::parse_document(html))
+    .unwrap_or_default();
+    let short = [" - ", " | ", " · ", " — ", " – "]
+        .iter()
+        .filter_map(|sep| title.split(sep).next())
+        .min_by_key(|s| s.len())
+        .unwrap_or(&title)
+        .trim();
+    if short.len() >= 3 {
+        short.to_owned()
+    } else {
+        title.trim().to_owned()
+    }
+}
+
+/// The `lang` attribute of the page, when it has one.
+fn page_lang(html: &str) -> String {
+    itda_html::Field {
+        selector: "html".into(),
+        attribute: "lang".into(),
+    }
+    .extract(&itda_html::parse_document(html))
+    .unwrap_or_default()
+}
+
 fn page_action(
     page: &Page,
     url: &url::Url,
@@ -250,14 +288,10 @@ fn page_action(
     params: &[String],
     names: &mut BTreeSet<String>,
     notes: &mut Vec<String>,
+    lang: &str,
 ) -> Mapping {
     let title = evidence::title_field(&page.html);
-    let page_title = itda_html::Field {
-        selector: "title".into(),
-        attribute: String::new(),
-    }
-    .extract(&itda_html::parse_document(&page.html))
-    .unwrap_or_default();
+    let page_title = title_of(&page.html);
     let name = if path == "/" {
         "home".to_owned()
     } else {
@@ -266,14 +300,14 @@ fn page_action(
     let name = unique(names, &name);
     let mut entry = Mapping::new();
     entry.insert("name".into(), name.into());
+    let subject = if page_title.is_empty() {
+        url.path().to_owned()
+    } else {
+        page_title.clone()
+    };
     entry.insert(
         "desc".into(),
-        if page_title.is_empty() {
-            format!("Read {}", url.path())
-        } else {
-            format!("Read {}", page_title.chars().take(80).collect::<String>())
-        }
-        .into(),
+        describe(&Label::Page { title: &subject }, lang).into(),
     );
     entry.insert("method".into(), "GET".into());
     entry.insert("path".into(), path.into());
@@ -318,6 +352,10 @@ fn page_action(
     response.insert("format".into(), "html".into());
     let label = format!("GET {}", url.path());
     if let Some(extraction) = evidence::infer_extraction(&page.html, url.as_str()) {
+        entry.insert(
+            "desc".into(),
+            describe(&Label::List { title: &subject }, lang).into(),
+        );
         let count = extraction.fields.len();
         if let Some(title) = &title {
             response.insert(
@@ -335,6 +373,10 @@ fn page_action(
             .into(),
         );
     } else if let Some((key, pointer, pointers)) = embedded(&page.html) {
+        entry.insert(
+            "desc".into(),
+            describe(&Label::Embedded { title: &subject }, lang).into(),
+        );
         response.insert("ssr_json".into(), key.clone().into());
         if !pointer.is_empty() {
             response.insert("extract_pointer".into(), pointer.clone().into());
@@ -401,6 +443,7 @@ fn page_action(
 
 /// A form as an action: a search as a read, a post as a change whose tokens
 /// come from the form page through a preflight step.
+#[allow(clippy::too_many_arguments)]
 fn form_action(
     form: &evidence::Form,
     page: &url::Url,
@@ -408,6 +451,8 @@ fn form_action(
     params: &[String],
     names: &mut BTreeSet<String>,
     notes: &mut Vec<String>,
+    page_title: &str,
+    lang: &str,
 ) -> Mapping {
     let read = form.method == "GET";
     let searches = form.controls.iter().any(|c| {
@@ -430,12 +475,20 @@ fn form_action(
     let label = format!("{} {path}", form.method);
     let mut entry = Mapping::new();
     entry.insert("name".into(), name.into());
+    let subject = if page_title.is_empty() {
+        page.path().to_owned()
+    } else {
+        page_title.to_owned()
+    };
     entry.insert(
         "desc".into(),
-        format!(
-            "{} the form on {}",
-            if read { "Search with" } else { "Submit" },
-            page.path()
+        describe(
+            &if read {
+                Label::Search { title: &subject }
+            } else {
+                Label::Submit { title: &subject }
+            },
+            lang,
         )
         .into(),
     );
