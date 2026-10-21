@@ -74,7 +74,260 @@ pub fn infer_extraction(html: &str, base: &str) -> Option<Extraction> {
     table_extraction(&document)
         .into_iter()
         .chain(record_extraction(&document))
+        .chain(generic_extraction(&document))
         .find(|extraction| extraction.valid() && extraction.extract(html, base).is_some())
+}
+
+/// Elements that repeat as records, and the page furniture they are never in.
+const RECORD_TAGS: &[&str] = &["li", "tr", "article", "div", "section", "dd", "dt", "p"];
+const FURNITURE: &[&str] = &["nav", "aside", "header", "footer"];
+
+/// Any run of three or more siblings of one shape, outside navigation,
+/// whose members each hold one link at the same place: a list page the
+/// known selectors do not name. The title and link are read from that
+/// link's own path, found in the page rather than guessed.
+fn generic_extraction(document: &Html) -> Option<Extraction> {
+    let everything = Selector::parse("body *").ok()?;
+    let mut best: Option<(usize, Extraction)> = None;
+    for parent in document.select(&everything).take(40_000) {
+        if furniture(parent) {
+            continue;
+        }
+        let mut groups: BTreeMap<String, Vec<ElementRef<'_>>> = BTreeMap::new();
+        for child in parent.children().filter_map(ElementRef::wrap) {
+            if RECORD_TAGS.contains(&child.value().name()) {
+                groups.entry(segment(child)).or_default().push(child);
+            }
+        }
+        for (shape, records) in groups {
+            if records.len() < 3 {
+                continue;
+            }
+            let Some((items, records)) = items_selector(document, parent, &shape, records) else {
+                continue;
+            };
+            let Some((path, text_len)) = title_path(&records) else {
+                continue;
+            };
+            let score = records.len().min(100) * text_len.min(120);
+            if best.as_ref().is_some_and(|(top, _)| *top >= score) {
+                continue;
+            }
+            let mut fields = BTreeMap::new();
+            if let Some(field) = pick_field(&records, &[("", "data-id"), ("", "id")], false) {
+                fields.insert("id".into(), field);
+            }
+            fields.insert(
+                "title".into(),
+                OutputField {
+                    selector: path.clone(),
+                    attribute: String::new(),
+                    required: false,
+                    absolute_url: false,
+                },
+            );
+            fields.insert(
+                "link".into(),
+                OutputField {
+                    selector: path,
+                    attribute: "href".into(),
+                    required: false,
+                    absolute_url: true,
+                },
+            );
+            for (name, options) in [
+                (
+                    "summary",
+                    &[(".summary", ""), (".description", ""), ("p", "")][..],
+                ),
+                ("meta", &[(".meta", ""), (".byline", ""), (".info", "")][..]),
+                (
+                    "published_at",
+                    &[("time[datetime]", "datetime"), ("time", "")][..],
+                ),
+            ] {
+                if let Some(field) = pick_field(&records, options, false) {
+                    fields.insert(name.into(), field);
+                }
+            }
+            best = Some((
+                score,
+                Extraction {
+                    items,
+                    fields,
+                    page: BTreeMap::new(),
+                    limit: 100,
+                },
+            ));
+        }
+    }
+    best.map(|(_, extraction)| extraction)
+}
+
+/// Inside navigation, a sidebar, a header or a footer: by tag, or by the
+/// names pages give those areas when they use plain `div`s.
+fn furniture(element: ElementRef<'_>) -> bool {
+    std::iter::once(element)
+        .chain(element.ancestors().filter_map(ElementRef::wrap))
+        .any(furniture_self)
+}
+
+fn furniture_self(e: ElementRef<'_>) -> bool {
+    const WORDS: &[&str] = &[
+        "sidebar",
+        "nav",
+        "menu",
+        "footer",
+        "header",
+        "breadcrumb",
+        "toolbar",
+    ];
+    if FURNITURE.contains(&e.value().name()) {
+        return true;
+    }
+    // Only containers are named after what they hold; a record's own id
+    // (`431_request_header_fields_too_large`) says nothing about layout.
+    if !matches!(e.value().name(), "div" | "section" | "ul" | "ol" | "menu") {
+        return false;
+    }
+    let named = e.value().classes().chain(e.value().id()).any(|name| {
+        let lower = name.to_ascii_lowercase();
+        WORDS.iter().any(|word| lower.contains(word))
+    });
+    // A page-wide wrapper such as `div.flex-wrap-footer` holds the content
+    // itself; a real sidebar or menu holds no heading or article.
+    named
+        && Selector::parse("h1, main, article")
+            .is_ok_and(|content| e.select(&content).next().is_none())
+}
+
+/// `tag.class` with the first class a selector can use, else just `tag`.
+fn segment(element: ElementRef<'_>) -> String {
+    let tag = element.value().name();
+    element
+        .value()
+        .classes()
+        .find(|class| selector_word(class))
+        .map(|class| format!("{tag}.{class}"))
+        .unwrap_or_else(|| tag.to_owned())
+}
+
+fn selector_word(word: &str) -> bool {
+    !word.is_empty()
+        && word.len() <= 40
+        && word.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// A selector that picks these records: the parent's path, made longer
+/// until it matches exactly them, or else the same shape repeated under
+/// several parents of one kind (a list per section), none of it furniture.
+/// Returns the selector and every record it picks.
+fn items_selector<'a>(
+    document: &'a Html,
+    parent: ElementRef<'a>,
+    shape: &str,
+    records: Vec<ElementRef<'a>>,
+) -> Option<(String, Vec<ElementRef<'a>>)> {
+    let mut path = Vec::new();
+    let mut node = Some(parent);
+    let mut spread: Option<(String, Vec<ElementRef<'a>>)> = None;
+    for _ in 0..6 {
+        let element = node?;
+        let id = element.value().id().filter(|id| selector_word(id));
+        match id {
+            Some(id) => path.insert(0, format!("#{id}")),
+            None => path.insert(0, segment(element)),
+        }
+        let candidate = format!("{} > {shape}", path.join(" > "));
+        let matched: Vec<ElementRef<'a>> = Selector::parse(&candidate)
+            .map(|selector| document.select(&selector).take(1001).collect())
+            .unwrap_or_default();
+        if matched.len() == records.len() {
+            return Some((candidate, records));
+        }
+        let parallel = matched.len() <= 1000
+            && spread
+                .as_ref()
+                .is_none_or(|(_, seen)| matched.len() < seen.len())
+            && matched.iter().all(|m| {
+                !furniture(*m)
+                    && m.parent()
+                        .and_then(ElementRef::wrap)
+                        .is_some_and(|p| segment(p) == segment(parent))
+            });
+        if parallel {
+            spread = Some((candidate, matched));
+        }
+        if id.is_some() {
+            break;
+        }
+        node = element.parent().and_then(ElementRef::wrap);
+    }
+    spread
+}
+
+/// The path, relative to a record, of the one link most records have at
+/// the same place, and the average length of its text.
+fn title_path(records: &[ElementRef<'_>]) -> Option<(String, usize)> {
+    let anchors = Selector::parse("a[href]").ok()?;
+    let mut paths: Vec<String> = Vec::new();
+    for record in records.iter().take(5) {
+        for anchor in record.select(&anchors) {
+            if element_text(anchor).trim().is_empty() {
+                continue;
+            }
+            let mut path = Vec::new();
+            let mut node = Some(anchor);
+            while let Some(element) = node.filter(|e| e.id() != record.id()) {
+                path.insert(0, segment(element));
+                node = element.parent().and_then(ElementRef::wrap);
+            }
+            // Links without classes tell apart by position: `a:nth-of-type(2)`.
+            let position = anchor
+                .prev_siblings()
+                .filter_map(ElementRef::wrap)
+                .filter(|e| e.value().name() == "a")
+                .count()
+                + 1;
+            let mut placed = path.clone();
+            if let Some(last) = placed.last_mut() {
+                *last = format!("{last}:nth-of-type({position})");
+            }
+            for path in [path.join(" > "), placed.join(" > ")] {
+                if !paths.contains(&path) {
+                    paths.push(path);
+                }
+            }
+        }
+    }
+    let needed = (records.len() * 4).div_ceil(5).max(2);
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let selector = Selector::parse(&path).ok()?;
+            let texts: Vec<usize> = records
+                .iter()
+                .filter_map(|record| {
+                    let mut matches = record.select(&selector);
+                    let first = matches.next()?;
+                    if matches.next().is_some() {
+                        return None;
+                    }
+                    let text = element_text(first);
+                    let text = text.trim();
+                    (!text.is_empty() && text.len() <= 300).then_some(text.len())
+                })
+                .collect();
+            (texts.len() >= needed).then(|| {
+                let average = texts.iter().sum::<usize>() / texts.len();
+                (path, texts.len(), average)
+            })
+        })
+        .max_by_key(|(path, hits, average)| (*hits, *average, std::cmp::Reverse(path.len())))
+        .map(|(path, _, average)| (path, average))
 }
 
 /// The first table with a header row and at least two body rows.
@@ -186,7 +439,7 @@ fn record_extraction(document: &Html) -> Option<Extraction> {
             continue;
         };
         let records: Vec<ElementRef<'_>> = document.select(&selector).take(40).collect();
-        if records.len() < 3 {
+        if records.len() < 3 || records.iter().any(|record| furniture(*record)) {
             continue;
         }
         let mut fields = BTreeMap::new();
@@ -561,6 +814,43 @@ mod tests {
         assert_eq!(extraction.fields["title"].selector, "h2");
         assert_eq!(extraction.fields["published_at"].attribute, "datetime");
         assert!(infer_extraction("<p>one</p><p>two</p>", BASE).is_none());
+    }
+
+    #[test]
+    fn unnamed_lists_are_found_by_their_repeated_link_and_navigation_is_skipped() {
+        let stories: String = (1..=4)
+            .map(|n| format!("<li class='story'><div class='story_liner'><span class='link'><a class='u-url' href='/s/{n}'>Story {n} title</a></span><span class='tags'><a href='/t/a'>a</a> <a href='/t/b'>b</a></span><span class='byline'>by someone</span></div></li>"))
+            .collect();
+        let html = format!(
+            "<nav><ol>{}</ol></nav><main><h1>Front</h1><ol class='stories list'>{stories}</ol></main>",
+            (1..=6)
+                .map(|n| format!("<li><a href='/nav/{n}'>Menu {n}</a></li>"))
+                .collect::<String>()
+        );
+        let extraction = infer_extraction(&html, BASE).unwrap();
+        assert!(
+            extraction.items.starts_with("ol.") && extraction.items.ends_with(" > li.story"),
+            "{}",
+            extraction.items
+        );
+        assert_eq!(
+            extraction.fields["title"].selector,
+            "div.story_liner > span.link > a.u-url"
+        );
+        assert_eq!(extraction.fields["link"].attribute, "href");
+        let value = extraction.extract(&html, BASE).unwrap();
+        assert_eq!(value["items"][2]["title"], "Story 3 title");
+        assert_eq!(value["items"][2]["link"], "https://example.test/s/3");
+
+        let listing: String = (1..=5)
+            .map(|n| format!("<dt><a href='/abs/{n}'>arXiv:{n}</a></dt><dd><div class='list-title'>Paper {n}</div></dd>"))
+            .collect();
+        let html = format!(
+            "<nav><ul><li><a href='/x'>x</a></li><li><a href='/y'>y</a></li><li><a href='/z'>z</a></li></ul></nav><dl id='articles'>{listing}</dl>"
+        );
+        let extraction = infer_extraction(&html, BASE).unwrap();
+        assert_eq!(extraction.items, "#articles > dt");
+        assert_eq!(extraction.fields["title"].selector, "a");
     }
 
     #[test]
