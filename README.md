@@ -27,8 +27,8 @@ change.
 
 > Status: early, and used against real sites. The runtime, CLI, MCP server,
 > approvals (in a terminal or inside the agent app), audit log, drafting from
-> OpenAPI documents or browser recordings, API keys, browser sign-in and CSRF
-> preflight steps work today. Signed site packs are next. See
+> OpenAPI documents, browser recordings or fetched pages, API keys, browser
+> sign-in and CSRF preflight steps work today. Signed site packs are next. See
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Why
@@ -64,9 +64,19 @@ Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releas
 or build from source with
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then turn a website you use into commands. In your browser's developer
-tools, open the Network tab, use the site as usual (sign in, search, post a
-form) and save the log as a HAR file:
+Then turn a website you use into commands. For pages you can open without
+signing in, give itda their addresses: tables and lists become records,
+search forms become reads, post forms become changes, and feeds come along:
+
+```sh
+itda draft page https://example.com/board --install   # shows what it found on the page
+itda call example.get-board --page 2 --json
+itda check example                                     # does the page still match?
+```
+
+For a site behind a sign-in, record yourself using it. In your browser's
+developer tools, open the Network tab, use the site as usual (sign in,
+search, post a form) and save the log as a HAR file:
 
 ```sh
 itda draft har board.har --name board --install   # shows what it found; never copies values
@@ -94,6 +104,8 @@ prints where the data directory is, and
 [docs/SPEC.md](docs/SPEC.md) explains how to write one.
 
 ```sh
+itda draft page <url>... [--install]     # draft a site from the pages you use
+itda draft har <file> / openapi <file>   # or from a recording or an API description
 itda add spec.yaml / remove <site>       # install or remove a site (also a URL or github)
 itda ls                                  # installed sites and their actions
 itda call <site>.<action> --input value  # run one; --json for agents

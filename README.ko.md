@@ -26,8 +26,9 @@ itda는 내가 쓰는 웹사이트를, 로그인이 필요한 오래된 사내 �
 <p align="center"><img src="assets/flow.ko.svg" alt="브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다." width="860"></p>
 
 > 상태: 초기 단계이며 실제 사이트에서 쓰고 있습니다. 런타임, CLI, MCP 서버,
-> 승인(터미널 또는 에이전트 앱 안에서), 감사 로그, OpenAPI 문서나 브라우저
-> 녹화로 초안 만들기, API 키, 브라우저 로그인, CSRF 사전 단계가 지금 동작합니다.
+> 승인(터미널 또는 에이전트 앱 안에서), 감사 로그, OpenAPI 문서·브라우저
+> 녹화·가져온 페이지로 초안 만들기, API 키, 브라우저 로그인, CSRF 사전 단계가
+> 지금 동작합니다.
 > 서명된 사이트 팩이 다음 순서입니다. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를
 > 보세요.
 
@@ -63,7 +64,17 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
-그다음 내가 쓰는 웹사이트를 명령으로 바꿔 보세요. 브라우저 개발자 도구의
+그다음 내가 쓰는 웹사이트를 명령으로 바꿔 보세요. 로그인 없이 열리는
+페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
+폼은 변경으로, 피드도 함께 초안이 됩니다.
+
+```sh
+itda draft page https://example.com/board --install   # 페이지에서 찾은 내용을 보여줌
+itda call example.get-board --page 2 --json
+itda check example                                     # 페이지가 아직 정의와 맞는가?
+```
+
+로그인이 필요한 사이트는 쓰는 모습을 녹화합니다. 브라우저 개발자 도구의
 Network 탭을 열고 평소처럼 사이트를 쓴 뒤(로그인, 검색, 폼 전송) 기록을 HAR
 파일로 저장합니다.
 
@@ -92,6 +103,8 @@ itda call github.repo --owner rust-lang --repo rust
 알려줍니다. 정의를 직접 쓰는 방법은 [docs/SPEC.md](docs/SPEC.md)에 있습니다.
 
 ```sh
+itda draft page <url>... [--install]     # 내가 쓰는 페이지로 사이트 초안 만들기
+itda draft har <file> / openapi <file>   # 또는 녹화나 API 설명서로
 itda add spec.yaml / remove <site>       # 사이트 설치·삭제 (URL이나 github 같은 이름도 가능)
 itda ls                                  # 설치된 사이트와 액션
 itda call <site>.<action> --input value  # 하나 실행, 에이전트용은 --json

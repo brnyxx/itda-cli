@@ -12,18 +12,17 @@ Each crate depends only on crates in a lower layer. Cargo rejects cycles;
 | Layer | Crate | Responsibility | I/O |
 |---|---|---|---|
 | 0 | `itda-types` | Error contract and exit codes, URL checks with the Public Suffix List, redaction, file helpers | files |
-| 1 | `itda-html` | Script-free HTML and embedded-JSON extraction | none |
+| 1 | `itda-html` | Script-free HTML and embedded-JSON extraction; what a page shows about itself (`evidence`) for drafting | none |
 | 1 | `itda-store` | One SQLite connection on its own thread, with per-component migrations | SQLite |
 | 2 | `itda-spec` | Definition format, request building, response verification | none |
 | 3 | `itda-policy` | Read/write classification, definition safety checks, single-use approvals | SQLite |
 | 4 | `itda-net` | Bounded HTTP, pacing and budgets, block detection and pauses, private-address guard | network, SQLite |
 | 5 | `itda-vault` | Accounts and secrets: OS keyring, environment variables, or memory | keyring, SQLite |
+| 6 | `itda-browser` | Opens the user's own browser in a fresh profile for sign-in, and reads its cookies over DevTools | browser |
 | 7 | `itda-runtime` | Runs an action end to end; approvals for changes; audit log | files |
+| 8 | `itda-prep` | Drafts definitions from OpenAPI documents, recordings and fetched pages; no I/O, the CLI fetches | none |
 | 9 | `itda-mcp` | MCP server over stdio | stdio |
 | 10 | `apps/cli` | The `itda` command; the only place that picks paths and settings | all |
-
-Layers 6 (`browser`) and 8 (`prep`) are reserved for browser sign-in and for
-drafting definitions; see the roadmap below.
 
 `itda-spec` never does I/O: response checks take a `ResponseLike` trait, so the
 format can be tested and reused without a network stack.
@@ -89,9 +88,7 @@ folder; `itda doctor` prints it).
 
 | Next | What it adds |
 |---|---|
-| Definition drafting (`prep`) | Draft `spec.yaml` from an OpenAPI document or a recorded browser session (HAR), then review and verify it |
-| Browser sign-in (`browser`) | Sites without API keys: reuse a session the user signed in to, only where the definition says so |
-| Approvals in clients | Approve through MCP elicitation or a desktop prompt instead of a terminal |
+| Desktop approvals | Approve through a desktop prompt instead of a terminal or MCP elicitation |
 | Signed site packs | Share and install reviewed definitions with hash-locked, signed packs |
 
 ## Provenance

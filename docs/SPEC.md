@@ -25,6 +25,43 @@ multipart bodies, deprecated operations) is listed on stderr instead of being
 guessed. Review the draft before agents use it: shorten descriptions, remove
 actions agents should not call, and tighten the response checks.
 
+## Start from the pages you use
+
+For a site with no API description, and pages you can open without signing
+in, give itda the addresses of the pages an agent should read:
+
+```sh
+itda draft page https://example.com/board > spec.yaml      # print the draft
+itda draft page https://example.com/board https://example.com/board/42
+itda draft page https://example.com/board --name board --install
+```
+
+itda fetches each page as itself (`itda/<version>`, never a browser), on the
+same rules as every other request: private addresses need `ITDA_ALLOW_LOCAL=1`,
+and a page that refuses or challenges the request pauses the site instead of
+being retried. Each page becomes a read with a response check, so `itda check`
+notices when the page changes:
+
+| What the page has | What the draft gets |
+|---|---|
+| A table with a header row | `html.items` per row, one field per column named after its header, plus `link` |
+| A list of similar elements with a title and a link (cards, posts, `tr.athing`) | `html.items` with `title`, `link` and, when present, `id`, `summary`, `meta`, `published_at` |
+| Data embedded for its scripts (`__NEXT_DATA__`, `__NUXT_DATA__`, `__remixContext`, `__APOLLO_STATE__`, `ld+json`) | `ssr_json` with `required_pointers` |
+| Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
+| Links to `?page=2` on the same path | A `page` query input (`int`, default 1) |
+| A `GET` form | A read with the form's fields as `query` inputs |
+| A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
+| A sign-in form | Left out; `itda login <site> --browser` signs in |
+| `<link rel="alternate">` to RSS or Atom | A read with `format: xml` |
+| A link to an OpenAPI document | A note suggesting `itda draft openapi` |
+
+Field and input names go through the same checks as a hand-written
+definition: a name that looks like a credential is left out and listed. A
+hidden form field that is not a token keeps its value as a default, since the
+form always sends it; nothing else from the page is copied. A page drawn by
+scripts shows little to a plain fetch; the draft says so and points at
+recording the site instead.
+
 ## Start from a browser recording
 
 Most internal and older sites publish no API description, but their pages
