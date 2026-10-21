@@ -24,7 +24,7 @@
 
 ```console
 $ itda
-itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요 (그냥 Enter는 명령 목록).
+itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내가 쓰는 사이트 주소를 붙여넣고 Enter를 누르세요. 떠오르는 주소가 없으면 github, npm, crates-io, pypi 중 하나를 치세요. 그냥 Enter는 명령 목록.
 주소: news.ycombinator.com
 1/5  news.ycombinator.com 살펴보는 중...
     이 페이지는 로그인 없이 열립니다.
@@ -38,7 +38,8 @@ itda는 내가 쓰는 웹사이트를 AI 에이전트에게 넘겨줍니다. 내
 4/5  'news-ycombinator'로 저장했습니다.
     Claude Desktop에 연결할까요? [Y/n]
 5/5  Claude Desktop에 itda 추가 중...
-Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json). Claude Desktop를 다시 시작하면 적용됩니다.
+Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json).
+Claude Desktop를 열면 itda가 보입니다.
 
 끝났습니다. 에이전트에게 'news-ycombinator'에 대해 물어보세요. 예: "news-ycombinator에서 Hacker News 목록 읽기".
 ```

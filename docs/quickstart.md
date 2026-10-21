@@ -27,6 +27,7 @@ ok    data directory   /home/you/.local/share/itda
 ok    secrets          system keyring
 ok    audit log        0 records, chain intact
 ok    sites            0 installed, 0 invalid
+ok    agents           none connected (itda setup <url>, or itda mcp install <client>)
 ok    local addresses  refused (ITDA_ALLOW_LOCAL=1 allows them)
 ```
 

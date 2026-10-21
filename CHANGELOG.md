@@ -16,6 +16,14 @@ change the definition format or the CLI.
   all after one Enter; the numbered list only appears when none is found.
 - `itda setup` asks whether the site needs a sign-in only when the page it
   fetched has a password form; a page that simply opened is used as it is.
+- The installer ends with "Open a new terminal window and type: itda".
+- At the first prompt, a ready-made site's name (`github`, `npm`, `crates-io`,
+  `pypi`) installs that site and connects the agent apps found on this
+  computer.
+- After adding itda to Claude Desktop on macOS, itda offers to restart the app
+  when it is open, or says that opening it is enough; for Claude Code it runs
+  `claude mcp add` itself when `claude` is on the PATH.
+- `itda doctor` lists the agent apps whose settings already start itda.
 
 ## [0.4.0] - 2026-10-22
 
