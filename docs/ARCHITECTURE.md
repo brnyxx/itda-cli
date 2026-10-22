@@ -91,6 +91,7 @@ Everything is in the data directory (`ITDA_HOME` or the platform's data folder).
 |---|---|
 | Desktop approvals | Approve through a desktop prompt instead of a terminal or MCP elicitation |
 | Signed site packs | Share and install reviewed definitions with hash-locked, signed packs |
+| Outcome check after a lost answer | A change names the read that shows it landed; after `action_outcome_unknown` itda runs that read before asking you to approve again |
 
 ## Provenance
 
