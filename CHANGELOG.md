@@ -7,6 +7,36 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Changed
+
+- The gate reads the request it is about to send, not only the declared
+  inputs. After the template is rendered, every query key and body field,
+  the value of an intent field such as `action` or `mode`, and any GraphQL
+  document in `query` (or `q`/`document` on a GraphQL path) are read again.
+  A declared read whose rendered request asks for a change (a `json_template`
+  whose literal body is a mutation, `{"op": "delete"}` deep inside it) is
+  treated as a change: `approval_required` carries `reclassified` with the
+  reason, the review shows it, and the audit record says `effect: write`
+  with the same `reclassified` reason. A read whose effect cannot be told (a
+  GraphQL endpoint sent no document, a document itda cannot read) stops with
+  `effect_unknown` (exit 2) and a remedy; nothing is sent. A declared write
+  is unchanged, and so are the 101 reads in the bundled definitions.
+
+### Fixed
+
+- A same-origin redirect or a next-page address of the form
+  `/graphql?query=mutation{...}` passed the read check, because only the
+  path and the query keys were read. The check now parses a GraphQL document
+  in `query` (and `q`/`document` on a GraphQL path) for its operation type;
+  a mutation or subscription is not followed or turned to.
+- `X-Original-URL` and `X-Rewrite-URL`, which ask a server to treat the
+  request as one to another address, are refused like the method override
+  headers.
+- The SQLite database was created with the umask; only its directory was
+  private. The file and its `-wal`/`-shm` companions are now 0600 on Unix
+  (files left by an earlier run are tightened when the store opens); on
+  Windows the directory's ACL covers them.
+
 ## [0.5.0] - 2026-10-23
 
 Uglier sites, fewer steps, and a bundle for Claude Desktop. `itda setup` now

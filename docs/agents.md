@@ -146,7 +146,7 @@ branch on the exit code:
 | Exit | Meaning | What to do |
 |---|---|---|
 | 0 | ok | |
-| 2 | bad input or unknown action (the remedy names the nearest one), or a read that preflight would have turned into a change (`effect_changed`) | `itda describe <site>` |
+| 2 | bad input or unknown action (the remedy names the nearest one), a read that preflight would have turned into a change (`effect_changed`), or a read whose built request itda cannot classify (`effect_unknown`, the remedy says what is missing) | `itda describe <site>` |
 | 10 | signed out or no key | ask the user to run `itda login` |
 | 11 | the page no longer matches its definition, or the site answered the query with errors (`query_failed`) | update the definition |
 | 12 | the site refused; it is paused | tell the user; `itda resume` after checking |
