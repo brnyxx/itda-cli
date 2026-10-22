@@ -94,6 +94,39 @@ change the definition format or the CLI.
   A site whose software is recognised gets its template instead and is not
   watched. `itda_setup` over MCP does the same, and says in its description
   and its result that a window opens briefly on the user's screen.
+- Reads that list things can turn pages. A definition declares
+  `pagination` (`style: page|offset|cursor`, where the next marker is in the
+  answer as a JSON pointer or `header:link`, an optional `more` pointer, and
+  the `query` or `body` input it goes back in). The answer then carries
+  `meta.next`, an opaque handle such as `ic_…`; `itda call ... --next
+  <handle>` and `next` over MCP (`itda_call` and the per-action tools, whose
+  schemas list it) read the following page with the same inputs. The site's
+  own marker stays in the local database for fifteen minutes, bound to the
+  site, action, account, inputs, definition and credential, and is removed
+  from the data; a `cursor` input is never shown to agents. A handle for
+  another call, or an expired one, is refused with `pagination_invalid` or
+  `pagination_expired` (exit 23). Only reads turn pages. `itda draft
+  openapi`, `itda draft har`, `itda draft page` and the GraphQL schema
+  drafts declare it when the evidence is plain, never by guessing; the
+  bundled `github` (issues, comments, repository search), `npm` (search)
+  and `crates-io` (search) definitions declare it. `AGENTS.md`, the skill
+  and the server instructions say to read only as many pages as the
+  question needs.
+- A preflight step can read a value from the JSON a page embeds for its
+  scripts: `extract: {build_id: "ssr:__NEXT_DATA__#/buildId"}`, so a token
+  or build id that only lives there reaches the action's path or inputs.
+  Only a string, number or boolean counts.
+
+### Fixed
+
+- Two itda processes starting on a fresh data directory at once (the MCP
+  server and `itda approve`, say) no longer race in the database setup:
+  `Store::migrate` reads the schema version and applies the steps in one
+  immediate transaction.
+- A GraphQL document nested deeper than 32 levels is refused before it is
+  parsed, with a clear message in a definition's default and `bad_request`
+  for an agent's input, instead of running the parser out of stack.
+
 - Five MCP tools so an agent never needs a terminal to set a site up or
   look after it: `itda_setup` (look at a page as itda, draft, try every
   read once, keep what works; the site's actions become tools in the same

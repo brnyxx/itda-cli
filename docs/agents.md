@@ -42,7 +42,7 @@ stays short and prompt caches stay valid:
 |---|---|
 | `itda_search` | Find actions by keywords |
 | `itda_describe` | Show one action's input schema and effect |
-| `itda_call` | Run an action with `args` (and `approval` for a change) |
+| `itda_call` | Run an action with `args` (and `approval` for a change, `next` for the next page of a list) |
 
 `itda mcp --mode direct` or `--mode catalog` overrides the choice.
 
@@ -62,6 +62,23 @@ Every result is the same envelope as `itda call --json`, marked
 instructions. Results over 24 KB keep the start of their longest lists and say
 `"truncated": true`. Failures are tool errors with a code and a fix, so the
 agent can tell the user what to do.
+
+## Lists that go on
+
+A read whose definition declares `pagination` answers with `meta.next` when
+the site says there is another page: an opaque handle such as
+`ic_4f0a4207d04f4a0fb4e059d26bd54b6d`. The agent passes it back as `next`
+(`--next` on the command line) with the same inputs and gets the following
+page, which may carry a `meta.next` of its own. The site's own marker, a
+cursor, a page number or an offset, stays on the user's computer: it is kept
+in the local database for fifteen minutes, bound to that site, action,
+account, inputs and definition, and it is removed from the data it appears
+in. A handle given to another action, another account, other inputs, after
+the definition changed or after it expired is refused with
+`pagination_invalid` or `pagination_expired` (exit 23), and the agent starts
+again without `next`. Only reads turn pages; a change is sent once. The
+server instructions, `AGENTS.md` and the skill tell the agent to read only
+as many pages as the question needs.
 
 ## Changes
 
@@ -117,6 +134,7 @@ branch on the exit code:
 | 20 | needs approval, or changes are off | ask the user to run `itda approve <id>` |
 | 21 | approval used, rejected, expired or for other inputs | call again for a new one |
 | 22 | a change was sent but its outcome is unknown | check the site before retrying |
+| 23 | the `next` handle expired, or was for another call | call again without `--next` |
 | 30 | network error | retry later |
 
 With `--json`, errors are printed on stdout as
