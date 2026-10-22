@@ -1,16 +1,10 @@
 //! The `itda` command. This is the composition root: it picks the data
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
-mod check;
-mod description;
 mod feedback;
 mod install;
-mod introspect;
-mod login;
 mod output;
-mod record;
 mod setup;
-mod sites;
 mod text;
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -20,6 +14,7 @@ use itda_runtime::{
     Call, Runtime,
     audit::{AuditLog, Event},
 };
+use itda_setup::{check, sites};
 use itda_store::Store;
 use itda_types::error::{AppError, AppResult, usage};
 use itda_vault::{EnvStore, KeyringStore, Secret, SecretStore, Vault};
@@ -631,6 +626,25 @@ impl Parts {
             .with_approvals(self.approvals)
             .with_audit(self.audit)
     }
+
+    /// The same parts, with a runtime built on them, for the setup steps.
+    fn context(self, home: &Path) -> itda_setup::Context {
+        let (net, vault, approvals, audit) = (
+            self.net.clone(),
+            self.vault.clone(),
+            self.approvals.clone(),
+            self.audit.clone(),
+        );
+        itda_setup::Context {
+            home: home.to_path_buf(),
+            runtime: Arc::new(self.runtime()),
+            net,
+            vault,
+            approvals,
+            audit,
+            lang: lang(),
+        }
+    }
 }
 
 fn audit_log(home: &Path) -> AuditLog {
@@ -811,6 +825,7 @@ async fn check(
     };
     let outcomes = check::run(&open(home)?.runtime(), &specs, account).await;
     let verdicts = check::verdicts(&outcomes);
+    check::remember(home, &verdicts)?;
     let status = check::exit_status(&outcomes);
     if as_json {
         println!(
@@ -893,62 +908,40 @@ async fn login_browser(
 ) -> AppResult<ExitCode> {
     let spec = sites::load(home, site)?;
     // Check where the session will be kept before the person signs in.
-    if std::env::var("ITDA_SECRET_STORE").is_ok_and(|v| v == "env") {
-        return Err(usage(
-            "Environment secrets are read-only",
-            "Sign in where the system keyring is available, or set the session in an ITDA_SECRET__ variable.",
-        ));
-    }
-    KeyringStore::available()?;
-    let parts = open(home)?;
-    let session = tokio::task::spawn_blocking(move || login::browser(&spec, url.as_deref()))
-        .await
-        .map_err(|_| AppError::api("internal", 500))??;
-    parts.vault.add_account(site, account, label).await?;
-    parts
-        .vault
-        .set_secret(
-            site,
-            account,
-            itda_runtime::SESSION_SECRET,
-            Secret::new(session.cookies),
-        )
-        .await?;
-    // A new sign-in replaces an expired one, so the account may run again.
-    resume_scopes(home, &parts.net, site, Some(account)).await?;
+    itda_setup::credentials::writable()?;
+    let ctx = open(home)?.context(home);
+    let session = tokio::task::spawn_blocking(move || {
+        let done = setup::enter_pressed();
+        itda_setup::login::browser(&spec, url.as_deref(), Some(&done), &mut say_login)
+    })
+    .await
+    .map_err(|_| AppError::api("internal", 500))??;
+    let count = session.count;
+    itda_setup::login::keep(&ctx, site, account, label, session).await?;
     eprintln!(
-        "Saved the session for {site}/{account} ({} cookies) in the system keyring. Agents only see the account id.",
-        session.count
+        "Saved the session for {site}/{account} ({count} cookies) in the system keyring. Agents only see the account id."
     );
     Ok(ExitCode::SUCCESS)
 }
 
-async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<ExitCode> {
-    resume_scopes(home, &open(home)?.net, site, account).await?;
-    eprintln!("Resumed {site}.");
-    Ok(ExitCode::SUCCESS)
+fn say_login(progress: itda_setup::login::Progress) {
+    match progress {
+        itda_setup::login::Progress::Opened { site } => {
+            eprintln!("Sign in to {site} in the browser window that just opened.");
+        }
+        itda_setup::login::Progress::WaitsFor { cookie: Some(name) } => eprintln!(
+            "itda continues when the {name} cookie appears, or press Enter once you are signed in."
+        ),
+        itda_setup::login::Progress::WaitsFor { cookie: None } => {
+            eprintln!("Press Enter here once you are signed in.");
+        }
+    }
 }
 
-/// Lift pauses on every origin the site's actions use.
-async fn resume_scopes(
-    home: &Path,
-    net: &Network,
-    site: &str,
-    account: Option<&str>,
-) -> AppResult<()> {
-    let spec = sites::load(home, site)?;
-    let mut origins: Vec<String> = spec
-        .operations
-        .iter()
-        .filter_map(|op| url::Url::parse(spec.operation_base(op)).ok())
-        .map(|url| url.origin().ascii_serialization())
-        .collect();
-    origins.sort();
-    origins.dedup();
-    for origin in &origins {
-        net.resume(origin, account.unwrap_or_default()).await?;
-    }
-    Ok(())
+async fn resume(home: &Path, site: &str, account: Option<&str>) -> AppResult<ExitCode> {
+    itda_setup::resume(&open(home)?.context(home), site, account).await?;
+    eprintln!("Resumed {site}.");
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn add(home: &Path, source: &str, force: bool) -> AppResult<ExitCode> {
@@ -1015,8 +1008,8 @@ async fn draft_har(
     let text = std::fs::read(file)?;
     let endpoints = itda_prep::graphql::endpoints_in_recording(&text);
     if !endpoints.is_empty() {
-        options.schemas = introspect::schemas(&open(home)?.net, &endpoints).await;
-        introspect::say(&options.schemas, "");
+        options.schemas = itda_setup::introspect::schemas(&open(home)?.net, &endpoints).await;
+        say_schemas(&options.schemas);
     }
     publish(
         home,
@@ -1042,73 +1035,56 @@ fn draft(
 
 /// What the gate already knows about a page that refused itda, as the error
 /// `itda call` would give (`blocked_by_site`, `site_rate_limited`) with the
-/// block named in the person's language: Cloudflare, a bot manager, a
-/// captcha, or a rate limit with the wait it asked for. `None` when the
-/// answer was not a block.
+/// block named in the person's language. `None` when the answer was not a
+/// block.
 fn site_refusal(url: &str, response: &itda_net::Response) -> Option<AppError> {
+    itda_setup::refusal(url, response).map(|refused| refusal_words(&refused))
+}
+
+/// The refusal in the person's language: Cloudflare, a bot manager, a
+/// captcha, a rate limit with the wait it asked for, or a sign-in redirect.
+fn refusal_words(refused: &itda_setup::Refused) -> AppError {
+    use itda_setup::Refusal;
     use text::{t, tf};
-    let host = url::Url::parse(url)
-        .ok()
-        .and_then(|u| u.host_str().map(str::to_owned))
-        .unwrap_or_else(|| url.to_owned());
-    if matches!(response.status, 301 | 302 | 303 | 307 | 308)
-        && let Some(path) = signin_redirect(url, response)
-    {
-        return Some(AppError::new(
-            itda_types::error::Code::Auth,
-            tf("redirect_signin", &[("host", &host), ("path", &path)]),
+    let host = refused.host.clone();
+    let (msg, fix) = match &refused.kind {
+        Refusal::SignInRedirect { path } => (
+            tf("redirect_signin", &[("host", &host), ("path", path)]),
             t("redirect_signin_fix"),
-        ));
-    }
-    let mut error = itda_runtime::refusal(response, false);
-    let status = response.status.to_string();
-    let (msg, fix) = match (response.defense.as_str(), error.public_code.as_str()) {
-        ("cloudflare", _) => (
+        ),
+        Refusal::Cloudflare => (
             tf("blocked_cloudflare", &[("host", &host)]),
             t("blocked_fix"),
         ),
-        ("bot-manager", _) => (
+        Refusal::BotManager => (
             tf("blocked_bot_manager", &[("host", &host)]),
             t("blocked_fix"),
         ),
-        ("captcha", _) => (tf("blocked_captcha", &[("host", &host)]), t("blocked_fix")),
-        (_, "site_rate_limited") => (
-            match error
-                .extra
-                .get("retry_after")
-                .and_then(serde_json::Value::as_u64)
-            {
-                Some(wait) => tf(
-                    "rate_limited_wait",
-                    &[("host", &host), ("n", &wait.to_string())],
-                ),
-                None => tf("rate_limited", &[("host", &host)]),
-            },
+        Refusal::Captcha => (tf("blocked_captcha", &[("host", &host)]), t("blocked_fix")),
+        Refusal::RateLimited { wait: Some(wait) } => (
+            tf(
+                "rate_limited_wait",
+                &[("host", &host), ("n", &wait.to_string())],
+            ),
             t("rate_limited_fix"),
         ),
-        (_, "blocked_by_site") => (
-            tf("blocked_other", &[("host", &host), ("status", &status)]),
+        Refusal::RateLimited { wait: None } => (
+            tf("rate_limited", &[("host", &host)]),
+            t("rate_limited_fix"),
+        ),
+        Refusal::Other { status } => (
+            tf(
+                "blocked_other",
+                &[("host", &host), ("status", &status.to_string())],
+            ),
             t("blocked_fix"),
         ),
-        _ => return None,
     };
+    let mut error = AppError::api(&refused.error.public_code, refused.error.http_status);
+    error.extra = refused.error.extra.clone();
     error.msg = msg;
     error.remedy = fix.to_owned();
-    Some(error)
-}
-
-/// The page's path when its answer sends itda on to a sign-in page (a
-/// `Location` with a path segment such as `login`, `signin` or `sso`).
-fn signin_redirect(url: &str, response: &itda_net::Response) -> Option<String> {
-    let page = url::Url::parse(url).ok()?;
-    let target = page.join(response.header("location")).ok()?;
-    let signin = target.path().split('/').any(|segment| {
-        matches!(
-            segment.to_ascii_lowercase().as_str(),
-            "login" | "signin" | "sign-in" | "sign_in" | "sso" | "oauth" | "authenticate"
-        )
-    });
-    signin.then(|| page.path().to_owned())
+    error
 }
 
 /// Fetch each page with the honest client, then draft from what they show.
@@ -1157,12 +1133,12 @@ async fn draft_page(
             html: String::from_utf8_lossy(&response.bytes).into_owned(),
         });
     }
-    let endpoints = introspect::endpoints_in_pages(&pages);
+    let endpoints = itda_setup::introspect::endpoints_in_pages(&pages);
     if !endpoints.is_empty() {
-        options.schemas = introspect::schemas(&net, &endpoints).await;
-        introspect::say(&options.schemas, "");
+        options.schemas = itda_setup::introspect::schemas(&net, &endpoints).await;
+        say_schemas(&options.schemas);
     }
-    let description = description::find(&net, &pages).await;
+    let description = itda_setup::description::find(&net, &pages).await;
     let draft = itda_prep::from_pages_and_description(&pages, description.as_ref(), &options)?;
     if let Some(described) = &draft.described {
         eprintln!("{}", text::described(described));
@@ -1183,9 +1159,12 @@ async fn record(
     save: Option<&Path>,
 ) -> AppResult<ExitCode> {
     let url = url.to_owned();
-    let recording = tokio::task::spawn_blocking(move || record::browser(&url))
-        .await
-        .map_err(|_| AppError::api("internal", 500))??;
+    let recording = tokio::task::spawn_blocking(move || {
+        let done = setup::enter_pressed();
+        itda_setup::record::browser(&url, Some(&done), &mut |progress| say_recording(&progress))
+    })
+    .await
+    .map_err(|_| AppError::api("internal", 500))??;
     let har = serde_json::to_vec(&recording.har)?;
     if let Some(path) = save {
         itda_types::util::atomic_file(path, &har)?;
@@ -1196,8 +1175,8 @@ async fn record(
     }
     let endpoints = itda_prep::graphql::endpoints_in_recording(&har);
     if !endpoints.is_empty() {
-        options.schemas = introspect::schemas(&open(home)?.net, &endpoints).await;
-        introspect::say(&options.schemas, "");
+        options.schemas = itda_setup::introspect::schemas(&open(home)?.net, &endpoints).await;
+        say_schemas(&options.schemas);
     }
     let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
     let site = draft.site.clone();
@@ -1224,61 +1203,53 @@ async fn keep_credentials(
     har: &Value,
     cookies: &[itda_browser::Cookie],
 ) -> AppResult<bool> {
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() || std::env::var("ITDA_SECRET_STORE").is_ok_and(|v| v == "env") {
+    if !std::io::stdin().is_terminal() || itda_setup::credentials::store_is_env() {
         return Ok(false);
     }
-    let site = &spec.site.name;
-    let account = itda_runtime::DEFAULT_ACCOUNT;
-    let mut offers: Vec<(String, String, Secret)> = Vec::new();
-    for auth in &spec.auth {
-        match auth.kind.as_str() {
-            "header" => {
-                let Some(name) = auth.value_from.strip_prefix(&format!("store:{site}/")) else {
-                    continue;
-                };
-                if let Some(value) =
-                    record::header_value(har, &spec.site.base_url, &auth.header, &auth.prefix)
-                {
-                    offers.push((
-                        format!("the {} header the pages sent", auth.header),
-                        name.to_owned(),
-                        Secret::new(value),
-                    ));
-                }
-            }
-            "browser" if !cookies.is_empty() => offers.push((
-                format!("the browser session ({} cookies)", cookies.len()),
-                itda_runtime::SESSION_SECRET.to_owned(),
-                Secret::new(itda_browser::header(cookies)),
-            )),
-            _ => {}
-        }
-    }
+    let offers = itda_setup::credentials::offers(spec, har, cookies);
     if offers.is_empty() {
         return Ok(false);
     }
     KeyringStore::available()?;
-    let parts = open(home)?;
+    let site = &spec.site.name;
+    let account = itda_runtime::DEFAULT_ACCOUNT;
+    let ctx = open(home)?.context(home);
     let mut kept = false;
-    for (what, name, secret) in offers {
-        eprint!(
-            "Keep {what} as {site}/{account} in the system keyring? Agents only see the account id. [y/N] "
-        );
-        let mut answer = String::new();
-        stdin.lock().read_line(&mut answer)?;
-        if !matches!(answer.trim(), "y" | "Y" | "yes") {
+    for offer in offers {
+        if !setup::ask_keep(site, &offer.what)? {
             continue;
         }
-        parts.vault.add_account(site, account, "").await?;
-        parts.vault.set_secret(site, account, &name, secret).await?;
-        resume_scopes(home, &parts.net, site, Some(account)).await?;
-        eprintln!(
-            "Saved {name} for {site}/{account}. Tokens expire; record again or use `itda login {site}` when calls answer auth_required."
-        );
+        itda_setup::credentials::keep(&ctx, site, account, &offer.name, offer.secret).await?;
+        say_credential_kept(&offer.name, site, account);
         kept = true;
     }
     Ok(kept)
+}
+
+fn say_credential_kept(name: &str, site: &str, account: &str) {
+    eprintln!(
+        "Saved {name} for {site}/{account}. Tokens expire; record again or use `itda login {site}` when calls answer auth_required."
+    );
+}
+
+fn say_recording(progress: &itda_setup::record::Progress) {
+    match progress {
+        itda_setup::record::Progress::Opened { host } => {
+            eprintln!(
+                "Recording {host}. Use the site in the window that just opened: sign in, search, open things, post a form."
+            );
+            eprintln!("Press Enter here, or close the window, when you are done.");
+        }
+        itda_setup::record::Progress::Calls(n) => eprintln!("  {n} calls so far"),
+        itda_setup::record::Progress::Finished(n) => eprintln!("Recorded {n} calls."),
+    }
+}
+
+/// One line per schema that was read, in the person's language.
+fn say_schemas(schemas: &[itda_prep::graphql::Schema]) {
+    for schema in schemas {
+        eprintln!("{}", text::tf("asked_schema", &[("url", &schema.url)]));
+    }
 }
 
 /// Print the draft, or install it, and list what to review on stderr.
@@ -1514,11 +1485,10 @@ async fn mcp(home: &Path, mode: Option<&str>, approve_in_client: bool) -> AppRes
     };
     let parts = open(home)?;
     let (approvals, audit) = (parts.approvals.clone(), parts.audit.clone());
-    let mut server = itda_mcp::Server::new(
-        Arc::new(parts.runtime()),
-        itda_mcp::Catalog::new(specs),
-        mode,
-    );
+    let ctx = Arc::new(parts.context(home));
+    let mut server =
+        itda_mcp::Server::new(ctx.runtime.clone(), itda_mcp::Catalog::new(specs), mode)
+            .with_setup(ctx);
     if approve_in_client {
         server = server.with_client_approval(approvals, audit);
     }

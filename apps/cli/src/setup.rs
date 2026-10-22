@@ -1,17 +1,18 @@
 //! `itda setup <url>`: one command from a page address to an agent that can
-//! use the site. Each step is one of the existing commands; this only asks
-//! the questions and keeps what works.
-use crate::check;
+//! use the site. The steps live in `itda_setup`; this asks the questions,
+//! says what happens in the person's language, and connects an agent at
+//! the end.
 use crate::text::{client_label, t, tf};
-use itda_html::evidence;
 use itda_policy::{Effect, operation_effect};
+use itda_setup::{Answers, Fallback, Finished, Progress, Stopped, check};
 use itda_spec::Spec;
-use itda_types::error::{AppError, AppResult, usage};
+use itda_types::error::{AppResult, usage};
 use std::{
     collections::BTreeMap,
     io::{BufRead, IsTerminal, Write},
     path::Path,
     process::ExitCode,
+    sync::mpsc,
 };
 
 pub struct Flags {
@@ -23,11 +24,45 @@ pub struct Flags {
     pub yes: bool,
 }
 
-/// Why a fetched page is not enough to draft from.
-enum Fallback {
-    Blocked,
-    SignIn,
-    Scripted,
+/// The questions, asked in the terminal.
+struct Terminal {
+    record: Option<bool>,
+    yes: bool,
+}
+
+impl Answers for Terminal {
+    fn record_anyway(&mut self) -> AppResult<bool> {
+        if self.record.is_some() {
+            return Ok(false);
+        }
+        ask(t("ask_record_anyway"), false)
+    }
+
+    fn record(&mut self, _why: Fallback) -> AppResult<bool> {
+        if self.record == Some(false) {
+            return Err(usage(t("no_record_allowed"), ""));
+        }
+        ask(t("ask_record"), true)
+    }
+
+    fn recording_done(&mut self) -> Option<mpsc::Receiver<()>> {
+        Some(enter_pressed())
+    }
+
+    fn replace(&mut self, site: &str) -> AppResult<bool> {
+        if self.yes {
+            return Ok(true);
+        }
+        ask(&tf("exists", &[("site", site)]), false)
+    }
+
+    fn can_keep_credentials(&self) -> bool {
+        std::io::stdin().is_terminal()
+    }
+
+    fn keep_credential(&mut self, site: &str, what: &str) -> AppResult<bool> {
+        ask_keep(site, what)
+    }
 }
 
 pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
@@ -35,167 +70,35 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
     if !interactive && (flags.record.is_none() || flags.client.is_none()) {
         return Err(usage(t("no_terminal"), ""));
     }
-    let url = itda_types::url::validate_url(&flags.url)?;
-    let host = url.host_str().unwrap_or_default().to_owned();
-    let mut options = itda_prep::Options {
-        name: flags.name.clone(),
-        base_url: None,
-        include: None,
-        lang: crate::lang(),
-        schemas: Vec::new(),
+    let ctx = crate::open(home)?.context(home);
+    let mut answers = Terminal {
+        record: flags.record,
+        yes: flags.yes,
     };
-
-    // 1. Look at the page, or decide to record.
-    step(1, &tf("looking", &[("host", &host)]));
-    let mut record = flags.record == Some(true);
-    let mut draft = None;
-    if !record {
-        match probe(home, url.as_str()).await? {
-            Ok(page) => {
-                eprintln!("    {}", t("fetched_page"));
-                eprintln!("    {}", tf("found", &[("what", &describe_page(&page))]));
-                let has_sign_in = evidence::forms(&page.html, &page.url)
-                    .iter()
-                    .any(|form| form.password);
-                if flags.record.is_none() && has_sign_in && ask(t("ask_record_anyway"), false)? {
-                    record = true;
-                } else {
-                    let pages = [page];
-                    options.schemas =
-                        introspect(home, &crate::introspect::endpoints_in_pages(&pages)).await?;
-                    let net = crate::open(home)?.net;
-                    let description = crate::description::find(&net, &pages).await;
-                    let drafted = itda_prep::from_pages_and_description(
-                        &pages,
-                        description.as_ref(),
-                        &options,
-                    )?;
-                    if let Some(described) = &drafted.described {
-                        eprintln!("    {}", crate::text::described(described));
-                    }
-                    draft = Some(drafted);
-                }
-            }
-            Err(why) => {
-                let why = match why {
-                    Fallback::Blocked => t("why_blocked"),
-                    Fallback::SignIn => t("why_signin"),
-                    Fallback::Scripted => t("why_scripted"),
-                };
-                eprintln!("    {}", tf("needs_record", &[("why", why)]));
-                if flags.record == Some(false) {
-                    return Err(usage(t("no_record_allowed"), ""));
-                }
-                if !ask(t("ask_record"), true)? {
-                    return Ok(ExitCode::FAILURE);
-                }
-                record = true;
-            }
-        }
-    }
-    let mut recording = None;
-    if record {
-        let start = url.to_string();
-        let rec = tokio::task::spawn_blocking(move || crate::record::browser(&start))
-            .await
-            .map_err(|_| AppError::api("internal", 500))??;
-        let har = serde_json::to_vec(&rec.har)?;
-        options.schemas =
-            introspect(home, &itda_prep::graphql::endpoints_in_recording(&har)).await?;
-        draft = Some(itda_prep::from_recording(&har, &options, "`itda setup`")?);
-        recording = Some(rec);
-    }
-    let draft = draft.ok_or_else(|| AppError::api("internal", 500))?;
-    let site = draft.site.clone();
-
-    // 2. Show what was found, in words.
-    step(2, t("actions_heading"));
-    let spec = itda_spec::parse(draft.yaml.as_bytes())?;
-    list_actions(&spec);
-
-    // 3. Save, replacing only with a yes.
-    let path = crate::sites::specs_dir(home).join(&site).join("spec.yaml");
-    if path.exists() && !flags.yes && !ask(&tf("exists", &[("site", &site)]), false)? {
-        eprintln!("    {}", tf("exists_kept", &[("site", &site)]));
-        return Ok(ExitCode::FAILURE);
-    }
-    itda_types::util::atomic_file(&path, draft.yaml.as_bytes())?;
-    if let Some(rec) = &recording {
-        let spec = crate::sites::load(home, &site)?;
-        crate::keep_credentials(home, &spec, &rec.har, &rec.cookies).await?;
-    }
-
-    // 4. Try every read; keep what works.
-    step(3, t("trying"));
-    let spec = crate::sites::load(home, &site)?;
-    let outcomes = check::run(
-        &crate::open(home)?.runtime(),
-        std::slice::from_ref(&spec),
-        None,
+    let mut width = 12;
+    let finished = itda_setup::run(
+        &ctx,
+        itda_setup::Request {
+            url: flags.url.clone(),
+            name: flags.name.clone(),
+            record: flags.record == Some(true),
+        },
+        &mut answers,
+        &mut |progress| say(progress, &mut width),
     )
-    .await;
-    let mut failed = Vec::new();
-    let mut worked = 0;
-    let width = name_width(&spec);
-    for o in &outcomes {
-        let op = spec.op(&o.action)?;
-        let line = match o.status.as_str() {
-            "ok" => {
-                worked += 1;
-                match o.records {
-                    Some(n) => format!(
-                        "✓ {:<width$} {}",
-                        o.action,
-                        tf("ok_records", &[("n", &n.to_string())])
-                    ),
-                    None => format!("✓ {:<width$} {}", o.action, t("ok")),
-                }
-            }
-            "skipped" if operation_effect(op, &BTreeMap::new()) != Effect::Read => {
-                format!("· {:<width$} {}", o.action, t("skipped_change"))
-            }
-            "skipped" => format!(
-                "· {:<width$} {}",
-                o.action,
-                tf(
-                    "skipped_needs",
-                    &[("list", &check::needed_inputs(op).join(", "))]
-                )
-            ),
-            code => {
-                failed.push(o.action.clone());
-                let why = match (code, o.retry_after_s) {
-                    ("response_mismatch", _) => t("why_mismatch").to_owned(),
-                    ("auth_required", _) => t("why_auth").to_owned(),
-                    ("not_found", _) => t("why_not_found").to_owned(),
-                    ("blocked_by_site", _) => t("why_blocked").to_owned(),
-                    ("site_rate_limited", Some(seconds)) => {
-                        tf("why_wait", &[("n", &seconds.to_string())])
-                    }
-                    ("site_rate_limited", None) => t("why_rate_limited").to_owned(),
-                    _ => o.detail.clone(),
-                };
-                format!("✗ {:<width$} {}", o.action, tf("removed", &[("why", &why)]))
-            }
-        };
-        eprintln!("    {line}");
-    }
-    let kept = spec.operations.len() - failed.len();
-    if kept == 0
-        || (worked == 0
-            && spec
-                .operations
-                .iter()
-                .all(|op| operation_effect(op, &BTreeMap::new()) == Effect::Read))
-    {
-        let _ = std::fs::remove_file(&path);
-        return Err(usage(tf("nothing_works", &[("url", url.as_str())]), ""));
-    }
-    if !failed.is_empty() {
-        let yaml = without(&draft.yaml, &failed)?;
-        itda_types::util::atomic_file(&path, yaml.as_bytes())?;
-    }
-    step(4, &tf("saved", &[("site", &site)]));
+    .await?;
+    let done = match finished {
+        Finished::Done(done) => done,
+        Finished::Stopped(Stopped::NoRecord { .. }) => return Ok(ExitCode::FAILURE),
+        Finished::Stopped(Stopped::Exists(site)) => {
+            eprintln!("    {}", tf("exists_kept", &[("site", &site)]));
+            return Ok(ExitCode::FAILURE);
+        }
+        Finished::Stopped(Stopped::NothingWorks) => {
+            return Err(usage(tf("nothing_works", &[("url", &flags.url)]), ""));
+        }
+    };
+    let site = done.site;
 
     // 5. Connect an agent.
     let clients = match &flags.client {
@@ -211,7 +114,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
             crate::mcp_install(client, false, false)?;
         }
     }
-    let spec = crate::sites::load(home, &site)?;
+    let spec = done.spec;
     let example = spec
         .operations
         .iter()
@@ -233,6 +136,91 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
         eprintln!("{}", t("approve_note"));
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Each step, in words, as it happens. `width` is the column the action
+/// names take, set when the draft is shown.
+fn say(progress: Progress<'_>, width: &mut usize) {
+    match progress {
+        Progress::Looking { host } => step(1, &tf("looking", &[("host", host)])),
+        Progress::PageFetched(summary) => {
+            eprintln!("    {}", t("fetched_page"));
+            eprintln!("    {}", tf("found", &[("what", &describe_page(summary))]));
+        }
+        Progress::SchemaAsked { url } => {
+            eprintln!("    {}", tf("asked_schema", &[("url", url)]));
+        }
+        Progress::Described(described) => {
+            eprintln!("    {}", crate::text::described(described));
+        }
+        Progress::Refused(refused) => eprintln!("    {}", crate::refusal_words(refused).msg),
+        Progress::NeedsRecord(why) => {
+            let why = match why {
+                Fallback::Blocked => t("why_blocked"),
+                Fallback::SignIn => t("why_signin"),
+                Fallback::Scripted => t("why_scripted"),
+            };
+            eprintln!("    {}", tf("needs_record", &[("why", why)]));
+        }
+        Progress::Recording(progress) => crate::say_recording(&progress),
+        Progress::Drafted(spec) => {
+            step(2, t("actions_heading"));
+            *width = name_width(spec);
+            list_actions(spec, *width);
+        }
+        Progress::Trying(spec) => {
+            *width = name_width(spec);
+            step(3, t("trying"));
+        }
+        Progress::Tried { spec, outcome } => eprintln!("    {}", tried(spec, outcome, *width)),
+        Progress::Saved { site } => step(4, &tf("saved", &[("site", site)])),
+        Progress::CredentialKept {
+            name,
+            site,
+            account,
+        } => crate::say_credential_kept(name, site, account),
+    }
+}
+
+/// One line per read tried: kept, skipped, or removed with why.
+fn tried(spec: &Spec, outcome: &check::Outcome, width: usize) -> String {
+    let name = &outcome.action;
+    let op = spec.op(name).ok();
+    let read = op.is_none_or(|op| operation_effect(op, &BTreeMap::new()) == Effect::Read);
+    match outcome.status.as_str() {
+        "ok" => match outcome.records {
+            Some(n) => format!(
+                "✓ {name:<width$} {}",
+                tf("ok_records", &[("n", &n.to_string())])
+            ),
+            None => format!("✓ {name:<width$} {}", t("ok")),
+        },
+        "skipped" if !read => format!("· {name:<width$} {}", t("skipped_change")),
+        "skipped" => format!(
+            "· {name:<width$} {}",
+            tf(
+                "skipped_needs",
+                &[(
+                    "list",
+                    &op.map(check::needed_inputs).unwrap_or_default().join(", ")
+                )]
+            )
+        ),
+        code => {
+            let why = match (code, outcome.retry_after_s) {
+                ("response_mismatch", _) => t("why_mismatch").to_owned(),
+                ("auth_required", _) => t("why_auth").to_owned(),
+                ("not_found", _) => t("why_not_found").to_owned(),
+                ("blocked_by_site", _) => t("why_blocked").to_owned(),
+                ("site_rate_limited", Some(seconds)) => {
+                    tf("why_wait", &[("n", &seconds.to_string())])
+                }
+                ("site_rate_limited", None) => t("why_rate_limited").to_owned(),
+                _ => outcome.detail.clone(),
+            };
+            format!("✗ {name:<width$} {}", tf("removed", &[("why", &why)]))
+        }
+    }
 }
 
 fn name_width(spec: &Spec) -> usize {
@@ -267,100 +255,23 @@ fn step(n: u8, text: &str) {
     eprintln!("{}  {text}", tf("step", &[("n", &n.to_string())]));
 }
 
-/// What the GraphQL endpoints the page or the recording named offer, said
-/// under the current step.
-async fn introspect(
-    home: &Path,
-    endpoints: &[String],
-) -> AppResult<Vec<itda_prep::graphql::Schema>> {
-    if endpoints.is_empty() {
-        return Ok(Vec::new());
-    }
-    let schemas = crate::introspect::schemas(&crate::open(home)?.net, endpoints).await;
-    crate::introspect::say(&schemas, "    ");
-    Ok(schemas)
-}
-
-/// Fetch the page as itda; `Err` says why that is not enough.
-async fn probe(home: &Path, url: &str) -> AppResult<Result<itda_prep::Page, Fallback>> {
-    let net = crate::open(home)?.net;
-    let request = itda_net::Request {
-        limit: 8 * 1024 * 1024,
-        ..itda_net::Request::read(url)
-    };
-    let response = match net.fetch(request).await {
-        Ok(response) => response,
-        Err(error)
-            if matches!(
-                error.public_code.as_str(),
-                "blocked_by_site" | "site_rate_limited"
-            ) =>
-        {
-            return Ok(Err(Fallback::Blocked));
-        }
-        Err(error) => return Err(error),
-    };
-    if let Some(error) = crate::site_refusal(url, &response) {
-        eprintln!("    {}", error.msg);
-        return Ok(Err(if error.public_code == "auth_required" {
-            Fallback::SignIn
-        } else {
-            Fallback::Blocked
-        }));
-    }
-    if matches!(response.status, 401 | 403) {
-        return Ok(Err(Fallback::SignIn));
-    }
-    if !response.successful() {
-        return Ok(Err(Fallback::Blocked));
-    }
-    if !response.header("content-type").contains("html") {
-        return Err(usage(
-            format!("{url} is not an HTML page"),
-            "Pass the address of a page. For an API description, use `itda draft openapi`.",
-        ));
-    }
-    let html = String::from_utf8_lossy(&response.bytes).into_owned();
-    let signed_in_form = evidence::forms(&html, &response.url)
-        .iter()
-        .any(|form| form.password)
-        && evidence::infer_extraction(&html, &response.url).is_none();
-    if evidence::script_shell(&html) {
-        return Ok(Err(Fallback::Scripted));
-    }
-    if signed_in_form && response.url.to_lowercase().contains("login") {
-        return Ok(Err(Fallback::SignIn));
-    }
-    Ok(Ok(itda_prep::Page {
-        url: response.url.clone(),
-        html,
-    }))
-}
-
 /// "a list of 42 records, 2 forms, a feed": what the page offers, in words.
-fn describe_page(page: &itda_prep::Page) -> String {
+fn describe_page(summary: &itda_setup::PageSummary) -> String {
     let mut parts = Vec::new();
-    if let Some(extraction) = evidence::infer_extraction(&page.html, &page.url)
-        && let Some(value) = extraction.extract(&page.html, &page.url)
-    {
-        let n = value["items"].as_array().map(Vec::len).unwrap_or(0);
+    if let Some(n) = summary.records {
         parts.push(tf("found_list", &[("n", &n.to_string())]));
-    } else if !itda_html::extract_ssr_map(&page.html).is_empty() {
+    } else if summary.embedded_data {
         parts.push(t("found_data").to_owned());
     }
-    let forms = evidence::forms(&page.html, &page.url)
-        .iter()
-        .filter(|f| !f.password)
-        .count();
-    if forms == 1 {
+    if summary.forms == 1 {
         parts.push(t("found_form").to_owned());
-    } else if forms > 1 {
-        parts.push(tf("found_forms", &[("n", &forms.to_string())]));
+    } else if summary.forms > 1 {
+        parts.push(tf("found_forms", &[("n", &summary.forms.to_string())]));
     }
-    if !evidence::feeds(&page.html, &page.url).is_empty() {
+    if summary.feed {
         parts.push(t("found_feed").to_owned());
     }
-    if evidence::openapi_link(&page.html, &page.url).is_some() {
+    if summary.description_link {
         parts.push(t("found_description").to_owned());
     }
     if parts.is_empty() {
@@ -369,8 +280,7 @@ fn describe_page(page: &itda_prep::Page) -> String {
     parts.join(", ")
 }
 
-fn list_actions(spec: &Spec) {
-    let width = name_width(spec);
+fn list_actions(spec: &Spec, width: usize) {
     for op in &spec.operations {
         let read = operation_effect(op, &BTreeMap::new()) == Effect::Read;
         let inputs: Vec<&str> = op
@@ -408,22 +318,6 @@ fn list_actions(spec: &Spec) {
     }
 }
 
-/// The definition without the named operations, with its comments kept.
-fn without(yaml: &str, names: &[String]) -> AppResult<String> {
-    let (header, body): (Vec<&str>, Vec<&str>) = yaml.lines().partition(|l| l.starts_with('#'));
-    let mut doc: serde_norway::Value =
-        serde_norway::from_str(&body.join("\n")).map_err(|_| AppError::api("internal", 500))?;
-    if let Some(serde_norway::Value::Sequence(ops)) = doc.get_mut("operations") {
-        ops.retain(|op| {
-            op.get("name")
-                .and_then(serde_norway::Value::as_str)
-                .is_none_or(|name| !names.iter().any(|n| n == name))
-        });
-    }
-    let rest = serde_norway::to_string(&doc).map_err(|_| AppError::api("internal", 500))?;
-    Ok(format!("{}\n{rest}", header.join("\n")))
-}
-
 /// A yes or no in the terminal; `default` answers an empty line.
 pub(crate) fn ask(question: &str, default: bool) -> AppResult<bool> {
     let stdin = std::io::stdin();
@@ -439,6 +333,34 @@ pub(crate) fn ask(question: &str, default: bool) -> AppResult<bool> {
         "y" | "yes" | "ㅇ" | "네" | "예" => true,
         _ => false,
     })
+}
+
+/// Keep `what` in the keyring? The same question `itda record --install`
+/// asks; values are never shown.
+pub(crate) fn ask_keep(site: &str, what: &str) -> AppResult<bool> {
+    eprint!(
+        "Keep {what} as {site}/{} in the system keyring? Agents only see the account id. [y/N] ",
+        itda_runtime::DEFAULT_ACCOUNT
+    );
+    let mut answer = String::new();
+    std::io::stdin().lock().read_line(&mut answer)?;
+    Ok(matches!(answer.trim(), "y" | "Y" | "yes"))
+}
+
+/// Fires once when the person presses Enter.
+pub(crate) fn enter_pressed() -> mpsc::Receiver<()> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        if std::io::stdin()
+            .lock()
+            .read_line(&mut line)
+            .is_ok_and(|read| read > 0)
+        {
+            let _ = sender.send(());
+        }
+    });
+    receiver
 }
 
 /// After a ready-made site was added from the welcome prompt: connect the

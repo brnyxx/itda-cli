@@ -2,7 +2,6 @@
 //! query each, sent as itda, read-only and bounded. An endpoint that refuses,
 //! errors or answers something else is skipped without a word; sites turn
 //! introspection off on purpose.
-use crate::text::tf;
 use itda_net::{Network, Request};
 use itda_prep::graphql::{ENDPOINT_CAP, Schema, introspection_body};
 
@@ -37,13 +36,6 @@ pub async fn schemas(net: &Network, endpoints: &[String]) -> Vec<Schema> {
         });
     }
     out
-}
-
-/// One line per schema that was read, in the person's language.
-pub fn say(schemas: &[Schema], indent: &str) {
-    for schema in schemas {
-        eprintln!("{indent}{}", tf("asked_schema", &[("url", &schema.url)]));
-    }
 }
 
 /// The endpoints the pages name, each once.

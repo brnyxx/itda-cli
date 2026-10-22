@@ -325,7 +325,20 @@ async fn mcp_serves_installed_actions_over_stdio() {
         .collect();
     assert_eq!(
         names,
-        ["fixture.create-item", "fixture.list-items", "fixture.me"]
+        [
+            "fixture.create-item",
+            "fixture.list-items",
+            "fixture.me",
+            "itda_setup",
+            "itda_login",
+            "itda_check",
+            "itda_sites",
+            "itda_manage",
+        ]
+    );
+    assert_eq!(
+        replies[0]["result"]["capabilities"]["tools"]["listChanged"],
+        true
     );
     std::fs::remove_dir_all(home).ok();
 }

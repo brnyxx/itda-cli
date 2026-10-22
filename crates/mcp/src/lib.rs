@@ -14,8 +14,16 @@
 //! exact request. The agent never sees or answers that form; only the client's
 //! user does. Without it, or when the client cannot show forms, the agent gets
 //! the approval id and the person runs `itda approve`.
+//!
+//! With [`Server::with_setup`], the agent can also set a site up, sign the
+//! person in, check sites and manage them from inside the conversation
+//! (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`, `itda_manage`).
+//! When the sites change, the server says so with
+//! `notifications/tools/list_changed` and serves the new tools on the next
+//! `tools/list`.
 mod catalog;
 mod elicit;
+mod manage;
 
 pub use catalog::{Catalog, Entry};
 
@@ -25,14 +33,26 @@ use itda_types::error::AppError;
 use rmcp::{
     ErrorData, Peer, RoleServer, ServerHandler, ServiceExt,
     model::{
-        CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
-        InitializeResult, ListToolsResult, PaginatedRequestParams, ServerCapabilities, Tool,
-        ToolAnnotations,
+        CallToolRequestParams, CallToolResponse, CallToolResult, ClientCapabilities, ContentBlock,
+        Implementation, InitializeResult, ListToolsResult, PaginatedRequestParams,
+        ServerCapabilities, Tool, ToolAnnotations,
     },
     service::RequestContext,
 };
+
+/// The client behind one tool call: where to send forms and notifications,
+/// and what it said it can do. The capabilities come
+/// with the request (`_meta`, from protocol 2026-07-28) or from the
+/// handshake before that.
+pub(crate) struct Caller<'a> {
+    pub(crate) peer: &'a Peer<RoleServer>,
+    pub(crate) capabilities: Option<ClientCapabilities>,
+}
 use serde_json::{Map, Value, json};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+};
 
 /// Above this many actions the server switches to catalog mode.
 pub const DIRECT_LIMIT: usize = 30;
@@ -60,10 +80,15 @@ site_rate_limited means the site asked for a wait longer than itda gives on its 
 retry_after seconds it carries before calling that site again. \
 action_outcome_unknown means a change was sent but no answer came back: never call it again; \
 ask the user to check the site first. \
-When an action that used to work fails, ask the user to run itda check <site> before you retry \
+When an action that used to work fails, call itda_check with the site before you retry \
 or ask for a new definition: its verdict says whether they are signed out, the site changed, \
-it is blocked, or it is unreachable. \
-A new site is set up with itda setup <url>; a problem is reported with itda feedback.";
+it is blocked, or it is unreachable (itda check <site> does the same in a terminal). \
+If a site is not set up, call itda_setup with the address of a page on it: the site's actions \
+become tools in this session. If a read says to sign in, call itda_login with the site: the user \
+signs in in their own browser and you only ever see the account id. itda_sites lists what is set \
+up; itda_manage removes or resumes a site after the user confirms, and shows approvals and the \
+audit log. itda setup <url> and itda login <site> --browser do the same in a terminal; a problem \
+is reported with itda feedback.";
 
 #[cfg(test)]
 mod tests {
@@ -77,8 +102,11 @@ mod tests {
             "Never run a change the user did not ask for",
             "action_outcome_unknown",
             "never call it again",
+            "itda_check",
             "itda check <site>",
+            "itda_setup",
             "itda setup <url>",
+            "itda_login",
             "itda feedback",
         ] {
             assert!(INSTRUCTIONS.contains(phrase), "{phrase}");
@@ -89,25 +117,39 @@ mod tests {
 #[derive(Clone)]
 pub struct Server {
     runtime: Arc<Runtime>,
-    catalog: Arc<Catalog>,
-    mode: Mode,
+    /// Replaced whole when a site is set up or removed; never held across an
+    /// await.
+    catalog: Arc<RwLock<Arc<Catalog>>>,
+    /// The mode asked for, or `None` to choose from the number of actions.
+    chosen: Option<Mode>,
     client_approval: Option<elicit::ClientApproval>,
+    setup: Option<Arc<itda_setup::Context>>,
 }
 
 impl Server {
     /// `mode` overrides the choice made from the number of actions.
     pub fn new(runtime: Arc<Runtime>, catalog: Catalog, mode: Option<Mode>) -> Self {
-        let mode = mode.unwrap_or(if catalog.entries().len() > DIRECT_LIMIT {
-            Mode::Catalog
-        } else {
-            Mode::Direct
-        });
         Self {
             runtime,
-            catalog: Arc::new(catalog),
-            mode,
+            catalog: Arc::new(RwLock::new(Arc::new(catalog))),
+            chosen: mode,
             client_approval: None,
+            setup: None,
         }
+    }
+
+    /// Serve `itda_setup`, `itda_login`, `itda_check`, `itda_sites` and
+    /// `itda_manage` as well, on the data directory `context` opens.
+    pub fn with_setup(mut self, context: Arc<itda_setup::Context>) -> Self {
+        self.setup = Some(context);
+        self
+    }
+
+    fn catalog(&self) -> Arc<Catalog> {
+        self.catalog
+            .read()
+            .map(|catalog| catalog.clone())
+            .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
     }
 
     /// Ask the person to approve changes in the MCP client, when it can show
@@ -117,8 +159,15 @@ impl Server {
         self
     }
 
+    /// The mode in use now: the one asked for, else chosen from how many
+    /// actions are installed at the moment.
     pub fn mode(&self) -> Mode {
-        self.mode
+        self.chosen
+            .unwrap_or(if self.catalog().entries().len() > DIRECT_LIMIT {
+                Mode::Catalog
+            } else {
+                Mode::Direct
+            })
     }
 
     /// Serve on stdin and stdout until the client disconnects.
@@ -131,12 +180,17 @@ impl Server {
         Ok(())
     }
 
-    /// The tools this server lists.
+    /// The tools this server lists: the actions, then the setup and
+    /// management tools when the server has a setup context.
     pub fn tools(&self) -> Vec<Tool> {
-        match self.mode {
-            Mode::Direct => self.catalog.entries().iter().map(action_tool).collect(),
+        let mut tools = match self.mode() {
+            Mode::Direct => self.catalog().entries().iter().map(action_tool).collect(),
             Mode::Catalog => catalog_tools(),
+        };
+        if self.setup.is_some() {
+            tools.extend(manage::tools());
         }
+        tools
     }
 
     /// Run one tool call. Tool failures come back as results with `isError`,
@@ -149,13 +203,18 @@ impl Server {
         &self,
         name: &str,
         arguments: Map<String, Value>,
-        peer: Option<&Peer<RoleServer>>,
+        caller: Option<&Caller<'_>>,
     ) -> CallToolResult {
-        match (self.mode, name) {
+        if manage::NAMES.contains(&name)
+            && let Some(result) = self.manage(name, &arguments, caller).await
+        {
+            return result;
+        }
+        match (self.mode(), name) {
             (Mode::Catalog, "itda_search") => {
                 let query = arguments.get("query").and_then(Value::as_str).unwrap_or("");
                 let matches: Vec<Value> = self
-                    .catalog
+                    .catalog()
                     .search(query, 20)
                     .into_iter()
                     .map(|e| json!({"action": e.name, "effect": e.effect.as_str(), "description": e.description}))
@@ -167,7 +226,7 @@ impl Server {
                     .get("action")
                     .and_then(Value::as_str)
                     .unwrap_or("");
-                match self.catalog.get(action) {
+                match self.catalog().get(action) {
                     Some(e) => structured(json!({
                         "status": "ok",
                         "action": e.name,
@@ -191,9 +250,9 @@ impl Server {
                 if let Some(approval) = arguments.get("approval") {
                     args.insert("approval".into(), approval.clone());
                 }
-                self.run(action, args, peer).await
+                self.run(action, args, caller).await
             }
-            (Mode::Direct, _) => self.run(name, arguments, peer).await,
+            (Mode::Direct, _) => self.run(name, arguments, caller).await,
             _ => unknown(name),
         }
     }
@@ -202,9 +261,10 @@ impl Server {
         &self,
         name: &str,
         mut arguments: Map<String, Value>,
-        peer: Option<&Peer<RoleServer>>,
+        caller: Option<&Caller<'_>>,
     ) -> CallToolResult {
-        let Some(entry) = self.catalog.get(name) else {
+        let catalog = self.catalog();
+        let Some(entry) = catalog.get(name) else {
             return unknown(name);
         };
         let account = match arguments.remove("account") {
@@ -234,11 +294,11 @@ impl Server {
             approval,
         };
         let mut outcome = self.runtime.call(&entry.site, call.clone()).await;
-        if let (Err(error), Some(peer), Some(client)) = (&outcome, peer, &self.client_approval)
+        if let (Err(error), Some(caller), Some(client)) = (&outcome, caller, &self.client_approval)
             && error.public_code == "approval_required"
             && let Some(id) = error.extra.get("approval").and_then(Value::as_str)
         {
-            match client.ask(peer, id).await {
+            match client.ask(caller, id).await {
                 Some(Ok(())) => {
                     call.approval = Some(id.to_owned());
                     outcome = self.runtime.call(&entry.site, call).await;
@@ -409,9 +469,14 @@ fn bad_args(message: &str) -> AppError {
 
 impl ServerHandler for Server {
     fn get_info(&self) -> InitializeResult {
-        InitializeResult::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("itda", env!("CARGO_PKG_VERSION")))
-            .with_instructions(INSTRUCTIONS)
+        InitializeResult::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_tool_list_changed()
+                .build(),
+        )
+        .with_server_info(Implementation::new("itda", env!("CARGO_PKG_VERSION")))
+        .with_instructions(INSTRUCTIONS)
     }
 
     async fn list_tools(
@@ -427,11 +492,15 @@ impl ServerHandler for Server {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
+        let caller = Caller {
+            peer: &context.peer,
+            capabilities: context.client_capabilities(),
+        };
         Ok(self
             .call_from(
                 &request.name,
                 request.arguments.unwrap_or_default(),
-                Some(&context.peer),
+                Some(&caller),
             )
             .await
             .into())

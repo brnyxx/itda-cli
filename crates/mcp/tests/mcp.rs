@@ -368,3 +368,289 @@ async fn clients_without_forms_get_an_approval_id() {
     let first = client.call("fixture.delete-item", json!({"id": 3})).await;
     assert_eq!(first["structuredContent"]["status"], "approval_required");
 }
+
+// ---- Setting sites up from inside the conversation ----
+
+const BOARD: &str = "<html lang='ko'><title>공지사항 - 사내</title><link rel='alternate' type='application/rss+xml' href='/missing.xml'><h1>공지</h1>
+<form action='/board/search' method='get'><input name='q' required></form>
+<table><thead><tr><th>No</th><th>Title</th></tr></thead>
+<tr><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+<tr><td>1</td><td><a href='/n/1'>First</a></td></tr></table>
+<form action='/board' method='post'><input name='title'></form></html>";
+
+/// A site with a board page to set up, next to the fixture API.
+async fn site_with_board() -> String {
+    let router = Router::new()
+        .route(
+            "/one",
+            get(|| async { axum::Json(json!({"items": [{"title": "x"}]})) }),
+        )
+        .route(
+            "/items",
+            get(|| async { axum::Json(json!({"items": [{"id": 1}]})) }),
+        )
+        .route("/board", get(|| async { axum::response::Html(BOARD) }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+struct Managed {
+    server: Server,
+    home: std::path::PathBuf,
+}
+
+/// A server that can set sites up, on a data directory of its own that
+/// starts with the fixture site installed.
+fn managed(base: &str) -> Managed {
+    let home = std::env::temp_dir().join(format!("itda-mcp-home-{}", itda_types::util::id()));
+    let dir = home.join("specs/fixture");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.json"),
+        serde_json::to_vec(&serde_json::to_value(spec(base)).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let store = Store::in_memory().unwrap();
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let net = Arc::new(Network::new(gate, true));
+    let vault = Arc::new(Vault::open(store.clone(), Arc::new(MemoryStore::default())).unwrap());
+    let approvals = Arc::new(itda_policy::Approvals::open(store).unwrap());
+    let audit = Arc::new(itda_runtime::audit::AuditLog::new(home.join("audit.jsonl")));
+    let runtime = Arc::new(
+        Runtime::new(net.clone(), vault.clone())
+            .with_approvals(approvals.clone())
+            .with_audit(audit.clone()),
+    );
+    let context = Arc::new(itda_setup::Context {
+        home: home.clone(),
+        net,
+        vault,
+        approvals,
+        audit,
+        runtime: runtime.clone(),
+        lang: "en".into(),
+    });
+    let server = Server::new(runtime, Catalog::new(vec![spec(base)]), Some(Mode::Direct))
+        .with_setup(context);
+    Managed { server, home }
+}
+
+/// Everything the server sent while one tool call ran.
+struct Exchange {
+    notifications: Vec<String>,
+    forms: Vec<Value>,
+    result: Value,
+}
+
+impl Client {
+    /// Call a tool, answering forms with `form`, and keep every notification.
+    async fn exchange(&mut self, name: &str, arguments: Value, form: Value) -> Exchange {
+        let id = self.next;
+        self.next += 1;
+        self.send(json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": {"name": name, "arguments": arguments}}))
+            .await;
+        let mut exchange = Exchange {
+            notifications: Vec::new(),
+            forms: Vec::new(),
+            result: Value::Null,
+        };
+        loop {
+            let line = self.lines.next_line().await.unwrap().unwrap();
+            let message: Value = serde_json::from_str(&line).unwrap();
+            if message["method"] == "elicitation/create" {
+                exchange.forms.push(message["params"].clone());
+                let reply = match form.get("error") {
+                    Some(error) => json!({"jsonrpc": "2.0", "id": message["id"], "error": error}),
+                    None => json!({"jsonrpc": "2.0", "id": message["id"], "result": form}),
+                };
+                self.send(reply).await;
+            } else if message.get("id").is_none() {
+                exchange
+                    .notifications
+                    .push(message["method"].as_str().unwrap_or_default().to_owned());
+            } else if message["id"] == id {
+                exchange.result = message["result"].clone();
+                return exchange;
+            }
+        }
+    }
+
+    async fn tool_names(&mut self) -> Vec<String> {
+        self.request("tools/list", json!({})).await["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_owned())
+            .collect()
+    }
+}
+
+#[tokio::test]
+async fn setup_adds_the_sites_tools_and_says_the_list_changed() {
+    let base = site_with_board().await;
+    let Managed { server, home } = managed(&base);
+    let mut client = Client::start(server).await;
+    let before = client.tool_names().await;
+    assert!(before.contains(&"itda_setup".to_owned()), "{before:?}");
+    assert!(!before.iter().any(|n| n.starts_with("board.")));
+
+    let done = client
+        .exchange(
+            "itda_setup",
+            json!({"url": format!("{base}/board"), "name": "board"}),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(done.result["isError"], false, "{}", done.result);
+    let structured = &done.result["structuredContent"];
+    assert_eq!(structured["site"], "board");
+    let names: Vec<&str> = structured["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["action"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"get-board"), "{names:?}");
+    assert!(names.contains(&"post-board"), "{names:?}");
+    assert!(
+        !names.contains(&"feed"),
+        "the broken feed was removed: {names:?}"
+    );
+    assert_eq!(structured["removed"][0]["action"], "feed");
+    assert!(
+        done.notifications
+            .contains(&"notifications/tools/list_changed".to_owned()),
+        "{:?}",
+        done.notifications
+    );
+
+    let after = client.tool_names().await;
+    assert!(after.contains(&"board.get-board".to_owned()), "{after:?}");
+    assert!(home.join("specs/board/spec.yaml").exists());
+    let read = client.call("board.get-board", json!({})).await;
+    assert_eq!(
+        read["structuredContent"]["data"]["items"][0]["title"],
+        "Second"
+    );
+
+    let again = client
+        .exchange(
+            "itda_setup",
+            json!({"url": format!("{base}/board"), "name": "board"}),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(again.result["structuredContent"]["status"], "site_exists");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test]
+async fn check_sites_and_management_run_without_a_terminal() {
+    let base = site_with_board().await;
+    let Managed { server, home } = managed(&base);
+    let mut client = Client::start(server).await;
+
+    let checked = client.call("itda_check", json!({"site": "fixture"})).await;
+    assert_eq!(checked["isError"], false, "{checked}");
+    assert_eq!(checked["structuredContent"]["verdict"], "ok");
+    assert_eq!(checked["structuredContent"]["sites"][0]["site"], "fixture");
+    assert!(
+        checked["structuredContent"]["sites"][0]["hint"]
+            .as_str()
+            .unwrap()
+            .contains("still matches")
+    );
+
+    let sites = client.call("itda_sites", json!({})).await;
+    let fixture = &sites["structuredContent"]["sites"][0];
+    assert_eq!(fixture["site"], "fixture");
+    assert_eq!(fixture["reads"], 2);
+    assert_eq!(fixture["changes"], 1);
+    assert_eq!(fixture["last_check"]["verdict"], "ok");
+    assert!(fixture["last_check"]["at"].as_str().unwrap().contains('T'));
+
+    let approvals = client
+        .call("itda_manage", json!({"action": "approvals"}))
+        .await;
+    assert_eq!(approvals["structuredContent"]["approvals"], json!([]));
+
+    let audit = client
+        .call(
+            "itda_manage",
+            json!({"action": "audit", "site": "fixture", "last": 5}),
+        )
+        .await;
+    let records = audit["structuredContent"]["records"].as_array().unwrap();
+    assert!(!records.is_empty(), "the check was recorded");
+    assert!(records.len() <= 5);
+    assert_eq!(records[0]["site"], "fixture");
+
+    // Nobody can confirm in this client: the person removes in a terminal.
+    let refused = client
+        .call(
+            "itda_manage",
+            json!({"action": "remove", "site": "fixture"}),
+        )
+        .await;
+    assert_eq!(refused["isError"], true);
+    assert_eq!(refused["structuredContent"]["status"], "needs_confirmation");
+    assert!(home.join("specs/fixture/spec.json").exists());
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test]
+async fn removing_a_site_asks_the_person_and_drops_its_tools() {
+    let base = site_with_board().await;
+    let Managed { server, home } = managed(&base);
+    let mut client = Client::start_with(server, json!({"elicitation": {}})).await;
+
+    let declined = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "remove", "site": "fixture"}),
+            json!({"action": "decline"}),
+        )
+        .await;
+    assert_eq!(declined.result["structuredContent"]["status"], "declined");
+    assert_eq!(declined.forms.len(), 1);
+    assert!(
+        declined.forms[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("fixture")
+    );
+
+    // A form the client fails, or never answers, is not a yes either.
+    let failed = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "remove", "site": "fixture"}),
+            json!({"error": {"code": -1, "message": "nobody answered"}}),
+        )
+        .await;
+    assert_eq!(failed.result["structuredContent"]["status"], "unanswered");
+    assert!(home.join("specs/fixture/spec.json").exists());
+
+    let removed = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "remove", "site": "fixture"}),
+            json!({"action": "accept", "content": {"confirm": true}}),
+        )
+        .await;
+    assert_eq!(removed.result["isError"], false, "{}", removed.result);
+    assert!(
+        removed
+            .notifications
+            .contains(&"notifications/tools/list_changed".to_owned())
+    );
+    let names = client.tool_names().await;
+    assert!(
+        !names.iter().any(|n| n.starts_with("fixture.")),
+        "{names:?}"
+    );
+    assert!(!home.join("specs/fixture").exists());
+    std::fs::remove_dir_all(home).ok();
+}

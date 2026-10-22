@@ -12,7 +12,7 @@ const LIMIT: usize = 4 * 1024 * 1024;
 /// The description the pages link to, else the one `/openapi.json` on the
 /// first page's origin answers with. A linked document is returned even when
 /// it does not parse, so the draft can say so; the probed one must parse.
-pub(crate) async fn find(net: &Network, pages: &[Page]) -> Option<Description> {
+pub async fn find(net: &Network, pages: &[Page]) -> Option<Description> {
     for page in pages {
         if let Some(link) = evidence::openapi_link(&page.html, &page.url) {
             return fetch(net, &link).await;

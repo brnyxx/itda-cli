@@ -25,6 +25,7 @@ itda-browser.workspace = true
 itda-runtime.workspace = true
 itda-mcp.workspace = true
 itda-prep.workspace = true
+itda-setup.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
