@@ -384,9 +384,23 @@ pub fn render_json_template(
     resolved_values: &std::collections::BTreeMap<String, Value>,
     raw_args: &std::collections::BTreeMap<String, String>,
 ) -> Value {
+    // An optional input the caller left out leaves the body too, instead of
+    // standing in as an empty string where a number or null belongs.
+    let unresolved = |v: &Value| {
+        v.as_str()
+            .and_then(|s| s.strip_prefix("{{"))
+            .and_then(|rest| rest.strip_suffix("}}"))
+            .map(str::trim)
+            .is_some_and(|var| {
+                !var.contains("{{")
+                    && !resolved_values.contains_key(var)
+                    && !raw_args.contains_key(var)
+            })
+    };
     match template {
         Value::Object(map) => Value::Object(
             map.iter()
+                .filter(|(_, v)| !unresolved(v))
                 .map(|(k, v)| {
                     (
                         k.clone(),

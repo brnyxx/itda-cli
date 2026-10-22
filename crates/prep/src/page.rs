@@ -35,7 +35,9 @@ const SSR_KEYS: &[&str] = &[
 ];
 
 pub fn from_pages(pages: &[Page], options: &Options) -> AppResult<Draft> {
-    let parts = page_parts(pages, options)?;
+    let mut parts = page_parts(pages, options)?;
+    let lang = language(&options.lang, &page_lang(&pages[0].html));
+    crate::add_schemas(&mut parts, options, &lang);
     if parts.operations.is_empty() {
         return Err(usage(
             "No actions could be drafted",

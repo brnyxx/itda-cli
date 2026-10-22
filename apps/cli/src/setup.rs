@@ -37,11 +37,12 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
     }
     let url = itda_types::url::validate_url(&flags.url)?;
     let host = url.host_str().unwrap_or_default().to_owned();
-    let options = itda_prep::Options {
+    let mut options = itda_prep::Options {
         name: flags.name.clone(),
         base_url: None,
         include: None,
         lang: crate::lang(),
+        schemas: Vec::new(),
     };
 
     // 1. Look at the page, or decide to record.
@@ -59,7 +60,10 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
                 if flags.record.is_none() && has_sign_in && ask(t("ask_record_anyway"), false)? {
                     record = true;
                 } else {
-                    draft = Some(itda_prep::from_pages(&[page], &options)?);
+                    let pages = [page];
+                    options.schemas =
+                        introspect(home, &crate::introspect::endpoints_in_pages(&pages)).await?;
+                    draft = Some(itda_prep::from_pages(&pages, &options)?);
                 }
             }
             Err(why) => {
@@ -86,6 +90,8 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
             .await
             .map_err(|_| AppError::api("internal", 500))??;
         let har = serde_json::to_vec(&rec.har)?;
+        options.schemas =
+            introspect(home, &itda_prep::graphql::endpoints_in_recording(&har)).await?;
         draft = Some(itda_prep::from_recording(&har, &options, "`itda setup`")?);
         recording = Some(rec);
     }
@@ -249,6 +255,20 @@ fn mid_sentence_en(desc: &str) -> String {
 
 fn step(n: u8, text: &str) {
     eprintln!("{}  {text}", tf("step", &[("n", &n.to_string())]));
+}
+
+/// What the GraphQL endpoints the page or the recording named offer, said
+/// under the current step.
+async fn introspect(
+    home: &Path,
+    endpoints: &[String],
+) -> AppResult<Vec<itda_prep::graphql::Schema>> {
+    if endpoints.is_empty() {
+        return Ok(Vec::new());
+    }
+    let schemas = crate::introspect::schemas(&crate::open(home)?.net, endpoints).await;
+    crate::introspect::say(&schemas, "    ");
+    Ok(schemas)
 }
 
 /// Fetch the page as itda; `Err` says why that is not enough.

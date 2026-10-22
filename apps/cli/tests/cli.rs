@@ -828,3 +828,141 @@ async fn setup_goes_from_a_page_to_working_actions_in_one_go() {
     assert!(home.join("specs/board2/spec.yaml").exists());
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A GraphQL fixture: answers introspection with the prep crate's schema
+/// when `enabled`, or refuses it the way servers do, and answers every
+/// query with `{"data": {<field>: ...}}`.
+async fn serve_graphql(enabled: bool) -> String {
+    use axum::routing::post;
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../crates/prep/tests/fixtures/graphql_schema.json"
+    ))
+    .unwrap();
+    let router = Router::new()
+        .route(
+            "/board",
+            get(|| async {
+                axum::response::Html(
+                    "<title>Board</title><h1>Notices</h1>
+                     <script src='/static/graphql.min.js'></script>
+                     <script>fetch('/graphql', {method: 'POST'})</script>
+                     <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                     <tr><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+                     <tr><td>1</td><td><a href='/n/1'>First</a></td></tr></table>",
+                )
+            }),
+        )
+        .route(
+            "/graphql",
+            post(move |axum::Json(body): axum::Json<Value>| async move {
+                let query = body["query"].as_str().unwrap_or_default().to_owned();
+                if query.contains("__schema") {
+                    return if enabled {
+                        (axum::http::StatusCode::OK, axum::Json(schema.clone()))
+                    } else {
+                        (
+                            axum::http::StatusCode::BAD_REQUEST,
+                            axum::Json(json!({"errors": [{"message": "introspection is not allowed"}]})),
+                        )
+                    };
+                }
+                let field = query
+                    .split_once("{ ")
+                    .map(|(_, rest)| rest.split(['(', ' ']).next().unwrap_or_default())
+                    .unwrap_or_default()
+                    .to_owned();
+                let answer = match field.as_str() {
+                    "notices" => json!({"data": {"notices": [{"id": "1", "title": "first"}, {"id": "2", "title": "second"}]}}),
+                    "version" => json!({"data": {"version": "1"}}),
+                    _ => json!({"data": {field: null}}),
+                };
+                (axum::http::StatusCode::OK, axum::Json(answer))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_page_that_talks_graphql_gets_reads_from_its_schema() {
+    let home = home();
+    let base = serve_graphql(true).await;
+    let printed = itda(
+        &home,
+        &[
+            "draft",
+            "page",
+            &format!("{base}/board"),
+            "--name",
+            "gql",
+            "--install",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&printed.stderr);
+    assert!(printed.status.success(), "{said}");
+    assert!(
+        said.contains(&format!("Asked the GraphQL API at {base}/graphql")),
+        "{said}"
+    );
+    assert!(said.contains("9 actions (9 reads, 0 changes)"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/gql/spec.yaml")).unwrap();
+    assert!(spec.contains("name: notices"), "{spec}");
+    assert!(spec.contains("name: version"), "{spec}");
+    assert!(!spec.contains("createNotice"), "{spec}");
+
+    let checked = itda(&home, &["check", "gql", "--json"], &[]).await;
+    assert_eq!(checked.status.code(), Some(0), "{checked:?}");
+    let report = stdout_json(&checked);
+    let status = |action: &str| {
+        report["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["action"] == action)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(status("notices")["status"], "ok");
+    assert_eq!(status("version")["status"], "ok");
+    assert_eq!(status("me")["status"], "ok");
+    assert_eq!(status("notice")["status"], "skipped");
+    assert_eq!(status("notice")["detail"], "needs id");
+    assert_eq!(status("search")["detail"], "needs search_query");
+
+    let called = itda(
+        &home,
+        &["call", "gql.notices", "--first", "1", "--json"],
+        &[],
+    )
+    .await;
+    assert!(called.status.success(), "{called:?}");
+    assert_eq!(
+        stdout_json(&called)["data"]["data"]["notices"][0]["title"],
+        "first"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_site_with_introspection_off_is_drafted_from_its_page_alone() {
+    let home = home();
+    let base = serve_graphql(false).await;
+    let printed = itda(
+        &home,
+        &["draft", "page", &format!("{base}/board")],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&printed.stderr);
+    assert!(printed.status.success(), "{said}");
+    assert!(!said.contains("Asked the GraphQL API"), "{said}");
+    assert!(said.contains("1 actions (1 reads, 0 changes)"), "{said}");
+    let yaml = String::from_utf8_lossy(&printed.stdout);
+    assert!(yaml.contains("name: get-board"), "{yaml}");
+    assert!(!yaml.contains("/graphql"), "{yaml}");
+    std::fs::remove_dir_all(home).ok();
+}

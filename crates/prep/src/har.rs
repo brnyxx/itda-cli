@@ -152,7 +152,7 @@ struct Graphql {
 }
 
 /// The operation a JSON body sends, when it is a GraphQL document.
-fn graphql_operation(post: &Value) -> Option<(String, String, bool)> {
+pub(crate) fn graphql_operation(post: &Value) -> Option<(String, String, bool)> {
     use graphql_parser::query::{Definition, OperationDefinition};
     if !post["mimeType"]
         .as_str()
@@ -194,7 +194,8 @@ fn graphql_operation(post: &Value) -> Option<(String, String, bool)> {
 }
 
 pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
-    let parts = har_parts(text, options)?;
+    let mut parts = har_parts(text, options)?;
+    crate::add_schemas(&mut parts, options, &language(&options.lang, ""));
     if parts.operations.is_empty() {
         return Err(no_operations());
     }
