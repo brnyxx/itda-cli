@@ -998,6 +998,7 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
                 account,
                 approval,
                 next,
+                discovery: false,
             },
         )
         .await?;

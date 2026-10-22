@@ -65,6 +65,10 @@ pub struct Call {
     /// The `meta.next` handle of the previous answer, to read the page
     /// after it with the same inputs.
     pub next: Option<String>,
+    /// A read `itda setup` tries once while the person watches: a block or
+    /// challenge is reported without pausing the site (see
+    /// `itda_net::Request::pause_on_block`).
+    pub discovery: bool,
 }
 
 /// What an agent receives: the shaped data and where it came from, never the
@@ -292,6 +296,7 @@ impl Runtime {
         request.body = body;
         request.account_id = account.clone().unwrap_or_default();
         request.interval = spec.defaults.interval();
+        request.pause_on_block = !call.discovery;
 
         if let Some(approvals) = approvals {
             let execution = ExecutionRequest {
@@ -339,16 +344,7 @@ impl Runtime {
         }
 
         if !op.preflight.is_empty() {
-            let found = preflight::run(
-                &self.net,
-                spec,
-                op,
-                &args,
-                &request.headers,
-                &request.account_id,
-                &destination,
-            )
-            .await?;
+            let found = preflight::run(&self.net, spec, op, &args, &request, &destination).await?;
             let preflight::Found {
                 values: found,
                 cookies,

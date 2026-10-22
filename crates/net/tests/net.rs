@@ -233,6 +233,33 @@ async fn a_challenge_page_served_with_200_pauses_the_site() {
 }
 
 #[tokio::test]
+async fn a_challenge_during_setup_is_reported_without_pausing_the_site() {
+    let base = host(Router::new().route(
+        "/search/",
+        get(|| async {
+            (
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                include_str!("fixtures/client-challenge.html"),
+            )
+        }),
+    ))
+    .await;
+    let net = network(true);
+    let tried = Request {
+        pause_on_block: false,
+        ..Request::read(format!("{base}/search/"))
+    };
+    let first = net.fetch(tried).await.unwrap();
+    assert_eq!(first.defense, "bot-manager");
+    // Nothing was paused: the site answers the next request as before.
+    let again = net
+        .fetch(Request::read(format!("{base}/search/")))
+        .await
+        .unwrap();
+    assert_eq!(again.defense, "bot-manager");
+}
+
+#[tokio::test]
 async fn an_expired_session_pauses_only_that_account() {
     let base =
         host(Router::new().route("/api/me", get(|| async { StatusCode::UNAUTHORIZED }))).await;

@@ -135,6 +135,19 @@ base and merges the page's reads again. Over MCP, `itda_setup` does the same, ta
 `none`) and names the template it used in its result. The templates are not
 installed by `itda add`: their `base_url` is a placeholder the setup fills.
 
+## When setup tries the reads
+
+`itda setup` tries every read once while you watch, and a read the site
+blocks or challenges (a 403 from a bot manager, a captcha, a 200 page titled
+as a challenge) is handled as a finding of the setup rather than a refusal
+to remember: that read is left out with one line, "<path>: the site does not
+give itda this page", nothing more is sent to the site in that run (the
+reads after it are kept and shown as not tried, so the next `itda check`
+tries them), and the site is not paused, since nothing was retried. The
+reads that already answered are installed. `itda check`, `itda call` and the
+MCP tools on an installed site keep the rule that a block or challenge
+pauses the site until you resume it.
+
 ## Start from a browser recording
 
 Most internal and older sites publish no API description, but their pages

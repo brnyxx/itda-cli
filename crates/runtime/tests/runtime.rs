@@ -135,6 +135,7 @@ fn call(action: &str, args: &[(&str, &str)]) -> Call {
         account: None,
         approval: None,
         next: None,
+        discovery: false,
     }
 }
 

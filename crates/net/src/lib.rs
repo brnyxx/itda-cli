@@ -55,6 +55,11 @@ pub struct Request {
     /// The least time the site's definition wants between its requests. The
     /// gate's own pace is the floor; see [`gate::DEFAULT_INTERVAL`].
     pub interval: Option<Duration>,
+    /// Whether a block or challenge pauses the site until the user resumes
+    /// it. Only the reads `itda setup` tries once, with the person watching,
+    /// turn this off: the answer is still classified and reported, and the
+    /// caller sends nothing more to the site in that run.
+    pub pause_on_block: bool,
 }
 impl Request {
     /// A bounded anonymous GET that follows same-origin redirects.
@@ -70,6 +75,7 @@ impl Request {
             read_only: true,
             follow_redirects: true,
             interval: None,
+            pause_on_block: true,
         }
     }
 }
@@ -294,8 +300,11 @@ impl Network {
                     .into_owned(),
             });
             let blocked = defense != defend::Class::None && defense != defend::Class::RateLimit;
-            let outcome = if blocked {
+            let pause = blocked && input.pause_on_block;
+            let outcome = if pause {
                 Outcome::Pause(gate::BLOCKED)
+            } else if blocked {
+                host_outcome
             } else if status == 401 && !input.account_id.is_empty() {
                 // A signed-in request that is no longer accepted: stop using the
                 // session until the user reconnects, instead of retrying it.
@@ -305,7 +314,7 @@ impl Network {
             };
             lease.release(outcome).await?;
             // A site that refuses automated access refuses it for every account.
-            let host_outcome = if blocked { outcome } else { host_outcome };
+            let host_outcome = if pause { outcome } else { host_outcome };
             host_lease.release(host_outcome).await?;
             if input.follow_redirects
                 && input.read_only

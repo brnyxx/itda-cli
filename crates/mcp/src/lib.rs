@@ -341,6 +341,7 @@ impl Server {
             account,
             approval,
             next,
+            discovery: false,
         };
         let mut outcome = self.runtime.call(&entry.site, call.clone()).await;
         if let (Err(error), Some(caller), Some(client)) = (&outcome, caller, &self.client_approval)

@@ -24,15 +24,15 @@ pub(crate) struct Found {
 }
 
 /// Run `op`'s steps in order. Each step is a GET to the origin of
-/// `destination`, sent with `headers` (the action's own credential and
-/// default headers) and the cookies earlier steps set.
+/// `destination`, sent as `action` is (with its headers, the action's own
+/// credential and default headers, for its account, and pausing the site on
+/// a block when it would) and with the cookies earlier steps set.
 pub(crate) async fn run(
     net: &Network,
     spec: &Spec,
     op: &Operation,
     args: &BTreeMap<String, String>,
-    headers: &[(String, String)],
-    account_id: &str,
+    action: &Request,
     destination: &url::Url,
 ) -> AppResult<Found> {
     let mut found = BTreeMap::new();
@@ -47,15 +47,17 @@ pub(crate) async fn run(
         }
         let mut request = Request::read(url);
         request.headers = with_cookies(
-            headers
+            action
+                .headers
                 .iter()
                 .filter(|(name, _)| !name.eq_ignore_ascii_case("content-type"))
                 .cloned()
                 .collect(),
             &cookies,
         );
-        request.account_id = account_id.to_owned();
+        request.account_id = action.account_id.clone();
         request.interval = spec.defaults.interval();
+        request.pause_on_block = action.pause_on_block;
         let response = net.fetch(request).await?;
         if !response.successful() {
             return Err(

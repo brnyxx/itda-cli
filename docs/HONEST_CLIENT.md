@@ -21,6 +21,13 @@ rules are fixed. Pull requests that weaken them are declined.
 | The browser window itda opens for sign-in, recording or watching a page load is the person's own: itda opens the page they named, watches, scrolls once to the bottom when it watches a load by itself, and never clicks, types or navigates. | `itda-browser` `SignIn`, `Recorder` |
 | A sign-in through a site's own form is the person's: they type the user name and password, itda sends the form once, as `itda/<version>`, to the form's own action on the same site, with the fields the page gave. A refused sign-in is reported, never retried, and nothing is paused. The password is never kept; an agent cannot start this path. | `itda-setup` `login::form` |
 
+One step is treated differently: while `itda setup` tries each read of a new
+site once, with the person watching, a read the site blocks or challenges is
+dropped from the draft with a line saying the site does not give itda that
+page, and nothing more is sent to the site in that run. The site is not left
+paused, because nothing was retried: the remaining reads wait for the next
+`itda check`, and from then on a block or challenge pauses the site as above.
+
 ## What itda will not do
 
 - Solve or route around CAPTCHAs, challenges or bot managers.

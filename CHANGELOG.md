@@ -402,6 +402,12 @@ change the definition format or the CLI.
   handle asks for another page; the next page is still counted from 1, or
   from 0 for an offset. Sending `page=1` made some sites answer with
   different markup and the check fail.
+- A read the site blocks or challenges while `itda setup` tries it is left
+  out with "<path>: the site does not give itda this page", nothing more is
+  sent to the site in that run (the reads after it are kept and shown as not
+  tried, for the next `itda check`), and the site is not left paused, so a
+  challenge on pypi.org's search page no longer takes the three feeds after
+  it down too. `itda check` and calls on an installed site still pause it.
 
 ## [0.4.0] - 2026-10-22
 

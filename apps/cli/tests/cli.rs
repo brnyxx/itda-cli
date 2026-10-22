@@ -1144,6 +1144,94 @@ async fn setup_goes_from_a_page_to_working_actions_in_one_go() {
     std::fs::remove_dir_all(home).ok();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn setup_leaves_out_a_read_the_site_challenges_and_does_not_pause_it() {
+    let home = home();
+    let searched = Arc::new(AtomicUsize::new(0));
+    let counted = searched.clone();
+    let router = Router::new()
+        .route(
+            "/packages",
+            get(|| async {
+                axum::response::Html(
+                    "<html><title>Packages</title><link rel='alternate' type='application/rss+xml' title='Updates' href='/rss.xml'><h1>Packages</h1>
+                     <form action='/search/' method='get'><input name='q'></form>
+                     <table><thead><tr><th>No</th><th>Name</th></tr></thead>
+                     <tr><td>2</td><td><a href='/p/2'>Second</a></td></tr>
+                     <tr><td>1</td><td><a href='/p/1'>First</a></td></tr></table></html>",
+                )
+            }),
+        )
+        .route(
+            "/search/",
+            get(move || {
+                counted.fetch_add(1, Ordering::SeqCst);
+                async {
+                    axum::response::Html(include_str!(
+                        "../../../crates/net/tests/fixtures/client-challenge.html"
+                    ))
+                }
+            }),
+        )
+        .route(
+            "/rss.xml",
+            get(|| async {
+                (
+                    [("content-type", "application/rss+xml")],
+                    "<?xml version='1.0'?><rss version='2.0'><channel><title>Updates</title><item><title>One</title><link>/p/1</link></item></channel></rss>",
+                )
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/packages"),
+            "--name",
+            "pkgs",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(
+        said.contains("/search/: the site does not give itda this page"),
+        "{said}"
+    );
+    assert!(
+        said.contains("not tried: the site refused an earlier read"),
+        "{said}"
+    );
+    let spec = std::fs::read_to_string(home.join("specs/pkgs/spec.yaml")).unwrap();
+    assert!(!spec.contains("path: /search/"), "{spec}");
+    assert!(spec.contains("path: /packages"), "{spec}");
+    assert!(spec.contains("path: /rss.xml"), "{spec}");
+    assert_eq!(searched.load(Ordering::SeqCst), 1);
+
+    // The site was not paused: the next check reads it, the feed too.
+    let checked = itda(&home, &["check", "pkgs", "--json"], &[]).await;
+    let report = stdout_json(&checked);
+    assert_eq!(report["verdict"], "ok", "{report}");
+    assert!(
+        report["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["status"] == "ok"),
+        "{report}"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
 /// A GraphQL fixture: answers introspection with the prep crate's schema
 /// when `enabled`, or refuses it the way servers do, and answers every
 /// query with `{"data": {<field>: ...}}`.

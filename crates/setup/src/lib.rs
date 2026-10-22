@@ -599,10 +599,11 @@ pub async fn run(
         kept_credentials = true;
     }
 
-    // 4. Try every read; keep what works.
+    // 4. Try every read once; keep what works. A read the site refuses is
+    // left out and nothing more is sent to it in this run.
     let spec = sites::load(&ctx.home, &site)?;
     report(Progress::Trying(&spec));
-    let outcomes = check::run(&ctx.runtime, std::slice::from_ref(&spec), None).await;
+    let outcomes = check::try_once(&ctx.runtime, &spec).await;
     let mut removed = Vec::new();
     let mut worked = 0;
     for outcome in &outcomes {

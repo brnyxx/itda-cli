@@ -210,6 +210,16 @@ pub fn t(key: &str) -> &'static str {
         ),
         ("removed", "removed: {why}", "뺐음: {why}"),
         (
+            "withheld",
+            "removed: {path}: the site does not give itda this page",
+            "뺐음: {path}: 사이트가 itda에게 이 페이지를 주지 않습니다",
+        ),
+        (
+            "skipped_refused",
+            "not tried: the site refused an earlier read; itda check tries it",
+            "앞선 읽기를 사이트가 거부해 건너뜀, itda check 때 시도합니다",
+        ),
+        (
             "why_mismatch",
             "the answer was not what the page showed",
             "응답이 페이지와 달랐음",
