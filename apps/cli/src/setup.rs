@@ -198,6 +198,9 @@ fn say(progress: Progress<'_>, width: &mut usize) {
                 })
             );
             eprintln!("    {}", tf("found", &[("what", &describe_page(summary))]));
+            if let Some(line) = crate::text::followed_frames(&summary.frames) {
+                eprintln!("    {line}");
+            }
         }
         Progress::SchemaAsked { url } => {
             eprintln!("    {}", tf("asked_schema", &[("url", url)]));

@@ -496,3 +496,33 @@ operations:
     assert!(issues[0].detail.contains("unsupported auth kind: derived"));
     assert!(issues[1].remedy.contains("plain HTTP"));
 }
+
+#[test]
+fn a_browser_session_may_live_in_a_cookie_or_a_query_key() {
+    let with = |value_from: &str| {
+        parse(&format!(
+            r##"
+site: {{name: portal, base_url: https://example.com}}
+auth:
+  - name: session
+    kind: browser
+    value_from: "{value_from}"
+operations:
+  - name: feed
+    method: GET
+    path: /feed
+    auth: session
+"##
+        ))
+        .validate()
+    };
+    assert!(with("cookie:SID").is_empty());
+    assert!(with("query:sid").is_empty());
+    assert!(with("").is_empty());
+    for bad in ["query:", "query: ", "header:sid", "sid"] {
+        let issues = with(bad);
+        assert_eq!(issues.len(), 1, "{bad}: {issues:?}");
+        assert_eq!(issues[0].field, "auth.session.value_from");
+        assert!(issues[0].detail.contains("query:<key>"), "{issues:?}");
+    }
+}

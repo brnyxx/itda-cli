@@ -60,12 +60,17 @@ impl Spec {
                 match a.kind.as_str() {
                     "none" => {}
                     "browser" => {
-                        if !a.value_from.is_empty() && !a.value_from.starts_with("cookie:") {
+                        let named = ["cookie:", "query:"].iter().any(|prefix| {
+                            a.value_from
+                                .strip_prefix(prefix)
+                                .is_some_and(|name| !name.trim().is_empty())
+                        });
+                        if !a.value_from.is_empty() && !named {
                             add(
                                 &mut out,
                                 &format!("auth.{}.value_from", a.name),
-                                "must be empty or name the sign-in cookie as cookie:<name>".into(),
-                                "Example: cookie:session_id",
+                                "must be empty, name the sign-in cookie as cookie:<name>, or name the query parameter the session goes in as query:<key>".into(),
+                                "Example: cookie:session_id, or query:sid",
                             );
                         }
                     }

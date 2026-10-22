@@ -1808,6 +1808,38 @@ pub fn sign_in_link(html: &str, base: &str) -> Option<String> {
         .map(|url| itda_types::url::sign_in_page(&url).to_string())
 }
 
+/// The query key and value the page's own links carry a session in, when
+/// they do: the pair whose value looks like a session on at least two
+/// same-origin links. A site that keeps its session in the address puts it
+/// on every link it draws. Only the sign-in reads this; a draft never keeps
+/// the value.
+pub fn session_in_links(html: &str, base: &str) -> Option<(String, String)> {
+    let document = Html::parse_document(html);
+    let base = url::Url::parse(base).ok()?;
+    let selector = Selector::parse("a[href]").ok()?;
+    let mut counts: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for link in document.select(&selector).take(2000) {
+        let Ok(url) = base.join(link.value().attr("href").unwrap_or_default()) else {
+            continue;
+        };
+        if url.origin() != base.origin() {
+            continue;
+        }
+        for (key, value) in url.query_pairs() {
+            if itda_types::url::session_value(&value) {
+                *counts
+                    .entry((key.into_owned(), value.into_owned()))
+                    .or_default() += 1;
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .filter(|(_, n)| *n >= 2)
+        .max_by_key(|(_, n)| *n)
+        .map(|(pair, _)| pair)
+}
+
 /// RSS and Atom feeds the page links to.
 pub fn feeds(html: &str, base: &str) -> Vec<Feed> {
     let document = Html::parse_document(html);
@@ -1838,6 +1870,58 @@ pub fn feeds(html: &str, base: &str) -> Vec<Feed> {
         })
         .take(5)
         .collect()
+}
+
+/// A frame the page shows another page in: an `<iframe src>` or a
+/// `<frame src>` of an older frameset.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Frame {
+    /// Resolved against the page address, without its fragment.
+    pub url: String,
+    /// The frame's page is on the page's own origin (scheme, host and
+    /// port), so it can be read as a page of the same site.
+    pub same_origin: bool,
+}
+
+/// At most this many frames are listed: a portal has a few, not a wall.
+const FRAMES: usize = 8;
+
+/// The frames the page shows, in document order, each address once. Blank
+/// and script frames (`about:blank`, `javascript:`, `data:`) are left out,
+/// as is the page itself.
+pub fn frames(html: &str, base: &str) -> Vec<Frame> {
+    let document = Html::parse_document(html);
+    let Ok(base) = url::Url::parse(base) else {
+        return Vec::new();
+    };
+    let Ok(selector) = Selector::parse("iframe[src], frame[src]") else {
+        return Vec::new();
+    };
+    let mut own = base.clone();
+    own.set_fragment(None);
+    let mut out: Vec<Frame> = Vec::new();
+    for frame in document.select(&selector) {
+        let Some(src) = frame.value().attr("src").map(str::trim) else {
+            continue;
+        };
+        let Ok(mut url) = base.join(src) else {
+            continue;
+        };
+        url.set_fragment(None);
+        if !matches!(url.scheme(), "http" | "https") || url == own {
+            continue;
+        }
+        let same_origin = url.origin() == base.origin();
+        let url = url.to_string();
+        if out.iter().any(|f| f.url == url) {
+            continue;
+        }
+        out.push(Frame { url, same_origin });
+        if out.len() == FRAMES {
+            break;
+        }
+    }
+    out
 }
 
 /// How a page turns its pages: the query key its links use, and the value
@@ -2407,6 +2491,74 @@ mod tests {
         assert!(found.inline_scripts[0].contains("appSubUrl"));
         assert!(found.body_has_class("mediawiki"));
         assert!(!found.body_has_class("skin"));
+    }
+
+    #[test]
+    fn frames_are_listed_once_with_their_origin_and_blank_ones_left_out() {
+        let html = r#"<title>Portal</title>
+            <iframe src="/menu.do#top"></iframe>
+            <iframe src="board/list.do?bbs=1"></iframe>
+            <iframe src="https://cdn.example.net/widget"></iframe>
+            <iframe src="/menu.do"></iframe>
+            <iframe src="about:blank"></iframe>
+            <iframe src="javascript:void(0)"></iframe>
+            <iframe src="data:text/html,hi"></iframe>
+            <iframe src="/portal/"></iframe>
+            <iframe></iframe>"#;
+        let found = frames(html, "https://intranet.example.co.kr/portal/");
+        let listed: Vec<(&str, bool)> = found
+            .iter()
+            .map(|f| (f.url.as_str(), f.same_origin))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                ("https://intranet.example.co.kr/menu.do", true),
+                (
+                    "https://intranet.example.co.kr/portal/board/list.do?bbs=1",
+                    true
+                ),
+                ("https://cdn.example.net/widget", false),
+            ]
+        );
+        assert!(
+            !frames(
+                "<iframe src='http://intranet.example.co.kr:8080/menu.do'></iframe>",
+                "http://intranet.example.co.kr/portal/"
+            )[0]
+            .same_origin,
+            "another port is another origin"
+        );
+        // An older frameset counts the same way.
+        let frameset = r#"<html><head><title>Main</title></head>
+            <frameset cols="20%,80%"><frame src="/menu.do" name="menu"><frame src="/board.do"></frameset></html>"#;
+        let found = frames(frameset, "https://intranet.example.co.kr/main.do");
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert_eq!(found[1].url, "https://intranet.example.co.kr/board.do");
+        assert!(frames("<h1>No frames</h1>", "https://a.test/").is_empty());
+    }
+
+    #[test]
+    fn the_session_key_links_carry_is_named_only_when_links_agree() {
+        let html = r#"<a href="/notices?sid=a1b2c3d4e5f6&page=2">next</a>
+            <a href="/notices/1?sid=a1b2c3d4e5f6">one</a>
+            <a href="/help?topic=faq">help</a>
+            <a href="https://other.example/x?sid=a1b2c3d4e5f6">elsewhere</a>"#;
+        assert_eq!(
+            session_in_links(html, "https://a.test/notices"),
+            Some(("sid".to_owned(), "a1b2c3d4e5f6".to_owned()))
+        );
+        assert_eq!(
+            session_in_links("<a href='/n?sid=a1b2c3d4e5f6'>once</a>", "https://a.test/"),
+            None
+        );
+        assert_eq!(
+            session_in_links(
+                "<a href='/n?page=2'>a</a><a href='/n?page=3'>b</a>",
+                "https://a.test/"
+            ),
+            None
+        );
     }
 
     #[test]

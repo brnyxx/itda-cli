@@ -13,6 +13,7 @@
 pub mod check;
 pub mod credentials;
 pub mod description;
+pub mod frames;
 pub mod introspect;
 pub mod login;
 pub mod record;
@@ -255,9 +256,32 @@ pub struct PageSummary {
     pub sign_in_form: bool,
     /// The page was read with the session the person just signed in with.
     pub signed_in: bool,
+    /// The frames followed on the page's own origin, by address, when the
+    /// page was a shell; what they show is counted in with the page.
+    pub frames: Vec<String>,
 }
 
 impl PageSummary {
+    /// The summary of a page with the frame pages it showed: what any of
+    /// them offers counts, and the frames are named.
+    pub fn with_frames(mut self, framed: &frames::Framed) -> Self {
+        for frame in &framed.pages {
+            let inner = summarize(frame);
+            self.main |= inner.main;
+            self.records = match (self.records, inner.records) {
+                (Some(a), Some(b)) => Some(a + b),
+                (a, b) => a.or(b),
+            };
+            self.embedded_data |= inner.embedded_data;
+            self.forms += inner.forms;
+            self.feed |= inner.feed;
+            self.description_link |= inner.description_link;
+            self.sign_in_form |= inner.sign_in_form;
+        }
+        self.frames = framed.followed.clone();
+        self
+    }
+
     /// Nothing but a title: no records, no embedded data, no form, no feed
     /// and no API description. Such a page is worth watching in a browser
     /// when its scripts could fetch something.
@@ -472,7 +496,10 @@ pub async fn run(
         match probed.outcome {
             Ok(()) => {
                 let page = probed.page.ok_or_else(|| AppError::api("internal", 500))?;
-                let summary = summarize(&page);
+                // A shell whose content is in frames on its own origin is
+                // read through them; the frame pages are pages of the site.
+                let mut framed = frames::follow(&ctx.net, &page, None).await?;
+                let summary = summarize(&page).with_frames(&framed);
                 report(Progress::PageFetched(&summary));
                 if summary.sign_in_form && answers.record_anyway()? {
                     record = true;
@@ -492,9 +519,17 @@ pub async fn run(
                         }
                     }
                     if draft.is_none() {
+                        let pages = with_frames(page, &mut framed);
                         draft = Some(
-                            draft_page(ctx, &page, &mut options, recognised.as_ref(), report)
-                                .await?,
+                            draft_pages(
+                                ctx,
+                                &pages,
+                                &[],
+                                &mut options,
+                                recognised.as_ref(),
+                                report,
+                            )
+                            .await?,
                         );
                     }
                 }
@@ -527,17 +562,28 @@ pub async fn run(
                     if let (Some(credentials), Some(to)) = (credentials, &probed.sign_in) {
                         let (page, session) =
                             sign_in_as_itda(ctx, &url, to, &credentials, report).await?;
-                        let mut summary = summarize(&page);
+                        let mut framed =
+                            frames::follow(&ctx.net, &page, Some(&session.session)).await?;
+                        let mut summary = summarize(&page).with_frames(&framed);
                         summary.signed_in = true;
                         report(Progress::PageFetched(&summary));
                         options.session = Some(itda_prep::SessionAuth {
                             cookie: session.cookie.clone().unwrap_or_default(),
+                            query: session.session.query.as_ref().map(|(key, _)| key.clone()),
                             login: session.form.clone(),
                         });
                         signed = Some(session);
+                        let pages = with_frames(page, &mut framed);
                         draft = Some(
-                            draft_page(ctx, &page, &mut options, recognised.as_ref(), report)
-                                .await?,
+                            draft_pages(
+                                ctx,
+                                &pages,
+                                &[],
+                                &mut options,
+                                recognised.as_ref(),
+                                report,
+                            )
+                            .await?,
                         );
                     } else if let Some(found) = &recognised {
                         // A page that is not enough on its own still gets
@@ -600,9 +646,14 @@ pub async fn run(
     }
     if let Some(signed) = signed {
         // The person signed in for this site; without the session its
-        // actions could not run, so it is kept as the default account.
+        // actions could not run, so it is kept as the default account, the
+        // way the definition names it (cookies, or the query value).
         let account = itda_runtime::DEFAULT_ACCOUNT;
-        login::keep(ctx, &site, account, "", signed.session).await?;
+        let from = spec
+            .find_auth("session")
+            .map(|auth| auth.value_from.clone())
+            .unwrap_or_default();
+        login::keep(ctx, &site, account, "", signed.session, &from).await?;
         report(Progress::CredentialKept {
             name: itda_runtime::SESSION_SECRET,
             site: &site,
@@ -724,13 +775,35 @@ impl Probed {
     }
 }
 
-/// Fetch the page as itda, with the session `cookies` when the person has
-/// signed in.
-pub async fn probe(ctx: &Context, url: &str, cookies: Option<&str>) -> AppResult<Probed> {
+/// The page with the frame pages it showed, as the pages to draft from.
+fn with_frames(page: Page, framed: &mut frames::Framed) -> Vec<Page> {
+    let mut pages = vec![page];
+    pages.append(&mut framed.pages);
+    pages
+}
+
+/// Fetch the page as itda, with the `session` when the person has signed
+/// in: its cookies in the header, and a session the site carries in the
+/// query on the address, which the page's own address then does without.
+pub async fn probe(
+    ctx: &Context,
+    url: &str,
+    session: Option<&login::Session>,
+) -> AppResult<Probed> {
+    let session_key = session
+        .and_then(|s| s.query.as_ref())
+        .map(|(key, _)| key.as_str());
+    let address = match session.and_then(|s| s.query.as_ref()) {
+        Some((key, value)) => itda_types::url::with_query_pair(url, key, value),
+        None => url.to_owned(),
+    };
     let mut request = itda_net::Request {
         limit: 8 * 1024 * 1024,
-        ..itda_net::Request::read(url)
+        ..itda_net::Request::read(address)
     };
+    let cookies = session
+        .map(|s| s.cookies.as_str())
+        .filter(|c| !c.is_empty());
     if let Some(cookies) = cookies {
         request.headers.push(("cookie".into(), cookies.to_owned()));
     }
@@ -783,30 +856,36 @@ pub async fn probe(ctx: &Context, url: &str, cookies: Option<&str>) -> AppResult
         .any(|form| form.password)
         && no_records;
     let page = Page {
-        url: response.url.clone(),
+        url: match session_key {
+            Some(key) => itda_types::url::without_query_key(&response.url, key),
+            None => response.url.clone(),
+        },
         html,
     };
     let mut sign_in = None;
-    let outcome = if evidence::script_shell(&page.html) {
-        Err((Fallback::Scripted, None))
-    } else if signed_in_form && response.url.to_lowercase().contains("login") {
-        sign_in = url::Url::parse(&response.url)
-            .map(|url| itda_types::url::sign_in_page(&url).to_string())
-            .ok()
-            .or_else(|| Some(response.url.clone()));
-        Err((Fallback::SignIn, None))
-    } else if no_records
-        && !signed_in_form
-        && cookies.is_none()
-        && login_required_title(&page.html)
-        && let Some(link) = evidence::sign_in_link(&page.html, &response.url)
-    {
-        // A page that says "log in to see this" instead of redirecting.
-        sign_in = Some(link);
-        Err((Fallback::SignIn, None))
-    } else {
-        Ok(())
-    };
+    // A shell with frames on its own origin is read through them before it
+    // counts as drawn by scripts.
+    let outcome =
+        if evidence::script_shell(&page.html) && !frames::has_own_frames(&page.html, &page.url) {
+            Err((Fallback::Scripted, None))
+        } else if signed_in_form && response.url.to_lowercase().contains("login") {
+            sign_in = url::Url::parse(&response.url)
+                .map(|url| itda_types::url::sign_in_page(&url).to_string())
+                .ok()
+                .or_else(|| Some(response.url.clone()));
+            Err((Fallback::SignIn, None))
+        } else if no_records
+            && !signed_in_form
+            && session.is_none()
+            && login_required_title(&page.html)
+            && let Some(link) = evidence::sign_in_link(&page.html, &response.url)
+        {
+            // A page that says "log in to see this" instead of redirecting.
+            sign_in = Some(link);
+            Err((Fallback::SignIn, None))
+        } else {
+            Ok(())
+        };
     Ok(Probed {
         page: Some(page),
         outcome,
@@ -840,7 +919,7 @@ async fn sign_in_as_itda(
         host: url.host_str().unwrap_or_default(),
         cookies: signed.session.count,
     });
-    let probed = probe(ctx, url.as_str(), Some(&signed.session.cookies)).await?;
+    let probed = probe(ctx, url.as_str(), Some(&signed.session)).await?;
     let host = url.host_str().unwrap_or_default();
     match probed.outcome {
         Ok(()) => {

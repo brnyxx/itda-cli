@@ -26,7 +26,8 @@ pub(crate) struct Found {
 /// Run `op`'s steps in order. Each step is a GET to the origin of
 /// `destination`, sent as `action` is (with its headers, the action's own
 /// credential and default headers, for its account, and pausing the site on
-/// a block when it would) and with the cookies earlier steps set.
+/// a block when it would), with `query_session` (a session the site keeps in
+/// the query) appended, and with the cookies earlier steps set.
 pub(crate) async fn run(
     net: &Network,
     spec: &Spec,
@@ -34,6 +35,7 @@ pub(crate) async fn run(
     args: &BTreeMap<String, String>,
     action: &Request,
     destination: &url::Url,
+    query_session: Option<&(String, String)>,
 ) -> AppResult<Found> {
     let mut found = BTreeMap::new();
     let mut cookies: Vec<(String, String)> = Vec::new();
@@ -45,6 +47,10 @@ pub(crate) async fn run(
         if validate_url(&url)?.origin() != destination.origin() {
             return Err(AppError::api("unsafe_target", 400));
         }
+        let url = match query_session {
+            Some((key, value)) => itda_types::url::with_query_pair(&url, key, value),
+            None => url,
+        };
         let mut request = Request::read(url);
         request.headers = with_cookies(
             action

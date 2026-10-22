@@ -152,6 +152,50 @@ pub fn same_site_url(a: &str, b: &str) -> AppResult<bool> {
     Ok(same_site_origin(&validate_url(a)?, &validate_url(b)?))
 }
 
+/// `url` with `key=value` added to its query. A session a site carries in
+/// the query goes on this way, the way a cookie goes in a header; the
+/// address is otherwise left as it is.
+pub fn with_query_pair(url: &str, key: &str, value: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return url.to_owned();
+    };
+    parsed.query_pairs_mut().append_pair(key, value);
+    parsed.into()
+}
+
+/// `url` without the query parameter `key`, so an address a site handed out
+/// with its session in it can be kept and shown without the session.
+pub fn without_query_key(url: &str, key: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return url.to_owned();
+    };
+    if !parsed.query_pairs().any(|(k, _)| k == key) {
+        return url.to_owned();
+    }
+    let kept: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter(|(k, _)| k != key)
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    parsed.set_query(None);
+    if !kept.is_empty() {
+        parsed.query_pairs_mut().extend_pairs(kept);
+    }
+    parsed.into()
+}
+
+/// A query parameter whose value looks like a session a site handed out:
+/// long and made of the characters tokens are made of, with letters and
+/// digits in it (or very long), and not an address to go back to.
+pub fn session_value(value: &str) -> bool {
+    let plain = value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~'));
+    let letters = value.chars().any(|c| c.is_ascii_alphabetic());
+    let digits = value.chars().any(|c| c.is_ascii_digit());
+    plain && !value.contains('/') && ((value.len() >= 8 && letters && digits) || value.len() >= 24)
+}
+
 /// A stable, readable site id derived from an origin.
 pub fn site_id_for(url: &url::Url) -> String {
     let host = url
@@ -246,6 +290,32 @@ mod tests {
         for none in ["localhost", "127.0.0.1", "[::1]", "com", ""] {
             assert_eq!(registrable_domain(none), None, "{none}");
         }
+    }
+
+    #[test]
+    fn a_query_session_is_added_and_taken_off_an_address() {
+        assert_eq!(
+            with_query_pair("https://a.test/notices?page=2", "sid", "x y"),
+            "https://a.test/notices?page=2&sid=x+y"
+        );
+        assert_eq!(
+            without_query_key("https://a.test/notices?sid=abc123def&page=2", "sid"),
+            "https://a.test/notices?page=2"
+        );
+        assert_eq!(
+            without_query_key("https://a.test/notices?sid=abc", "sid"),
+            "https://a.test/notices"
+        );
+        assert_eq!(
+            without_query_key("https://a.test/notices?page=2", "sid"),
+            "https://a.test/notices?page=2"
+        );
+        assert!(session_value("3f9a8c7b2e1d4a6f"));
+        assert!(session_value("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+        assert!(!session_value("%2Fnotices"));
+        assert!(!session_value("2"));
+        assert!(!session_value("notices"));
+        assert!(!session_value("/board?x=1"));
     }
 
     #[test]

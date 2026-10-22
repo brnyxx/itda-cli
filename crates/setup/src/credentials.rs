@@ -38,11 +38,25 @@ pub fn offers(spec: &Spec, har: &Value, cookies: &[itda_browser::Cookie]) -> Vec
                     });
                 }
             }
-            "browser" if !cookies.is_empty() => offers.push(Offer {
-                what: format!("the browser session ({} cookies)", cookies.len()),
-                name: itda_runtime::SESSION_SECRET.to_owned(),
-                secret: Secret::new(itda_browser::header(cookies)),
-            }),
+            "browser" => {
+                if let Some(key) = auth.value_from.strip_prefix("query:") {
+                    // The session the site carries in the address: the value
+                    // the recorded pages sent under that key.
+                    if let Some(value) = query_value(har, &spec.site.base_url, key) {
+                        offers.push(Offer {
+                            what: format!("the {key} session value the pages sent"),
+                            name: itda_runtime::SESSION_SECRET.to_owned(),
+                            secret: Secret::new(value),
+                        });
+                    }
+                } else if !cookies.is_empty() {
+                    offers.push(Offer {
+                        what: format!("the browser session ({} cookies)", cookies.len()),
+                        name: itda_runtime::SESSION_SECRET.to_owned(),
+                        secret: Secret::new(itda_browser::header(cookies)),
+                    });
+                }
+            }
             _ => {}
         }
     }
@@ -119,10 +133,43 @@ pub fn header_value(har: &Value, base_url: &str, header: &str, prefix: &str) -> 
         })
 }
 
+/// The value the last recorded request to `base_url` sent in the query
+/// parameter `key`: the session a definition's `query:<key>` entry refers
+/// to. Never printed.
+pub fn query_value(har: &Value, base_url: &str, key: &str) -> Option<String> {
+    har["log"]["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .rev()
+        .filter_map(|entry| url::Url::parse(entry["request"]["url"].as_str()?).ok())
+        .filter(|url| url.as_str().starts_with(base_url))
+        .find_map(|url| {
+            url.query_pairs()
+                .find(|(name, value)| name == key && !value.is_empty())
+                .map(|(_, value)| value.into_owned())
+        })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::header_value;
+    use super::{header_value, query_value};
     use serde_json::json;
+
+    #[test]
+    fn the_query_session_comes_from_the_last_request_that_sent_it() {
+        let har = json!({"log": {"entries": [
+            {"request": {"url": "https://app.example/notices?sid=first1234"}},
+            {"request": {"url": "https://other.example/x?sid=elsewhere1"}},
+            {"request": {"url": "https://app.example/notices/1?sid=second5678"}},
+            {"request": {"url": "https://app.example/style.css"}},
+        ]}});
+        assert_eq!(
+            query_value(&har, "https://app.example", "sid").as_deref(),
+            Some("second5678")
+        );
+        assert_eq!(query_value(&har, "https://app.example", "token"), None);
+    }
 
     #[test]
     fn the_token_comes_from_the_site_without_its_prefix() {

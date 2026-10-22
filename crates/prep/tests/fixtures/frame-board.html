@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><title>Notices - Example Intranet</title></head>
+<body>
+<h1>Notices</h1>
+<table>
+<thead><tr><th>No</th><th>Title</th><th>Posted</th></tr></thead>
+<tbody>
+<tr><td>3</td><td><a href="/frame/view.do?id=3">Third notice</a></td><td>2026-10-20</td></tr>
+<tr><td>2</td><td><a href="/frame/view.do?id=2">Second notice</a></td><td>2026-10-19</td></tr>
+<tr><td>1</td><td><a href="/frame/view.do?id=1">First notice</a></td><td>2026-10-18</td></tr>
+</tbody>
+</table>
+<form action="/frame/write.do" method="post">
+<input type="hidden" name="_csrf" value="frame-token-9">
+<input name="title" required>
+<textarea name="body"></textarea>
+</form>
+</body>
+</html>

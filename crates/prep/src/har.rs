@@ -132,6 +132,11 @@ struct Call {
     token: Option<(String, bool)>,
     /// Sign-in cookie names every sample sent; `None` before the first sample.
     session: Option<BTreeSet<String>>,
+    /// How many samples carried the site's session in the query.
+    query_session: usize,
+    /// A sample was the sign-in itself: a post with a password, or to a
+    /// sign-in path. A person signs in, never an agent.
+    sign_in: bool,
     /// Form fields that carried a token, such as `_csrf`.
     form_tokens: BTreeSet<String>,
     /// A header that carried an anti-forgery token, such as `X-CSRF-Token`.
@@ -291,6 +296,7 @@ fn parts_at(
     let mut elsewhere = BTreeSet::new();
     let mut calls: BTreeMap<(String, String, String), Call> = BTreeMap::new();
     let mut cookies = false;
+    let query_session = query_session_key(entries);
     for (entry, url) in recorded {
         let Some(rest) = url
             .path()
@@ -331,12 +337,18 @@ fn parts_at(
                 .position(|e| std::ptr::eq(e, *entry))
                 .unwrap_or(0)
         });
+        call.sign_in |= method == "POST" && sign_in_call(entry);
         call.method = method;
         call.path = path;
         call.params = params;
         call.samples += 1;
         for (name, value) in url.query_pairs() {
             if name == "_" {
+                continue;
+            }
+            // The session is auth, kept in the keyring; never an input.
+            if query_session.as_deref() == Some(name.as_ref()) {
+                call.query_session += 1;
                 continue;
             }
             if secret_field(&name) {
@@ -396,7 +408,20 @@ fn parts_at(
                 .find(|name| signed_in.iter().all(|names| names.contains(*name)))
         })
         .cloned();
-    if !signed_in.is_empty() {
+    let query_signed_in = calls.values().any(|call| call.query_session > 0);
+    let login = query_signed_in
+        .then(|| login_block(entries, &origin, &prefix))
+        .flatten();
+    if query_signed_in && let Some(key) = &query_session {
+        notes.push(match &login {
+            Some(_) => format!(
+                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in; it is kept in the keyring, never in the definition. Run `itda login {site}` once after installing."
+            ),
+            None => format!(
+                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in; it is kept in the keyring, never in the definition. Add the sign-in form to the auth entry as `login`, then run `itda login {site}`."
+            ),
+        });
+    } else if !signed_in.is_empty() {
         notes.push(format!(
             "Actions with auth: session use your browser sign-in; run `itda login {site} --browser` once after installing."
         ));
@@ -428,6 +453,12 @@ fn parts_at(
         if call.multipart {
             notes.push(format!(
                 "{label}: skipped; it uploads files, which drafts do not cover yet."
+            ));
+            continue;
+        }
+        if call.sign_in && call.token.is_none() {
+            notes.push(format!(
+                "{label}: the sign-in; left out. `itda login {site}` signs in through the site's form."
             ));
             continue;
         }
@@ -484,6 +515,24 @@ fn parts_at(
                 auth_name
             });
             entry.insert("auth".into(), auth_name.clone().into());
+        } else if call.query_session > 0
+            && let Some(key) = &query_session
+        {
+            if !auth_names.contains_key("query") {
+                let mut strategy = Mapping::new();
+                strategy.insert("name".into(), "session".into());
+                strategy.insert("kind".into(), "browser".into());
+                strategy.insert("value_from".into(), format!("query:{key}").into());
+                if let Some(login) = &login {
+                    strategy.insert("login".into(), Yaml::Mapping(login.clone()));
+                }
+                auth.push(Yaml::Mapping(strategy));
+                auth_names.insert("query".into(), "session".into());
+                // One session entry per site: a cookie session on top of a
+                // query one would only name the same sign-in twice.
+                auth_names.insert("cookie".into(), "session".into());
+            }
+            entry.insert("auth".into(), "session".into());
         } else if call.session.as_ref().is_some_and(|names| !names.is_empty()) {
             if !auth_names.contains_key("cookie") {
                 let mut strategy = Mapping::new();
@@ -694,6 +743,153 @@ fn parts_at(
     })
 }
 
+/// The query key a site carries its session in, when the recording shows
+/// one. Only a sign-in says which key that is: a `POST` whose path or body
+/// is a sign-in, answered with a redirect whose address carries a key with a
+/// session-looking value; or, failing that, a key with such a value on every
+/// same-origin call after the sign-in and on none before it. A recording
+/// without a sign-in names none.
+pub fn query_session_key(entries: &[Value]) -> Option<String> {
+    let sign_in = entries.iter().position(|entry| {
+        sign_in_call(entry)
+            && entry["request"]["method"]
+                .as_str()
+                .is_some_and(|m| m.eq_ignore_ascii_case("POST"))
+    })?;
+    let base = url::Url::parse(entries[sign_in]["request"]["url"].as_str()?).ok()?;
+    // The redacted copy a refresh keeps blanks the value to `REDACTED`; it
+    // still marks where the session was, so the copy drafts the same way.
+    let looks = |value: &str| itda_types::url::session_value(value) || value == REDACTED;
+    let location = entries[sign_in]["response"]["headers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|h| {
+            h["name"]
+                .as_str()
+                .is_some_and(|n| n.eq_ignore_ascii_case("location"))
+        })
+        .and_then(|h| h["value"].as_str())
+        .and_then(|to| base.join(to).ok());
+    if let Some(target) = location
+        && let Some((key, _)) = target.query_pairs().find(|(_, value)| looks(value))
+    {
+        return Some(key.into_owned());
+    }
+    let keys_of = |entry: &Value| -> Option<BTreeSet<String>> {
+        let url = url::Url::parse(entry["request"]["url"].as_str()?).ok()?;
+        if url.origin() != base.origin() {
+            return None;
+        }
+        let mime = entry["response"]["content"]["mimeType"]
+            .as_str()
+            .unwrap_or_default();
+        if ["image/", "font/", "javascript", "/css"]
+            .iter()
+            .any(|kind| mime.contains(kind))
+        {
+            return None;
+        }
+        Some(
+            url.query_pairs()
+                .filter(|(_, value)| looks(value))
+                .map(|(key, _)| key.into_owned())
+                .collect(),
+        )
+    };
+    let after: Vec<BTreeSet<String>> = entries[sign_in + 1..].iter().filter_map(keys_of).collect();
+    if after.len() < 2 {
+        return None;
+    }
+    let before: BTreeSet<String> = entries[..sign_in]
+        .iter()
+        .filter_map(keys_of)
+        .flatten()
+        .collect();
+    after
+        .iter()
+        .skip(1)
+        .fold(after[0].clone(), |common, keys| {
+            common.intersection(keys).cloned().collect()
+        })
+        .into_iter()
+        .find(|key| !before.contains(key))
+}
+
+/// The query session a recording shows, as a [`crate::SessionAuth`] for the
+/// page merge, so the pages read signed in carry `auth: session` too: the
+/// query key, and the sign-in form when one was recorded. `None` when the
+/// recording shows no query session.
+pub(crate) fn query_session_auth(
+    entries: &[Value],
+    origin: &url::Origin,
+    prefix: &str,
+) -> Option<crate::SessionAuth> {
+    let key = query_session_key(entries)?;
+    let login = login_block(entries, origin, prefix)
+        .map(|block| itda_spec::LoginForm {
+            path: block
+                .get("path")
+                .and_then(Yaml::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            user: block
+                .get("user")
+                .and_then(Yaml::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            password: block
+                .get("password")
+                .and_then(Yaml::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+        })
+        .unwrap_or_default();
+    Some(crate::SessionAuth {
+        cookie: String::new(),
+        query: Some(key),
+        login,
+    })
+}
+
+/// The sign-in form as a definition's `login` block, from the last page
+/// recorded before the sign-in that has one: where it is, and what its
+/// user and password fields are called.
+fn login_block(entries: &[Value], origin: &url::Origin, prefix: &str) -> Option<Mapping> {
+    let sign_in = entries.iter().position(|entry| {
+        sign_in_call(entry)
+            && entry["request"]["method"]
+                .as_str()
+                .is_some_and(|m| m.eq_ignore_ascii_case("POST"))
+    })?;
+    entries[..sign_in].iter().rev().find_map(|entry| {
+        if !html_page(entry) {
+            return None;
+        }
+        let url = url::Url::parse(entry["request"]["url"].as_str()?).ok()?;
+        if url.origin() != *origin {
+            return None;
+        }
+        let html = entry["response"]["content"]["text"].as_str()?;
+        let form = itda_html::evidence::sign_in_form(html, url.as_str(), None, None)?;
+        let page = itda_types::url::sign_in_page(&url);
+        let path = page.path().strip_prefix(prefix)?;
+        let path = if path.is_empty() { "/" } else { path };
+        let mut block = Mapping::new();
+        block.insert(
+            "path".into(),
+            match page.query() {
+                Some(query) => format!("{path}?{query}"),
+                None => path.to_owned(),
+            }
+            .into(),
+        );
+        block.insert("user".into(), form.user.into());
+        block.insert("password".into(), form.password.into());
+        Some(block)
+    })
+}
+
 /// What goes in the place of a recorded value that is kept on disk.
 pub const REDACTED: &str = "<redacted>";
 
@@ -706,11 +902,19 @@ pub const REDACTED: &str = "<redacted>";
 /// `secret` or `session` or looks like a credential, query parameters and
 /// form or JSON body fields with such names, and the whole response body of
 /// a call that was a sign-in (a path segment such as `login`, or a body with
-/// a password).
+/// a password). A session the site carries in the query (the key a sign-in
+/// handed out, see [`query_session_key`]) is blanked wherever it appears:
+/// addresses, `Location` headers and the links in recorded pages.
 pub fn redacted_recording(text: &[u8]) -> AppResult<Vec<u8>> {
     let mut doc: Value = serde_json::from_slice(text).map_err(|_| not_har())?;
     let Some(entries) = doc["log"]["entries"].as_array_mut() else {
         return Err(not_har());
+    };
+    let session_key = query_session_key(entries);
+    let private = |name: &str| private_name(name) || session_key.as_deref() == Some(name);
+    let blank_key = |text: &str| match &session_key {
+        Some(key) => blank_query_key(text, key),
+        None => text.to_owned(),
     };
     for entry in entries {
         let sign_in = sign_in_call(entry);
@@ -720,11 +924,13 @@ pub fn redacted_recording(text: &[u8]) -> AppResult<Vec<u8>> {
                 .and_then(Value::as_str)
                 .map(str::to_owned)
             {
-                request["url"] = Value::String(redacted_url(&url));
+                request["url"] = Value::String(redacted_url(&url, &private));
             }
             redact_pairs(request.get_mut("headers"), redact_header);
             redact_pairs(request.get_mut("cookies"), |_, _| Some(REDACTED.into()));
-            redact_pairs(request.get_mut("queryString"), redact_named);
+            redact_pairs(request.get_mut("queryString"), |name, _| {
+                private(name).then(|| REDACTED.to_owned())
+            });
             if let Some(post) = request.get_mut("postData") {
                 redact_pairs(post.get_mut("params"), redact_named);
                 let mime = post
@@ -738,25 +944,77 @@ pub fn redacted_recording(text: &[u8]) -> AppResult<Vec<u8>> {
             }
         }
         if let Some(response) = entry.get_mut("response") {
-            redact_pairs(response.get_mut("headers"), redact_header);
+            redact_pairs(response.get_mut("headers"), |name, value| {
+                if name.eq_ignore_ascii_case("location") {
+                    // A `Location` may be relative, so it is blanked by key
+                    // rather than parsed as a whole address.
+                    let blanked = blank_key(value);
+                    return (blanked != value).then_some(blanked);
+                }
+                redact_header(name, value)
+            });
             redact_pairs(response.get_mut("cookies"), |_, _| Some(REDACTED.into()));
-            if sign_in && let Some(content) = response.get_mut("content").filter(|c| c.is_object())
-            {
-                content["text"] = Value::String(String::new());
-                content["size"] = 0.into();
+            if let Some(content) = response.get_mut("content").filter(|c| c.is_object()) {
+                if sign_in {
+                    content["text"] = Value::String(String::new());
+                    content["size"] = 0.into();
+                } else if session_key.is_some()
+                    && let Some(text) = content.get("text").and_then(Value::as_str)
+                {
+                    let blanked = blank_key(text);
+                    if blanked != text {
+                        content["text"] = Value::String(blanked);
+                    }
+                }
             }
         }
     }
     Ok(serde_json::to_vec(&doc)?)
 }
 
+/// `text` with the value after every `key=` blanked, where `key` starts a
+/// query parameter (after `?`, `&` or an HTML `&amp;`). Links in a recorded
+/// page carry a query session the way addresses do.
+fn blank_query_key(text: &str, key: &str) -> String {
+    let marker = format!("{key}=");
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(&marker) {
+        let (head, tail) = rest.split_at(at);
+        let starts_parameter = head
+            .chars()
+            .next_back()
+            .is_some_and(|c| matches!(c, '?' | '&' | ';'));
+        out.push_str(head);
+        let after = &tail[marker.len()..];
+        if !starts_parameter {
+            out.push_str(&marker);
+            rest = after;
+            continue;
+        }
+        let end = after
+            .find(|c: char| {
+                !(c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~' | '%'))
+            })
+            .unwrap_or(after.len());
+        out.push_str(&marker);
+        if end > 0 {
+            out.push_str(REDACTED);
+        }
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// A name that holds a credential: the words `token`, `key`, `secret` or
 /// `session`, or what [`secret_field`] knows (`password`, `csrf`...).
 fn private_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    ["token", "key", "secret", "session"]
+    ["token", "key", "secret", "session", "sess"]
         .iter()
         .any(|word| lower.contains(word))
+        || lower == "sid"
         || secret_field(name)
 }
 
@@ -841,14 +1099,14 @@ fn redact_header(name: &str, value: &str) -> Option<String> {
 }
 
 /// The address with the values of private query parameters blanked.
-fn redacted_url(url: &str) -> String {
+fn redacted_url(url: &str, private: &dyn Fn(&str) -> bool) -> String {
     let Ok(mut parsed) = url::Url::parse(url) else {
         return url.to_owned();
     };
     let pairs: Vec<(String, String)> = parsed
         .query_pairs()
         .map(|(name, value)| {
-            let value = if private_name(&name) {
+            let value = if private(&name) {
                 REDACTED.to_owned()
             } else {
                 value.into_owned()
@@ -856,7 +1114,7 @@ fn redacted_url(url: &str) -> String {
             (name.into_owned(), value)
         })
         .collect();
-    if pairs.iter().all(|(name, _)| !private_name(name)) {
+    if pairs.iter().all(|(name, _)| !private(name)) {
         return url.to_owned();
     }
     parsed.query_pairs_mut().clear().extend_pairs(pairs);

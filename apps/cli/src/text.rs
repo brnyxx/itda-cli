@@ -58,6 +58,16 @@ pub fn t(key: &str) -> &'static str {
         ),
         ("found_title", "only a title", "제목만"),
         (
+            "followed_frame",
+            "Followed 1 frame: {list}.",
+            "프레임 1개를 따라가 읽었습니다: {list}.",
+        ),
+        (
+            "followed_frames",
+            "Followed {n} frames: {list}.",
+            "프레임 {n}개를 따라가 읽었습니다: {list}.",
+        ),
+        (
             "asked_schema",
             "Asked the GraphQL API at {url} what it offers.",
             "{url}의 GraphQL API에 무엇을 제공하는지 물었습니다.",
@@ -416,6 +426,21 @@ pub fn t(key: &str) -> &'static str {
             "정의의 auth 항목 value_from을 확인하거나 지우세요.",
         ),
         (
+            "query_missing",
+            "{site} accepted the sign-in, but did not hand out the {name} query parameter its definition names",
+            "{site}가 로그인을 받아들였지만 정의가 말한 {name} 쿼리 매개변수를 주지 않았습니다",
+        ),
+        (
+            "query_missing_fix",
+            "Check value_from in the definition's auth entry; the key must appear in the sign-in's redirect or on the links of the first page after it.",
+            "정의의 auth 항목 value_from을 확인하세요. 그 키는 로그인 뒤 리다이렉트 주소나 첫 페이지의 링크에 있어야 합니다.",
+        ),
+        (
+            "session_saved_query",
+            "Signed in. The {name} session value for {site}/{account} is sealed under the data directory with a key in the system keyring; it goes on the address of each request to the site, and agents only see the account id.",
+            "로그인했습니다. {site}/{account}의 {name} 세션 값은 데이터 폴더에 봉인돼 있고(키는 시스템 키링에), 사이트로 가는 요청 주소마다 붙습니다. 에이전트는 계정 id만 봅니다.",
+        ),
+        (
             "nothing_works",
             "No read worked, so nothing was kept. Try `itda record {url}` and use the site while it watches.",
             "동작하는 읽기가 없어 아무것도 남기지 않았습니다. `itda record {url}`로 사이트를 쓰는 모습을 녹화해 보세요.",
@@ -451,6 +476,20 @@ pub fn described(described: &itda_prep::Described) -> String {
             ("changes", &described.changes.to_string()),
         ],
     )
+}
+
+/// The frames a page's content was read through, in one line; `None` when
+/// none was followed.
+pub fn followed_frames(followed: &[String]) -> Option<String> {
+    let list = followed.join(", ");
+    match followed.len() {
+        0 => None,
+        1 => Some(tf("followed_frame", &[("list", &list)])),
+        n => Some(tf(
+            "followed_frames",
+            &[("n", &n.to_string()), ("list", &list)],
+        )),
+    }
 }
 
 /// `t(key)` with `{name}` fields filled in.

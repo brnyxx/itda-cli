@@ -2788,3 +2788,190 @@ async fn setup_names_the_sign_in_and_signs_in_only_where_the_session_can_be_kept
     assert!(String::from_utf8_lossy(&key.stderr).contains("No secret was given"));
     std::fs::remove_dir_all(home).ok();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_framed_portal_is_drafted_through_its_same_origin_frames() {
+    use axum::response::Html;
+    let home = home();
+    let router = Router::new()
+        .route(
+            "/",
+            get(|| async {
+                Html(
+                    "<title>Portal</title>
+                     <iframe src='/frame/board' name='main'></iframe>
+                     <iframe src='https://cdn.example.net/w'></iframe>",
+                )
+            }),
+        )
+        .route(
+            "/frame/board",
+            get(|| async {
+                Html(
+                    "<title>Board</title><h1>Notices</h1>
+                     <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                     <tr><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+                     <tr><td>1</td><td><a href='/n/1'>First</a></td></tr></table>",
+                )
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    // Before: the shell alone is a title check. The draft follows the frame
+    // and reads the board inside it, under the frame's own address.
+    let en = [("ITDA_LANG", "en")];
+    let printed = itda(&home, &["draft", "page", &format!("{base}/")], &en).await;
+    assert!(printed.status.success(), "{printed:?}");
+    let yaml = String::from_utf8_lossy(&printed.stdout);
+    assert!(yaml.contains("path: /frame/board"), "{yaml}");
+    assert!(yaml.contains("items: table tbody tr"), "{yaml}");
+    let said = String::from_utf8_lossy(&printed.stderr);
+    assert!(said.contains("Followed 1 frame: /frame/board."), "{said}");
+
+    let installed = itda(
+        &home,
+        &[
+            "draft",
+            "page",
+            &format!("{base}/"),
+            "--name",
+            "portal",
+            "--install",
+        ],
+        &[],
+    )
+    .await;
+    assert!(installed.status.success(), "{installed:?}");
+    let called = itda(&home, &["call", "portal.get-board", "--json"], &[]).await;
+    assert!(called.status.success(), "{called:?}");
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "Second");
+    std::fs::remove_dir_all(home).ok();
+}
+
+fn install_query_session(home: &Path, base: &str) {
+    let dir = home.join("specs/portal");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.yaml"),
+        format!(
+            "spec_version: 1
+site: {{name: portal, base_url: {base}}}
+auth:
+  - name: session
+    kind: browser
+    value_from: query:sid
+    login: {{path: /login, user: user_id, password: pw}}
+operations:
+  - name: list-notices
+    method: GET
+    path: /api/notices
+    auth: session
+    effect: read
+    evidence: doc
+    response: {{format: json, required_pointers: [/items]}}
+  - name: post-notice
+    method: POST
+    path: /api/notices
+    auth: session
+    effect: write
+    evidence: doc
+    body:
+      form:
+        title: {{type: string, required: true}}
+"
+        ),
+    )
+    .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_in_the_query_is_sent_and_kept_out_of_results_and_the_audit_log() {
+    use axum::extract::Query;
+    use axum::response::{IntoResponse, Redirect};
+    const TOKEN: &str = "9f8e7d6c5b4a3210fedc";
+    let home = home();
+    let seen = Arc::new(AtomicUsize::new(0));
+    let hits = seen.clone();
+    let router = Router::new().route(
+        "/api/notices",
+        get(
+            move |Query(q): Query<std::collections::HashMap<String, String>>| {
+                let hits = hits.clone();
+                async move {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                    if q.get("sid").map(String::as_str) != Some(TOKEN) {
+                        return Redirect::to("/login?next=%2Fapi%2Fnotices").into_response();
+                    }
+                    axum::Json(json!({"items": [{"id": 1, "title": "first"}]})).into_response()
+                }
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    install_query_session(&home, &base);
+    let session = [("ITDA_SECRET__PORTAL__DEFAULT__SESSION", TOKEN)];
+
+    // The session goes on the query; the answer comes back and the token is
+    // nowhere in the result.
+    let read = itda(&home, &["call", "portal.list-notices", "--json"], &session).await;
+    assert!(read.status.success(), "{read:?}");
+    let out = String::from_utf8_lossy(&read.stdout);
+    assert_eq!(stdout_json(&read)["data"]["items"][0]["title"], "first");
+    assert!(
+        !out.contains(TOKEN),
+        "the token is not in the result: {out}"
+    );
+
+    // A signed-out session (no token) is refused the way any sign-in is, and
+    // the error text carries no token.
+    let out = itda(&home, &["call", "portal.list-notices", "--json"], &[]).await;
+    assert_eq!(out.status.code(), Some(10), "{out:?}");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!text.contains(TOKEN), "{text}");
+
+    // A change logs to the audit, and the token never lands there.
+    let waiting = itda(
+        &home,
+        &["call", "portal.post-notice", "--title", "hi", "--json"],
+        &session,
+    )
+    .await;
+    let id = stdout_json(&waiting)["approval"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let store =
+        itda_policy::Approvals::open(itda_store::Store::open(&home.join("itda.db")).unwrap())
+            .unwrap();
+    store.claim(&id).await.unwrap();
+    let _ = itda(
+        &home,
+        &[
+            "call",
+            "portal.post-notice",
+            "--title",
+            "hi",
+            "--approval",
+            &id,
+            "--json",
+        ],
+        &session,
+    )
+    .await;
+    let audit = itda(&home, &["audit", "--json"], &[]).await;
+    let log = String::from_utf8_lossy(&audit.stdout);
+    assert!(
+        !log.contains(TOKEN),
+        "the audit log carries no token: {log}"
+    );
+    assert!(seen.load(Ordering::SeqCst) >= 1);
+    std::fs::remove_dir_all(home).ok();
+}
