@@ -124,8 +124,11 @@ pub fn pack(contents: &Contents<'_>, version: &str, out: &Path) -> io::Result<Pa
     let path = out.join(bundle_name(contents.target));
     let file = fs::File::create(&path)?;
     let mut zip = zip::ZipWriter::new(file);
+    // Mark the entries as Unix on every host: a bundle built on Windows
+    // would otherwise carry DOS attributes and lose the binary's execute bit.
     let text = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
+        .system(zip::System::Unix)
         .unix_permissions(0o644);
     let executable = text.unix_permissions(0o755);
 
