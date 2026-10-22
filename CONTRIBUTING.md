@@ -85,12 +85,27 @@ description.
 
 ## Translations
 
-`README.ko.md` and the Korean strings in `site/i18n.js` follow `README.md` and
-`site/index.html`. A pull request that changes the English text updates the
-Korean text too, or says in its description that it does not. New elements on
-the landing page get a `data-i18n` key with a Korean entry.
-`python3 assets/src/flow.py` builds the animated diagrams and holds both
-languages.
+itda speaks twelve languages where a person reads it; [docs/i18n.md](docs/i18n.md)
+lists them, with the glossary and the rules. English is the source, in three
+places, and each has eleven translations that say the same thing:
+
+| English | Translations |
+|---|---|
+| `apps/cli/text/en.json` (what the CLI prints) | `apps/cli/text/<tag>.json` |
+| `site/index.html` (the landing page) | `site/i18n/<tag>.js` |
+| `README.md` | `README.<tag>.md` |
+
+A pull request that changes one of the English texts changes the eleven
+translations in the same pull request, or says in its description what it
+leaves for later. A new line the CLI prints gets its key in every
+`apps/cli/text/*.json`; a new element on the landing page gets a `data-i18n`
+key with an entry in every `site/i18n/*.js`. `cargo test -p itda-cli` checks
+that every language has every key with the same `{fields}` and HTML, and
+that every README keeps the headings, code blocks and links of `README.md`.
+Agent-facing text (MCP tool descriptions, error codes and remedies, site
+definitions) stays English and is not translated.
+`python3 assets/src/flow.py` builds the animated diagrams; only English and
+Korean have one.
 
 ## Checks
 

@@ -53,7 +53,8 @@ site. It shows what agents can do and tries every read. After one more Enter, it
 connects the agent apps it finds on your computer. From then on, ask your agent
 for things on that site. `itda setup <address>` does the same from a script.
 `--no-record` never opens the browser; `--watch-only` watches but never asks you
-to record. `itda setup --help` lists the flags.
+to record. `itda setup --help` lists the flags. itda speaks the language of
+your `LANG`; `ITDA_LANG=ja` (or any tag in [docs/i18n.md](i18n.md)) overrides it.
 
 itda recognises sites running known software (GitLab, Jira, Confluence, Redmine,
 Discourse, MediaWiki, WordPress, Gitea or Forgejo) from their pages and confirms
@@ -130,7 +131,7 @@ for more room with `defaults.interval`.
 
 | Command | What it does |
 |---|---|
-| `itda setup <url> [--name id] [--record\|--no-record] [--as software\|--no-template] [--client name\|none] [--yes]` | In one go: look at the page or record you using the site. Name the actions in plain words (`ITDA_LANG=ko` for Korean). Try every read and keep what works. Connect an agent. Known software (GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea) gets its API from a template. `--as` forces one; `--no-template` skips them |
+| `itda setup <url> [--name id] [--record\|--no-record] [--as software\|--no-template] [--client name\|none] [--yes]` | In one go: look at the page or record you using the site. Name the actions in plain words (in your language: `ITDA_LANG` or `LANG`). Try every read and keep what works. Connect an agent. Known software (GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea) gets its API from a template. `--as` forces one; `--no-template` skips them |
 | `itda draft page <url>… [--name id] [--base-url url] [--include text] [--install] [--force]` | Draft a site definition from the pages you use: tables, lists, embedded data, forms and feeds, plus the reads of the API description the site publishes |
 | `itda record <url> [--name id] [--install] [--save file.har]` | Use a site in your own browser while itda records what its pages ask for. Draft a definition from the recording |
 | `itda draft openapi <file> [--install]` · `itda draft har <file> [--install]` | Draft one from an API description or a saved browser recording |
