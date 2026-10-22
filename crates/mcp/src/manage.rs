@@ -35,7 +35,7 @@ pub(crate) fn tools() -> Vec<Tool> {
     vec![
         Tool::new(
             "itda_setup",
-            "Set a website up for itda from the address of a page the user uses: looks at the page as itda, drafts actions in plain words, tries every read once, keeps the ones that work, and adds the site's actions to this server's tools. A site that runs software itda knows (GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea or Forgejo) gets that software's API from a ready-made template; the result names it under template. Sites that need a sign-in or are drawn by scripts cannot be set up here; the result says what the user should run in a terminal instead.",
+            "Set a website up for itda from the address of a page the user uses: looks at the page as itda, drafts actions in plain words, tries every read once, keeps the ones that work, and adds the site's actions to this server's tools. A site that runs software itda knows (GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea or Forgejo) gets that software's API from a ready-made template; the result names it under template. Otherwise, when the page shows itda nothing but a title (it is drawn by scripts), a browser window opens briefly on the user's screen so itda can watch what the page loads by itself; nothing in it is clicked or typed, and it closes on its own. Sites that need a sign-in, or still show nothing, cannot be set up here; the result says what the user should run in a terminal instead.",
             schema(json!({"type": "object", "properties": {
                 "url": {"type": "string", "description": "The address of a page on the site."},
                 "name": {"type": "string", "description": "Site id to save under; taken from the host name when left out."},
@@ -151,6 +151,7 @@ impl Server {
                 .unwrap_or(false),
         };
         let mut notes = Vec::new();
+        let mut watched = None;
         let request = itda_setup::Request {
             url: url.to_owned(),
             name: text(arguments, "name").map(str::to_owned),
@@ -160,6 +161,7 @@ impl Server {
                 Some(name) => itda_setup::Template::Named(name.to_owned()),
                 None => itda_setup::Template::Auto,
             },
+            watch: true,
         };
         let finished = itda_setup::run(ctx, request, &mut fixed, &mut |progress| match progress {
             itda_setup::Progress::Recognised(found) => notes.push(if found.confirmed {
@@ -180,9 +182,13 @@ impl Server {
                 "Read its API description at {}: {} reads, {} changes noted.",
                 described.url, described.reads, described.changes
             )),
+            itda_setup::Progress::Watched { calls, reads } => {
+                watched = Some(watched_words(calls, reads));
+            }
             _ => {}
         })
         .await;
+        notes.extend(watched.clone());
         let done = match finished {
             Err(error) => return failure(&error),
             Ok(Finished::Done(done)) => done,
@@ -193,10 +199,11 @@ impl Server {
                     (None, Fallback::SignIn) => "the page needs a sign-in".to_owned(),
                     (None, Fallback::Scripted) => "the page is drawn by scripts".to_owned(),
                 };
+                let seen = watched.map(|w| format!(" {w}")).unwrap_or_default();
                 return failure(&coded(
                     "needs_recording",
                     422,
-                    format!("The page could not be read as itda ({why})"),
+                    format!("The page could not be read as itda ({why}).{seen}"),
                     format!(
                         "Ask the user to run `itda setup {url}` in a terminal and answer yes when it offers to open their browser and record; or `itda record {url} --install`."
                     ),
@@ -639,6 +646,18 @@ fn change_words(change: &itda_setup::refresh::Change) -> String {
         Change::Changed { name, fields } => format!("{name}: changed ({})", fields.join(", ")),
         Change::Edited { name } => format!("{name}: kept as you edited it"),
     }
+}
+
+/// What watching the page load in a window on the user's screen gave.
+fn watched_words(calls: usize, reads: usize) -> String {
+    let found = if reads == 0 {
+        "nothing to draft".to_owned()
+    } else {
+        format!("{reads} reads drafted")
+    };
+    format!(
+        "Watched the page load in a browser window on the user's screen: {calls} calls, {found}."
+    )
 }
 
 /// What the gate saw when the page refused itda, in words.

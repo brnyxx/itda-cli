@@ -21,6 +21,8 @@ pub struct Flags {
     /// `Some(true)` records, `Some(false)` never opens the browser, `None` asks.
     pub record: Option<bool>,
     pub template: Template,
+    /// Watch the page load when it shows nothing, but never ask to record.
+    pub watch_only: bool,
     pub client: Option<String>,
     pub yes: bool,
 }
@@ -28,20 +30,24 @@ pub struct Flags {
 /// The questions, asked in the terminal.
 struct Terminal {
     record: Option<bool>,
+    watch_only: bool,
     yes: bool,
 }
 
 impl Answers for Terminal {
     fn record_anyway(&mut self) -> AppResult<bool> {
-        if self.record.is_some() {
+        if self.record.is_some() || self.watch_only {
             return Ok(false);
         }
         ask(t("ask_record_anyway"), false)
     }
 
-    fn record(&mut self, _why: Fallback) -> AppResult<bool> {
+    fn record(&mut self, why: Fallback) -> AppResult<bool> {
         if self.record == Some(false) {
             return Err(usage(t("no_record_allowed"), ""));
+        }
+        if self.watch_only {
+            return Err(usage(tf("watch_only_stop", &[("why", why_words(why))]), ""));
         }
         ask(t("ask_record"), true)
     }
@@ -68,12 +74,14 @@ impl Answers for Terminal {
 
 pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
     let interactive = std::io::stdin().is_terminal();
-    if !interactive && (flags.record.is_none() || flags.client.is_none()) {
+    let record_answered = flags.record.is_some() || flags.watch_only;
+    if !interactive && (!record_answered || flags.client.is_none()) {
         return Err(usage(t("no_terminal"), ""));
     }
     let ctx = crate::open(home)?.context(home);
     let mut answers = Terminal {
         record: flags.record,
+        watch_only: flags.watch_only,
         yes: flags.yes,
     };
     let mut width = 12;
@@ -84,6 +92,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
             name: flags.name.clone(),
             record: flags.record == Some(true),
             template: flags.template.clone(),
+            watch: flags.record.is_none(),
         },
         &mut answers,
         &mut |progress| say(progress, &mut width),
@@ -167,13 +176,18 @@ fn say(progress: Progress<'_>, width: &mut usize) {
             eprintln!("    {}", crate::text::described(described));
         }
         Progress::Refused(refused) => eprintln!("    {}", crate::refusal_words(refused).msg),
-        Progress::NeedsRecord(why) => {
-            let why = match why {
-                Fallback::Blocked => t("why_blocked"),
-                Fallback::SignIn => t("why_signin"),
-                Fallback::Scripted => t("why_scripted"),
+        Progress::Watching { host } => eprintln!("    {}", tf("watching", &[("host", host)])),
+        Progress::Watched { calls, reads } => {
+            let calls = calls.to_string();
+            let line = if reads == 0 {
+                tf("watched_nothing", &[("n", &calls)])
+            } else {
+                tf("watched", &[("n", &calls), ("k", &reads.to_string())])
             };
-            eprintln!("    {}", tf("needs_record", &[("why", why)]));
+            eprintln!("    {line}");
+        }
+        Progress::NeedsRecord(why) => {
+            eprintln!("    {}", tf("needs_record", &[("why", why_words(why))]));
         }
         Progress::Recording(progress) => crate::say_recording(&progress),
         Progress::Drafted(spec) => {
@@ -233,6 +247,15 @@ fn tried(spec: &Spec, outcome: &check::Outcome, width: usize) -> String {
             };
             format!("✗ {name:<width$} {}", tf("removed", &[("why", &why)]))
         }
+    }
+}
+
+/// Why the page was not enough, in a few words.
+fn why_words(why: Fallback) -> &'static str {
+    match why {
+        Fallback::Blocked => t("why_blocked"),
+        Fallback::SignIn => t("why_signin"),
+        Fallback::Scripted => t("why_scripted"),
     }
 }
 

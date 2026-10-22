@@ -88,6 +88,10 @@ pub struct Draft {
     pub yaml: String,
     pub operations: usize,
     pub reads: usize,
+    /// Of the reads, how many check nothing but a page's title: a page that
+    /// showed no records, data, form or feed. A draft with no other read
+    /// gives an agent little.
+    pub thin_reads: usize,
     /// What was skipped or simplified, one line each.
     pub notes: Vec<String>,
     /// What the install-time checks found, one line each.
@@ -416,6 +420,33 @@ pub fn from_template(
     Ok(draft)
 }
 
+/// A read that checks only the page's title: `required_html_fields` on it
+/// and no records, embedded data or format to check.
+fn thin_read(op: &Mapping) -> bool {
+    if op.get("effect").and_then(Yaml::as_str) != Some("read") {
+        return false;
+    }
+    let Some(Yaml::Mapping(response)) = op.get("response") else {
+        return false;
+    };
+    let only_title = response
+        .get("html")
+        .and_then(|html| html.get("page"))
+        .and_then(Yaml::as_mapping)
+        .is_some_and(|page| page.len() == 1 && page.contains_key("title"));
+    only_title
+        && ["items", "ssr_json", "required_pointers"]
+            .iter()
+            .all(|key| !response.contains_key(*key))
+}
+
+/// True for the error [`from_recording`] and [`from_har`] give when the
+/// recording held nothing to draft from, as opposed to a recording that
+/// could not be read at all.
+pub fn drafted_nothing(error: &itda_types::error::AppError) -> bool {
+    error.msg == har::no_operations().msg
+}
+
 /// Writes the definition and checks it with the rules `itda` applies at
 /// install time. The parts' `source` says what drafted it, for the header
 /// comment; `title` is the site's human name when the source gave one.
@@ -452,6 +483,7 @@ pub(crate) fn finish(parts: Parts, title: &str) -> Draft {
         .iter()
         .filter(|op| op.get("effect").and_then(Yaml::as_str) == Some("read"))
         .count();
+    let thin_reads = operations.iter().filter(|op| thin_read(op)).count();
     let count = operations.len();
     root.insert(
         "operations".into(),
@@ -476,6 +508,7 @@ pub(crate) fn finish(parts: Parts, title: &str) -> Draft {
         yaml,
         operations: count,
         reads,
+        thin_reads,
         notes,
         problems,
         described: None,

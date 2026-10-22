@@ -143,6 +143,10 @@ enum Command {
         /// Read the page like any other, even when it runs known software
         #[arg(long)]
         no_template: bool,
+        /// Only watch the page load in your browser when it shows itda
+        /// nothing; never ask you to record
+        #[arg(long, conflicts_with_all = ["record", "no_record"])]
+        watch_only: bool,
         /// The agent to connect: claude-desktop, claude-code, cursor, vscode,
         /// codex or none
         #[arg(long)]
@@ -435,6 +439,7 @@ fn main() -> ExitCode {
             no_record,
             software,
             no_template,
+            watch_only,
             client,
             yes,
         } => block_on(setup::run(
@@ -454,6 +459,7 @@ fn main() -> ExitCode {
                     None if no_template => itda_setup::Template::Off,
                     None => itda_setup::Template::Auto,
                 },
+                watch_only,
                 client,
                 yes,
             },
@@ -598,6 +604,7 @@ fn first_command(typed: &str) -> Option<First> {
         no_record: false,
         software: None,
         no_template: false,
+        watch_only: false,
         client: None,
         yes: false,
     }))

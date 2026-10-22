@@ -1815,3 +1815,223 @@ async fn a_template_can_be_forced_by_name() {
     );
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A page drawn by scripts, served three ways: one that fetches its list on
+/// load and more on the first scroll, one that fetches nothing, and one whose
+/// script sends the browser to a sign-in page.
+#[cfg(unix)]
+async fn serve_spa() -> String {
+    use axum::response::Html;
+    let shell = |script: &'static str| {
+        move || async move {
+            Html(format!(
+                "<!doctype html><html><head><title>Items</title></head><body>
+                 <div id='app' style='min-height: 4000px'>loading</div>
+                 <script src='{script}'></script></body></html>"
+            ))
+        }
+    };
+    let js = |text: &'static str| {
+        move || async move { ([("content-type", "application/javascript")], text) }
+    };
+    let router = Router::new()
+        .route("/app", get(shell("/app.js")))
+        .route(
+            "/app.js",
+            get(js("fetch('/api/items').then(r => r.json()).then(d => { document.getElementById('app').textContent = d.items.length + ' items'; });
+                   let more = false;
+                   addEventListener('scroll', () => {
+                     if (!more && innerHeight + scrollY >= document.body.scrollHeight - 10) { more = true; fetch('/api/more'); }
+                   });")),
+        )
+        .route(
+            "/api/items",
+            get(|| async { axum::Json(json!({"items": [{"id": 1, "title": "first"}]})) }),
+        )
+        .route(
+            "/api/more",
+            get(|| async { axum::Json(json!({"items": [{"id": 2, "title": "second"}]})) }),
+        )
+        .route(
+            "/plain",
+            get(|| async {
+                Html("<title>Plain</title><p>A page with a title, a paragraph and no script at all, which shows a plain fetch everything it has.</p>")
+            }),
+        )
+        .route("/empty", get(shell("/empty.js")))
+        .route(
+            "/empty.js",
+            get(js("document.getElementById('app').textContent = 'nothing here';")),
+        )
+        .route("/private", get(shell("/private.js")))
+        .route(
+            "/private.js",
+            get(js("location.replace('/login?next=%2Fprivate');")),
+        )
+        .route(
+            "/login",
+            get(|| async { Html("<title>Sign in</title><form><input type='password' name='p'></form>") }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+/// The browser `ITDA_TEST_BROWSER` names, wrapped to run headless; `None`
+/// when the variable is not set.
+#[cfg(unix)]
+fn headless_browser(dir: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let binary = std::env::var_os("ITDA_TEST_BROWSER").filter(|b| !b.is_empty())?;
+    let wrapper = dir.join("browser");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nexec '{}' --headless=new --no-sandbox --no-proxy-server \"$@\"\n",
+            binary.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    Some(wrapper)
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn setup_watches_what_a_scripted_page_loads_before_asking_to_record() {
+    let home = home();
+    let Some(browser) = headless_browser(&home) else {
+        eprintln!("skipped: set ITDA_TEST_BROWSER to run");
+        return;
+    };
+    let browser = browser.to_str().unwrap().to_owned();
+    let env = [("ITDA_BROWSER", browser.as_str()), ("ITDA_LANG", "en")];
+    let base = serve_spa().await;
+
+    // The calls the page makes on load and on the first scroll become reads.
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/app"),
+            "--name",
+            "app",
+            "--watch-only",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &env,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(said.contains("Opening your browser on 127.0.0.1"), "{said}");
+    assert!(said.contains("Watched the page load: "), "{said}");
+    assert!(said.contains(" calls, 2 reads drafted."), "{said}");
+    assert!(!said.contains("Open the browser and record?"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/app/spec.yaml")).unwrap();
+    assert!(spec.contains("path: /api/items"), "{spec}");
+    assert!(
+        spec.contains("path: /api/more"),
+        "the scroll was watched too:\n{spec}"
+    );
+    let called = itda(&home, &["call", "app.list-items", "--json"], &[]).await;
+    assert!(called.status.success(), "{called:?}");
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "first");
+
+    // A page that loads nothing falls through to the question, which
+    // --watch-only answers by stopping.
+    let nothing = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/empty"),
+            "--name",
+            "empty",
+            "--watch-only",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &env,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&nothing.stderr);
+    assert_eq!(nothing.status.code(), Some(2), "{said}");
+    assert!(said.contains(" calls, nothing to draft."), "{said}");
+    assert!(said.contains("(it is drawn by scripts)"), "{said}");
+    assert!(said.contains("--watch-only skips recording"), "{said}");
+    assert!(!home.join("specs/empty").exists());
+
+    // A page whose scripts go to a sign-in page stops with the refusal;
+    // nothing is typed there.
+    let private = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/private"),
+            "--name",
+            "private",
+            "--watch-only",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &env,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&private.stderr);
+    assert!(!private.status.success(), "{said}");
+    assert!(
+        said.contains("127.0.0.1 sends itda to a sign-in page instead of showing /private."),
+        "{said}"
+    );
+    assert!(said.contains("(it needs a sign-in)"), "{said}");
+    assert!(!home.join("specs/private").exists());
+
+    // A bare page without scripts cannot load anything by itself: no window.
+    let plain = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/plain"),
+            "--name",
+            "plain",
+            "--watch-only",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &env,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&plain.stderr);
+    assert!(plain.status.success(), "{said}");
+    assert!(said.contains("Found: only a title."), "{said}");
+    assert!(!said.contains("Opening your browser"), "{said}");
+    assert!(home.join("specs/plain/spec.yaml").exists());
+
+    // --no-record never opens the browser.
+    let no_browser = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/app"),
+            "--name",
+            "app2",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &env,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&no_browser.stderr);
+    assert!(!no_browser.status.success(), "{said}");
+    assert!(!said.contains("Opening your browser"), "{said}");
+    assert!(said.contains("--no-record forbids the browser"), "{said}");
+    std::fs::remove_dir_all(home).ok();
+}

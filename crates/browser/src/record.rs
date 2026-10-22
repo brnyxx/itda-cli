@@ -415,6 +415,11 @@ pub struct Recorder {
     /// The page to open once the first tab is being watched, so its own
     /// document request is recorded too.
     start: Option<url::Url>,
+    /// The tab the page was opened in: where a scroll goes.
+    page: Option<String>,
+    /// When the browser last reported anything on the network; `None` until
+    /// the page starts loading.
+    last_event: Option<Instant>,
     /// The last events seen, for a test or a bug report: method, session
     /// and request id only, never a value.
     trace: std::collections::VecDeque<String>,
@@ -444,6 +449,8 @@ impl Recorder {
             sessions: BTreeSet::new(),
             capture: Capture::default(),
             start: Some(url.clone()),
+            page: None,
+            last_event: None,
             trace: std::collections::VecDeque::new(),
         };
         let attached = recorder.send(
@@ -496,6 +503,29 @@ impl Recorder {
         crate::site_cookies(&result, site)
     }
 
+    /// How long the network has been quiet: the time since the browser last
+    /// reported a request, a response or a body. `None` until the page has
+    /// started loading, so a slow browser start does not count as quiet.
+    pub fn quiet_for(&self) -> Option<Duration> {
+        self.last_event.map(|at| at.elapsed())
+    }
+
+    /// Scroll the page to the bottom, as one turn of the mouse wheel would,
+    /// so what the page loads on its first scroll is recorded too. Nothing
+    /// is clicked or typed. The quiet clock starts again from here.
+    pub fn scroll_to_bottom(&mut self) -> AppResult<()> {
+        let Some(page) = self.page.clone() else {
+            return Ok(());
+        };
+        self.send_async(
+            Some(&page),
+            "Input.dispatchMouseEvent",
+            json!({"type": "mouseWheel", "x": 50, "y": 50, "deltaX": 0, "deltaY": 1_000_000}),
+        )?;
+        self.last_event = Some(Instant::now());
+        Ok(())
+    }
+
     /// What the browser sent, newest last: one line per event or reply.
     pub fn trace(&self) -> Vec<String> {
         self.trace.iter().cloned().collect()
@@ -546,7 +576,10 @@ impl Recorder {
         self.trace.push_back(line);
         if let Some(id) = reply["id"].as_u64() {
             match self.pending.remove(&id) {
-                Some(Pending::Fetch(fetch)) => self.capture.fetched(&fetch, reply.get("result")),
+                Some(Pending::Fetch(fetch)) => {
+                    self.last_event = Some(Instant::now());
+                    self.capture.fetched(&fetch, reply.get("result"));
+                }
                 // Tracking is on only once the browser says so; a page that
                 // started loading before that would miss its first events.
                 Some(Pending::Navigate(session, url)) => {
@@ -579,6 +612,7 @@ impl Recorder {
                     let blank =
                         reply["params"]["targetInfo"]["url"].as_str() == Some("about:blank");
                     if blank && let Some(start) = self.start.take() {
+                        self.page = Some(session.clone());
                         self.pending.insert(
                             enabled,
                             Pending::Navigate(session.clone(), start.to_string()),
@@ -591,6 +625,7 @@ impl Recorder {
                     .remove(reply["params"]["sessionId"].as_str().unwrap_or_default());
             }
             method if method.starts_with("Network.") => {
+                self.last_event = Some(Instant::now());
                 let fetches = self.capture.event(&session, method, &reply["params"]);
                 for fetch in fetches {
                     let (cdp, request) = match &fetch {
