@@ -119,6 +119,23 @@
       </ul>
     </section>
 
+    <section class="section wrap agent-prompt" id="for-your-agent">
+      <p class="eyebrow"><b>[ 00 ]</b> <span data-i18n="eyebrow.prompt">Or skip the terminal</span></p>
+      <h2 data-i18n="prompt.h2">Hand this to your agent.</h2>
+      <p class="section-lede" data-i18n="prompt.lede">Paste it into Claude Code, Cursor or Codex with the address of a site you use. The agent installs itda, sets the site up and starts using it. You only say yes to changes.</p>
+      <div class="win promptwin" data-copyable>
+        <div class="bar"><span></span><em data-i18n="prompt.win">paste into your agent</em><button class="copy" type="button" aria-label="Copy the prompt" data-copy><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <pre class="prompt-body" data-i18n="prompt.body">Install itda and set up the-site-you-use.example for me.
+1. Install it: curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh
+   (on Windows: irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex)
+2. Run: itda setup https://the-site-you-use.example --client claude-code -y
+   (use cursor, codex or claude-desktop if that is what you are)
+3. Read https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md, then use the site through itda.
+   Reads just work. Anything that changes the site waits for my approval.
+   If a read says to sign in, tell me to run: itda login &lt;site&gt; --browser</pre>
+      </div>
+    </section>
+
     <section class="section wrap" id="how">
       <p class="eyebrow"><b>[ 01 ]</b> <span data-i18n="eyebrow.how">How it works</span></p>
       <h2 data-i18n="how.h2">From one address to a connected agent.</h2>

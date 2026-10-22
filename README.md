@@ -93,6 +93,20 @@ your computer and connects them after one Enter (`ITDA_LANG=ko` makes it speak
 Korean). A bare `itda` asks for the address; `itda setup <address>` takes flags
 for scripts.
 
+Or skip the terminal and hand this to Claude Code, Cursor or Codex, with the
+address of a site you use:
+
+```text
+Install itda and set up the-site-you-use.example for me.
+1. Install it: curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh
+   (on Windows: irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex)
+2. Run: itda setup https://the-site-you-use.example --client claude-code -y
+   (use cursor, codex or claude-desktop if that is what you are)
+3. Read https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md, then use the site through itda.
+   Reads just work. Anything that changes the site waits for my approval.
+   If a read says to sign in, tell me to run: itda login <site> --browser
+```
+
 The pieces are commands of their own. For pages you can open without
 signing in, give itda their addresses: tables and lists become records,
 search forms become reads, post forms become changes, and feeds come along:

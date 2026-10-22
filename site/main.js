@@ -22,6 +22,21 @@ for (const box of document.querySelectorAll("[data-tabs]")) {
   });
 }
 
+// Copy buttons outside the install box copy the text of their window.
+for (const btn of document.querySelectorAll("[data-copy]")) {
+  btn.addEventListener("click", async () => {
+    const body = btn.closest("[data-copyable]")?.querySelector("pre");
+    if (!body) return;
+    try {
+      await navigator.clipboard.writeText(body.textContent.trim());
+      btn.classList.add("done");
+      setTimeout(() => btn.classList.remove("done"), 1500);
+    } catch {
+      // Clipboard access can be refused; the text stays selectable.
+    }
+  });
+}
+
 // English and Korean. English is the page as served; Korean strings come from
 // i18n.js and replace elements marked data-i18n. The choice comes from ?lang=,
 // then the last choice on this device, then the browser's language.
