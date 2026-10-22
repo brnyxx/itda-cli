@@ -765,6 +765,97 @@ pub fn openapi_link(html: &str, base: &str) -> Option<String> {
     })
 }
 
+/// What a page says about the software that made it: its `<meta>` tags,
+/// `<link>` tags, script addresses and body classes, as written, so a
+/// caller can recognise GitLab, WordPress or Jira without parsing the page
+/// again. Bounded: at most 500 of each.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Markers {
+    /// `(name or property, content)` of every `<meta>` with both.
+    pub metas: Vec<(String, String)>,
+    /// `(rel, href)` of every `<link>` with both.
+    pub links: Vec<(String, String)>,
+    /// `src` of every `<script src>`.
+    pub scripts: Vec<String>,
+    /// The `<body>`'s `class` attribute, or `""`.
+    pub body_class: String,
+    /// The text of every inline `<script>`, for settings pages embed such as
+    /// Gitea's `window.config`; each cut at 4 KB.
+    pub inline_scripts: Vec<String>,
+}
+
+impl Markers {
+    /// The content of the first `<meta name=...>` (or `property=...`) with
+    /// that name, case-insensitively.
+    pub fn meta(&self, name: &str) -> Option<&str> {
+        self.metas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, content)| content.as_str())
+    }
+
+    /// The `href` of the first `<link>` whose `rel` list contains `rel`.
+    pub fn link(&self, rel: &str) -> Option<&str> {
+        self.links
+            .iter()
+            .find(|(r, _)| {
+                r.split_ascii_whitespace()
+                    .any(|part| part.eq_ignore_ascii_case(rel))
+            })
+            .map(|(_, href)| href.as_str())
+    }
+
+    /// Whether the body carries `class`.
+    pub fn body_has_class(&self, class: &str) -> bool {
+        self.body_class
+            .split_ascii_whitespace()
+            .any(|c| c.eq_ignore_ascii_case(class))
+    }
+}
+
+pub fn markers(html: &str) -> Markers {
+    let document = Html::parse_document(html);
+    let mut out = Markers::default();
+    if let Ok(selector) = Selector::parse("meta") {
+        for meta in document.select(&selector).take(500) {
+            let element = meta.value();
+            let name = element.attr("name").or_else(|| element.attr("property"));
+            if let (Some(name), Some(content)) = (name, element.attr("content")) {
+                out.metas
+                    .push((name.trim().to_owned(), content.trim().to_owned()));
+            }
+        }
+    }
+    if let Ok(selector) = Selector::parse("link[rel][href]") {
+        for link in document.select(&selector).take(500) {
+            let element = link.value();
+            if let (Some(rel), Some(href)) = (element.attr("rel"), element.attr("href")) {
+                out.links
+                    .push((rel.trim().to_owned(), href.trim().to_owned()));
+            }
+        }
+    }
+    if let Ok(selector) = Selector::parse("script") {
+        for script in document.select(&selector).take(500) {
+            match script.value().attr("src") {
+                Some(src) => out.scripts.push(src.trim().to_owned()),
+                None => {
+                    let text: String = script.text().collect();
+                    if !text.trim().is_empty() {
+                        out.inline_scripts.push(text.chars().take(4096).collect());
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(selector) = Selector::parse("body")
+        && let Some(body) = document.select(&selector).next()
+    {
+        out.body_class = body.value().attr("class").unwrap_or_default().to_owned();
+    }
+    out
+}
+
 /// True when the page is mostly scripts with little text: an app shell that
 /// draws itself in the browser, which a plain fetch cannot see into.
 pub fn script_shell(html: &str) -> bool {
@@ -906,5 +997,30 @@ mod tests {
             "<div id=root></div><script src=/app.js></script>"
         ));
         assert!(!script_shell(html));
+    }
+
+    #[test]
+    fn markers_keep_metas_links_scripts_and_body_classes() {
+        let html = "<html><head><meta name='generator' content='WordPress 6.5'>
+            <meta property='og:site_name' content='GitLab'>
+            <link rel='https://api.w.org/' href='https://blog.example/wp-json/'>
+            <link rel='EditURI alternate' type='application/rsd+xml' href='//wiki.example/w/api.php?action=rsd'>
+            <script src='/assets/webpack/main.js'></script><script>window.config={appSubUrl:''}</script>
+            </head><body class='skin-vector mediawiki'></body></html>";
+        let found = markers(html);
+        assert_eq!(found.meta("Generator"), Some("WordPress 6.5"));
+        assert_eq!(found.meta("og:site_name"), Some("GitLab"));
+        assert_eq!(
+            found.link("https://api.w.org/"),
+            Some("https://blog.example/wp-json/")
+        );
+        assert_eq!(
+            found.link("edituri"),
+            Some("//wiki.example/w/api.php?action=rsd")
+        );
+        assert_eq!(found.scripts, vec!["/assets/webpack/main.js".to_owned()]);
+        assert!(found.inline_scripts[0].contains("appSubUrl"));
+        assert!(found.body_has_class("mediawiki"));
+        assert!(!found.body_has_class("skin"));
     }
 }

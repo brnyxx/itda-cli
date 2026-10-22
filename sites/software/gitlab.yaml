@@ -1,0 +1,259 @@
+# GitLab, through its REST API v4. `itda setup` fills base_url with the
+# instance it recognised (<instance>/api/v4), including a relative URL root.
+spec_version: 1
+site:
+  name: gitlab
+  title: GitLab
+  base_url: https://gitlab.example/api/v4
+auth:
+  # Optional for public projects; needed for private ones, for search and
+  # for changes. A personal, project or group access token with only the
+  # scopes agents should have (read_api, or api for changes):
+  #   echo "$GITLAB_TOKEN" | itda login gitlab
+  # https://docs.gitlab.com/api/rest/authentication/
+  - name: token
+    kind: header
+    header: PRIVATE-TOKEN
+    value_from: store:gitlab/api-key
+models:
+  project:
+    id: {path: id, type: int}
+    path: {path: path_with_namespace}
+    name: {path: name}
+    description: {path: description}
+    default_branch: {path: default_branch}
+    visibility: {path: visibility}
+    stars: {path: star_count, type: int}
+    forks: {path: forks_count, type: int}
+    last_activity_at: {path: last_activity_at}
+    url: {path: web_url}
+  issue:
+    iid: {path: iid, type: int}
+    title: {path: title}
+    state: {path: state}
+    author: {path: author.username}
+    labels: {path: labels}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    url: {path: web_url}
+    description: {path: description}
+  merge_request:
+    iid: {path: iid, type: int}
+    title: {path: title}
+    state: {path: state}
+    source_branch: {path: source_branch}
+    target_branch: {path: target_branch}
+    author: {path: author.username}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    url: {path: web_url}
+  note:
+    id: {path: id, type: int}
+    author: {path: author.username}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    system: {path: system, type: bool}
+    body: {path: body}
+  pipeline:
+    id: {path: id, type: int}
+    iid: {path: iid, type: int}
+    status: {path: status}
+    ref: {path: ref}
+    sha: {path: sha}
+    source: {path: source}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    url: {path: web_url}
+  branch:
+    name: {path: name}
+    default: {path: default, type: bool}
+    protected: {path: protected, type: bool}
+    merged: {path: merged, type: bool}
+    commit: {path: commit.id}
+    committed_at: {path: commit.committed_date}
+    url: {path: web_url}
+  release:
+    tag: {path: tag_name}
+    name: {path: name}
+    released_at: {path: released_at}
+    created_at: {path: created_at}
+    notes: {path: description}
+operations:
+  - name: projects
+    desc: List projects, most recently active first; search filters by name, path or description
+    method: GET
+    path: /projects
+    effect: read
+    evidence: "GET /projects, https://docs.gitlab.com/api/projects/"
+    query:
+      search: {type: string}
+      order_by: {type: string, default: last_activity_at}
+      per_page: {type: int, default: 20}
+    model: project
+    response:
+      format: json
+  - name: project
+    desc: Show one project by numeric id or by its path (group/project)
+    method: GET
+    path: /projects/{project}
+    effect: read
+    evidence: "GET /projects/:id, https://docs.gitlab.com/api/projects/"
+    params:
+      project: {type: string}
+    model: project
+    response:
+      format: json
+      required_pointers: [/id, /path_with_namespace]
+  - name: search
+    desc: Search the whole instance; scope is projects, issues, merge_requests, milestones or users
+    method: GET
+    path: /search
+    auth: token
+    effect: read
+    evidence: "GET /search, https://docs.gitlab.com/api/search/"
+    query:
+      scope: {type: string, default: projects}
+      search: {type: string, required: true}
+      per_page: {type: int, default: 20}
+    response:
+      format: json
+  - name: issues
+    desc: List a project's issues, most recently updated first; state is opened, closed or all
+    method: GET
+    path: /projects/{project}/issues
+    effect: read
+    evidence: "GET /projects/:id/issues, https://docs.gitlab.com/api/issues/"
+    params:
+      project: {type: string}
+    query:
+      state: {type: string, default: opened}
+      search: {type: string}
+      order_by: {type: string, default: updated_at}
+      per_page: {type: int, default: 20}
+    model: issue
+    response:
+      format: json
+  - name: issue
+    desc: Read one issue with its description
+    method: GET
+    path: /projects/{project}/issues/{issue_iid}
+    effect: read
+    evidence: "GET /projects/:id/issues/:issue_iid, https://docs.gitlab.com/api/issues/"
+    params:
+      project: {type: string}
+      issue_iid: {type: int}
+    model: issue
+    response:
+      format: json
+      required_pointers: [/iid, /title]
+  - name: issue-notes
+    desc: Read the comments on an issue, oldest first
+    method: GET
+    path: /projects/{project}/issues/{issue_iid}/notes
+    effect: read
+    evidence: "GET /projects/:id/issues/:issue_iid/notes, https://docs.gitlab.com/api/notes/"
+    params:
+      project: {type: string}
+      issue_iid: {type: int}
+    query:
+      sort: {type: string, default: asc}
+      per_page: {type: int, default: 30}
+    model: note
+    response:
+      format: json
+  - name: merge-requests
+    desc: List a project's merge requests, most recently updated first; state is opened, merged, closed or all
+    method: GET
+    path: /projects/{project}/merge_requests
+    effect: read
+    evidence: "GET /projects/:id/merge_requests, https://docs.gitlab.com/api/merge_requests/"
+    params:
+      project: {type: string}
+    query:
+      state: {type: string, default: opened}
+      order_by: {type: string, default: updated_at}
+      per_page: {type: int, default: 20}
+    model: merge_request
+    response:
+      format: json
+  - name: merge-request
+    desc: Read one merge request
+    method: GET
+    path: /projects/{project}/merge_requests/{merge_request_iid}
+    effect: read
+    evidence: "GET /projects/:id/merge_requests/:merge_request_iid, https://docs.gitlab.com/api/merge_requests/"
+    params:
+      project: {type: string}
+      merge_request_iid: {type: int}
+    model: merge_request
+    response:
+      format: json
+      required_pointers: [/iid, /title]
+  - name: pipelines
+    desc: List a project's pipelines, newest first; filter by status (success, failed, running) or ref
+    method: GET
+    path: /projects/{project}/pipelines
+    effect: read
+    evidence: "GET /projects/:id/pipelines, https://docs.gitlab.com/api/pipelines/"
+    params:
+      project: {type: string}
+    query:
+      status: {type: string}
+      ref: {type: string}
+      per_page: {type: int, default: 20}
+    model: pipeline
+    response:
+      format: json
+  - name: branches
+    desc: List a project's branches; search filters by name
+    method: GET
+    path: /projects/{project}/repository/branches
+    effect: read
+    evidence: "GET /projects/:id/repository/branches, https://docs.gitlab.com/api/branches/"
+    params:
+      project: {type: string}
+    query:
+      search: {type: string}
+      per_page: {type: int, default: 50}
+    model: branch
+    response:
+      format: json
+  - name: releases
+    desc: List a project's releases, newest first
+    method: GET
+    path: /projects/{project}/releases
+    effect: read
+    evidence: "GET /projects/:id/releases, https://docs.gitlab.com/api/releases/"
+    params:
+      project: {type: string}
+    model: release
+    response:
+      format: json
+  - name: create-issue
+    desc: Open an issue in a project
+    method: POST
+    path: /projects/{project}/issues
+    auth: token
+    effect: write
+    evidence: "POST /projects/:id/issues, https://docs.gitlab.com/api/issues/"
+    params:
+      project: {type: string}
+    body:
+      json:
+        title: {type: string, required: true}
+        description: {type: string}
+    model: issue
+  - name: comment-issue
+    desc: Add a comment to an issue
+    method: POST
+    path: /projects/{project}/issues/{issue_iid}/notes
+    auth: token
+    effect: write
+    evidence: "POST /projects/:id/issues/:issue_iid/notes, https://docs.gitlab.com/api/notes/"
+    params:
+      project: {type: string}
+      issue_iid: {type: int}
+    body:
+      json:
+        body: {type: string, required: true}
+    model: note

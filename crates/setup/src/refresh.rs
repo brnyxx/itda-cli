@@ -79,7 +79,9 @@ impl Sources {
     /// What the draft was made from, for the words: `pages`, `recording`,
     /// `description` or `template`.
     pub fn kind(&self) -> &'static str {
-        if self.recording.is_some() {
+        if self.template.is_some() {
+            "template"
+        } else if self.recording.is_some() {
             "recording"
         } else if !self.pages.is_empty() {
             "pages"
@@ -324,6 +326,54 @@ async fn draft(
         options.schemas = crate::introspect(ctx, &endpoints, report).await;
         return itda_prep::from_recording(&har, &options, "`itda refresh`");
     }
+    // A template site is filled again from the same template at the same
+    // API base, with the page read again when it still opens.
+    if let Some(name) = &sources.template {
+        let definition = crate::software::by_name(name).ok_or_else(|| {
+            usage(
+                format!(
+                    "'{site}' came from a template named {name}, which this itda does not have"
+                ),
+                "Set it up again with `itda setup <url>`.",
+            )
+        })?;
+        let found = crate::software::Recognised {
+            software: definition.name,
+            title: if before.site.title.is_empty() {
+                definition.title.to_owned()
+            } else {
+                before.site.title.clone()
+            },
+            base: sources
+                .base_url
+                .clone()
+                .unwrap_or_else(|| before.site.base_url.clone()),
+            version: None,
+            confirmed: true,
+        };
+        report(Progress::Recognised(&found));
+        let mut pages = Vec::new();
+        for url in &sources.pages {
+            let probed = crate::probe(ctx, url).await?;
+            match (probed.outcome, probed.page) {
+                (Ok(()), Some(page)) => pages.push(page),
+                (Err((_, Some(refused))), _) => report(Progress::Refused(&refused)),
+                _ => {}
+            }
+        }
+        if pages.is_empty() {
+            return itda_prep::from_template(&crate::fill(&found), &[], None, &options);
+        }
+        return crate::draft_pages(
+            ctx,
+            &pages,
+            &sources.graphql,
+            &mut options,
+            Some(&found),
+            report,
+        )
+        .await;
+    }
     if !sources.pages.is_empty() {
         let host = url::Url::parse(&sources.pages[0])
             .ok()
@@ -332,17 +382,19 @@ async fn draft(
         report(Progress::Looking { host: &host });
         let mut pages = Vec::new();
         for url in &sources.pages {
-            match crate::probe(ctx, url).await? {
-                Ok(page) => pages.push(page),
-                Err((why, refused)) => {
+            let probed = crate::probe(ctx, url).await?;
+            match (probed.outcome, probed.page) {
+                (Ok(()), Some(page)) => pages.push(page),
+                (Err((why, refused)), _) => {
                     if let Some(refused) = &refused {
                         report(Progress::Refused(refused));
                     }
                     return Err(cannot_read(url, why, refused));
                 }
+                (Ok(()), None) => return Err(AppError::api("internal", 500)),
             }
         }
-        return crate::draft_pages(ctx, &pages, &sources.graphql, &mut options, report).await;
+        return crate::draft_pages(ctx, &pages, &sources.graphql, &mut options, None, report).await;
     }
     if let Some(description) = &sources.description {
         let bytes = if description.starts_with("https://") || description.starts_with("http://") {
@@ -368,7 +420,7 @@ async fn draft(
         return itda_prep::from_openapi(&bytes, &options);
     }
     Err(usage(
-        format!("'{site}' came from a template, and templates cannot be refreshed yet"),
+        format!("'{site}' has no sources to draft from again"),
         "Set it up again with `itda setup <url>`.",
     ))
 }

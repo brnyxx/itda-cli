@@ -1,0 +1,182 @@
+# Discourse, through the .json form of its own pages. `itda setup` fills
+# base_url with the forum it recognised. Everything here reads; posting
+# through the API needs two headers (Api-Key and Api-Username), which a
+# definition cannot send yet, so no change is drafted.
+spec_version: 1
+site:
+  name: discourse
+  title: Discourse
+  base_url: https://discourse.example
+models:
+  topic:
+    id: {path: id, type: int}
+    title: {path: title}
+    slug: {path: slug}
+    category_id: {path: category_id, type: int}
+    posts: {path: posts_count, type: int}
+    replies: {path: reply_count, type: int}
+    views: {path: views, type: int}
+    likes: {path: like_count, type: int}
+    pinned: {path: pinned, type: bool}
+    closed: {path: closed, type: bool}
+    created_at: {path: created_at}
+    last_posted_at: {path: last_posted_at}
+    last_poster: {path: last_poster_username}
+  category:
+    id: {path: id, type: int}
+    name: {path: name}
+    slug: {path: slug}
+    description: {path: description_text}
+    topics: {path: topic_count, type: int}
+    posts: {path: post_count, type: int}
+  post:
+    id: {path: id, type: int}
+    topic_id: {path: topic_id, type: int}
+    topic_slug: {path: topic_slug}
+    number: {path: post_number, type: int}
+    username: {path: username}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    replies: {path: reply_count, type: int}
+    html: {path: cooked}
+  tag:
+    id: {path: id}
+    name: {path: name}
+    count: {path: count, type: int}
+  user:
+    id: {path: id, type: int}
+    username: {path: username}
+    name: {path: name}
+    title: {path: title}
+    trust_level: {path: trust_level, type: int}
+    created_at: {path: created_at}
+    last_seen_at: {path: last_seen_at}
+operations:
+  - name: basic-info
+    desc: Show the forum's title and description
+    method: GET
+    path: /site/basic-info.json
+    effect: read
+    evidence: "GET /site/basic-info.json, https://docs.discourse.org/openapi.json"
+    response:
+      format: json
+      required_pointers: [/title]
+  - name: latest-topics
+    desc: List the latest topics
+    method: GET
+    path: /latest.json
+    effect: read
+    evidence: "GET /latest.json (listLatestTopics), https://docs.discourse.org/openapi.json"
+    query:
+      order: {type: string, default: activity}
+      per_page: {type: int, default: 30}
+    model: topic
+    response:
+      format: json
+      extract_pointer: /topic_list/topics
+  - name: top-topics
+    desc: List the top topics of a period (daily, weekly, monthly, quarterly, yearly, all)
+    method: GET
+    path: /top.json
+    effect: read
+    evidence: "GET /top.json (listTopTopics), https://docs.discourse.org/openapi.json"
+    query:
+      period: {type: string, default: weekly}
+      per_page: {type: int, default: 30}
+    model: topic
+    response:
+      format: json
+      extract_pointer: /topic_list/topics
+  - name: categories
+    desc: List the categories
+    method: GET
+    path: /categories.json
+    effect: read
+    evidence: "GET /categories.json (listCategories), https://docs.discourse.org/openapi.json"
+    query:
+      include_subcategories: {type: bool, default: true}
+    model: category
+    response:
+      format: json
+      extract_pointer: /category_list/categories
+  - name: category-topics
+    desc: List the topics in a category, by its slug and id
+    method: GET
+    path: /c/{slug}/{id}.json
+    effect: read
+    evidence: "GET /c/{slug}/{id}.json (listCategoryTopics), https://docs.discourse.org/openapi.json"
+    params:
+      slug: {type: string}
+      id: {type: int}
+    model: topic
+    response:
+      format: json
+      extract_pointer: /topic_list/topics
+  - name: topic
+    desc: Read one topic with its first posts
+    method: GET
+    path: /t/{id}.json
+    effect: read
+    evidence: "GET /t/{id}.json (getTopic), https://docs.discourse.org/openapi.json"
+    params:
+      id: {type: int}
+    response:
+      format: json
+      required_pointers: [/id, /title, /post_stream/posts]
+  - name: search
+    desc: Search posts, topics, users and categories (Discourse search syntax, e.g. "backup in:title after:2024-01-01")
+    method: GET
+    path: /search.json
+    effect: read
+    evidence: "GET /search.json (search), https://docs.discourse.org/openapi.json"
+    query:
+      q: {type: string, required: true}
+      page: {type: int, default: 1}
+    response:
+      format: json
+      required_pointers: [/grouped_search_result]
+  - name: latest-posts
+    desc: List the latest posts across all topics
+    method: GET
+    path: /posts.json
+    effect: read
+    evidence: "GET /posts.json (listPosts), https://docs.discourse.org/openapi.json"
+    model: post
+    response:
+      format: json
+      extract_pointer: /latest_posts
+  - name: post
+    desc: Read one post by id
+    method: GET
+    path: /posts/{id}.json
+    effect: read
+    evidence: "GET /posts/{id}.json (getPost), https://docs.discourse.org/openapi.json"
+    params:
+      id: {type: int}
+    model: post
+    response:
+      format: json
+      required_pointers: [/id, /cooked]
+  - name: tags
+    desc: List the tags
+    method: GET
+    path: /tags.json
+    effect: read
+    evidence: "GET /tags.json (listTags), https://docs.discourse.org/openapi.json"
+    model: tag
+    response:
+      format: json
+      extract_pointer: /tags
+  - name: user
+    desc: Show a user's public profile by username
+    method: GET
+    path: /u/{username}.json
+    effect: read
+    evidence: "GET /u/{username}.json (getUser), https://docs.discourse.org/openapi.json"
+    params:
+      username: {type: string}
+    model: user
+    response:
+      format: json
+      extract_pointer: /user
+      required_pointers: [/id, /username]

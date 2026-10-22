@@ -15,7 +15,7 @@ pub use har::{from_har, redacted_recording};
 pub use openapi::{from_openapi, is_openapi};
 pub use page::{DESCRIPTION_PATH, Description, Page, from_pages, from_pages_and_description};
 
-use itda_types::error::AppResult;
+use itda_types::error::{AppResult, usage};
 
 use serde_norway::{Mapping, Value as Yaml};
 
@@ -152,7 +152,9 @@ impl Parts {
         finish(self, "")
     }
 
-    fn key(entry: &Mapping) -> (String, String) {
+    /// What makes two drafted calls the same call: the method and the path,
+    /// under the operation's own base address when it has one.
+    fn key(entry: &Mapping) -> (String, String, String) {
         let field = |name: &str| {
             entry
                 .get(name)
@@ -160,7 +162,7 @@ impl Parts {
                 .unwrap_or_default()
                 .to_owned()
         };
-        (field("method"), field("path"))
+        (field("method"), field("base_url"), field("path"))
     }
 
     /// Add what another source found about the same site: operations the
@@ -286,6 +288,130 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
         .unwrap_or_default();
     parts.source = format!("{source} from a recording of {host}");
     Ok(parts.finish())
+}
+
+/// A ready-made definition for software a site runs (`sites/software/
+/// <name>.yaml`), filled in for one site.
+#[derive(Clone, Debug)]
+pub struct Fill<'a> {
+    /// The template's text.
+    pub template: &'a str,
+    /// The software's name as people say it (`GitLab`), for the header.
+    pub software: &'a str,
+    /// The site's API base, in place of the template's placeholder: the
+    /// instance's origin plus its context path and the API's own path.
+    pub base_url: &'a str,
+}
+
+/// A template, filled in for one site, with what its pages show merged in:
+/// the template's site name, auth, models and operations come first; the
+/// pages add the reads and changes the template does not have (the same
+/// method and path under the same base is drafted once), under their own
+/// base address when it differs from the API's. The site is named by
+/// `options.name`, else after the host. `pages` may be empty.
+pub fn from_template(
+    fill: &Fill<'_>,
+    pages: &[Page],
+    description: Option<&Description>,
+    options: &Options,
+) -> AppResult<Draft> {
+    let doc: Mapping = serde_norway::from_str(fill.template).map_err(|error| {
+        usage(
+            format!("The {} template does not parse: {error}", fill.software),
+            "Report this with `itda feedback`.",
+        )
+    })?;
+    let site_block = doc.get("site").and_then(Yaml::as_mapping);
+    let field = |name: &str| {
+        site_block
+            .and_then(|site| site.get(name))
+            .and_then(Yaml::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let template_name = field("name");
+    let base = url::Url::parse(fill.base_url.trim_end_matches('/')).map_err(|_| {
+        usage(
+            format!("{} is not a URL", fill.base_url),
+            "Pass an address like https://example.com/api.",
+        )
+    })?;
+    let base_url = base.as_str().trim_end_matches('/').to_owned();
+    let site = options
+        .name
+        .as_deref()
+        .map(slug)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| har::site_name(base.host_str().unwrap_or_default()));
+    let auth: Vec<Yaml> = doc
+        .get("auth")
+        .and_then(Yaml::as_sequence)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mut entry| {
+            // `store:<template>/<key>` names the site the secret belongs to.
+            if let Yaml::Mapping(map) = &mut entry
+                && let Some(Yaml::String(from)) = map.get_mut("value_from")
+                && let Some(rest) = from.strip_prefix(&format!("store:{template_name}/"))
+            {
+                *from = format!("store:{site}/{rest}");
+            }
+            entry
+        })
+        .collect();
+    let operations: Vec<Mapping> = doc
+        .get("operations")
+        .and_then(Yaml::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(|op| op.as_mapping().cloned())
+        .collect();
+    let models = doc
+        .get("models")
+        .and_then(Yaml::as_mapping)
+        .cloned()
+        .unwrap_or_default();
+    let host = base.host_str().unwrap_or_default().to_owned();
+    let mut parts = Parts {
+        site: site.clone(),
+        title: field("title"),
+        base_url,
+        auth,
+        operations,
+        models,
+        notes: Vec::new(),
+        source: format!(
+            "`itda setup` from the {} template for {host}",
+            fill.software
+        ),
+    };
+    let mut described = None;
+    if !pages.is_empty() {
+        let page_options = Options {
+            name: Some(site),
+            base_url: None,
+            include: options.include.clone(),
+            lang: options.lang.clone(),
+            schemas: options.schemas.clone(),
+        };
+        let (mut found, from_description) =
+            page::page_parts_with_description(pages, description, &page_options)?;
+        described = from_description;
+        if found.base_url != parts.base_url {
+            for op in &mut found.operations {
+                op.insert("base_url".into(), found.base_url.clone().into());
+            }
+        }
+        parts.merge(found);
+        parts.source = format!(
+            "`itda setup` from the {} template and a page of {host}",
+            fill.software
+        );
+    }
+    let mut draft = parts.finish();
+    draft.described = described;
+    Ok(draft)
 }
 
 /// Writes the definition and checks it with the rules `itda` applies at

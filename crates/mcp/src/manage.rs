@@ -35,11 +35,12 @@ pub(crate) fn tools() -> Vec<Tool> {
     vec![
         Tool::new(
             "itda_setup",
-            "Set a website up for itda from the address of a page the user uses: looks at the page as itda, drafts actions in plain words, tries every read once, keeps the ones that work, and adds the site's actions to this server's tools. Sites that need a sign-in or are drawn by scripts cannot be set up here; the result says what the user should run in a terminal instead.",
+            "Set a website up for itda from the address of a page the user uses: looks at the page as itda, drafts actions in plain words, tries every read once, keeps the ones that work, and adds the site's actions to this server's tools. A site that runs software itda knows (GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea or Forgejo) gets that software's API from a ready-made template; the result names it under template. Sites that need a sign-in or are drawn by scripts cannot be set up here; the result says what the user should run in a terminal instead.",
             schema(json!({"type": "object", "properties": {
                 "url": {"type": "string", "description": "The address of a page on the site."},
                 "name": {"type": "string", "description": "Site id to save under; taken from the host name when left out."},
-                "replace": {"type": "boolean", "description": "Replace a site already set up under that name. Off unless the user asked for it."}
+                "replace": {"type": "boolean", "description": "Replace a site already set up under that name. Off unless the user asked for it."},
+                "template": {"type": "string", "description": "Force a software template (gitlab, jira, confluence, redmine, discourse, mediawiki, wordpress, gitea) whatever the page says, or \"none\" to read the page like any other. Left out, the software is recognised from the page."}
             }, "required": ["url"], "additionalProperties": false})),
         )
         .with_annotations(ToolAnnotations::new().read_only(false).open_world(true)),
@@ -154,8 +155,24 @@ impl Server {
             url: url.to_owned(),
             name: text(arguments, "name").map(str::to_owned),
             record: false,
+            template: match text(arguments, "template") {
+                Some("none") => itda_setup::Template::Off,
+                Some(name) => itda_setup::Template::Named(name.to_owned()),
+                None => itda_setup::Template::Auto,
+            },
         };
         let finished = itda_setup::run(ctx, request, &mut fixed, &mut |progress| match progress {
+            itda_setup::Progress::Recognised(found) => notes.push(if found.confirmed {
+                format!(
+                    "This looks like {}. Using its API at {}.",
+                    found.title, found.base
+                )
+            } else {
+                format!(
+                    "Using the {} template at {} as asked; its API did not answer there yet.",
+                    found.title, found.base
+                )
+            }),
             itda_setup::Progress::SchemaAsked { url } => {
                 notes.push(format!("Asked the GraphQL API at {url} what it offers."));
             }
@@ -220,6 +237,13 @@ impl Server {
             "status": "ok",
             "site": spec.site.name,
             "title": spec.site.title,
+            "template": done.recognised.as_ref().map(|found| json!({
+                "software": found.software,
+                "title": found.title,
+                "base_url": found.base,
+                "version": found.version,
+                "confirmed": found.confirmed,
+            })),
             "actions": actions(&spec),
             "removed": removed,
             "notes": notes,
