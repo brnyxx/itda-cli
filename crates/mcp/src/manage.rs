@@ -125,11 +125,16 @@ impl Server {
         caller: Option<&Caller<'_>>,
     ) -> Option<CallToolResult> {
         let ctx = self.setup.as_ref()?;
+        if let Some(only) = self.site()
+            && let Some(error) = outside(name, only, arguments)
+        {
+            return Some(failure(&error));
+        }
         Some(match name {
             "itda_setup" => self.setup_site(ctx, arguments, caller).await,
             "itda_login" => login(ctx, arguments, caller).await,
-            "itda_check" => check_sites(ctx, arguments).await,
-            "itda_sites" => list_sites(ctx),
+            "itda_check" => check_sites(ctx, self.site(), arguments).await,
+            "itda_sites" => list_sites(ctx, self.site()),
             "itda_manage" => self.manage_action(ctx, arguments, caller).await,
             _ => return None,
         })
@@ -313,6 +318,9 @@ impl Server {
                 if let Err(error) = itda_setup::refresh::apply(&ctx.home, &plan) {
                     return failure(&error);
                 }
+                if let Err(error) = ctx.approvals.invalidate(Some(site), None).await {
+                    return failure(&error);
+                }
                 if let Err(error) = self.reload(ctx) {
                     return failure(&error);
                 }
@@ -359,6 +367,9 @@ impl Server {
                     }
                 }
                 if let Err(error) = sites::remove(&ctx.home, site) {
+                    return failure(&error);
+                }
+                if let Err(error) = ctx.approvals.invalidate(Some(site), None).await {
                     return failure(&error);
                 }
                 if let Err(error) = self.reload(ctx) {
@@ -427,8 +438,28 @@ impl Server {
                     .filter(|r| site.is_none_or(|site| r.site == site))
                     .collect();
                 let recent = &own[own.len().saturating_sub(last)..];
+                let unfinished = match ctx.audit.unfinished_changes() {
+                    Ok(unfinished) => unfinished,
+                    Err(error) => return failure(&error),
+                };
+                let unfinished: Vec<Value> = unfinished
+                    .iter()
+                    .filter(|r| site.is_none_or(|site| r.site == site))
+                    .map(|r| {
+                        json!({
+                            "seq": r.seq,
+                            "at": r.at,
+                            "site": r.site,
+                            "action": r.action,
+                            "approval": r.approval,
+                            "outcome": "unknown: the process stopped after the change was sent; check the site",
+                        })
+                    })
+                    .collect();
                 match serde_json::to_value(recent) {
-                    Ok(records) => structured(json!({"status": "ok", "records": records})),
+                    Ok(records) => structured(
+                        json!({"status": "ok", "records": records, "unknown_outcome": unfinished}),
+                    ),
                     Err(_) => failure(&AppError::api("internal", 500)),
                 }
             }
@@ -443,6 +474,7 @@ impl Server {
     pub(crate) fn reload(&self, ctx: &Context) -> itda_types::error::AppResult<()> {
         let specs: Vec<Spec> = sites::list(&ctx.home)
             .into_iter()
+            .filter(|site| self.site().is_none_or(|only| only == site.name))
             .filter_map(|site| site.spec.ok())
             .collect();
         let catalog = Arc::new(crate::Catalog::new(specs));
@@ -472,7 +504,7 @@ async fn login(
         return failure(&error);
     }
     let message = format!(
-        "Open your browser to sign in to {site}? itda keeps the session cookies for {site} in the system keyring as account '{account}'. Agents only see the account id."
+        "Open your browser to sign in to {site}? itda keeps the session cookies for {site} as account '{account}', sealed under its data directory with a key from the system keyring. Agents only see the account id."
     );
     match confirmed(caller, message, "Open the browser").await {
         Confirmed::No => return failure(&declined("login", site)),
@@ -500,14 +532,39 @@ async fn login(
             "site": site,
             "account": account,
             "cookies": count,
-            "note": "The session is in the system keyring. Agents only see the account id.",
+            "note": "The session is sealed under the data directory with a key from the system keyring. Agents only see the account id.",
         })),
         Err(error) => failure(&error),
     }
 }
 
-async fn check_sites(ctx: &Context, arguments: &Map<String, Value>) -> CallToolResult {
-    let specs = match text(arguments, "site") {
+/// What a server pinned to one site refuses: setting other sites up, and
+/// naming another site anywhere.
+fn outside(tool: &str, only: &str, arguments: &Map<String, Value>) -> Option<AppError> {
+    let named = text(arguments, "site");
+    let other = named.is_some_and(|site| site != only);
+    if tool == "itda_setup" || (tool == "itda_manage" && other) || (tool != "itda_manage" && other)
+    {
+        let what = match tool {
+            "itda_setup" => "sets other sites up".to_owned(),
+            _ => format!("reaches {}", named.unwrap_or_default()),
+        };
+        return Some(usage(
+            format!("This server serves only {only} and never {what}"),
+            format!(
+                "Use the tools for {only}, or ask the user to run itda in a terminal for other sites."
+            ),
+        ));
+    }
+    None
+}
+
+async fn check_sites(
+    ctx: &Context,
+    only: Option<&str>,
+    arguments: &Map<String, Value>,
+) -> CallToolResult {
+    let specs = match text(arguments, "site").or(only) {
         Some(site) => match sites::load(&ctx.home, site) {
             Ok(spec) => vec![spec],
             Err(error) => return failure(&error),
@@ -532,9 +589,10 @@ async fn check_sites(ctx: &Context, arguments: &Map<String, Value>) -> CallToolR
     }))
 }
 
-fn list_sites(ctx: &Context) -> CallToolResult {
+fn list_sites(ctx: &Context, only: Option<&str>) -> CallToolResult {
     let list: Vec<Value> = sites::list(&ctx.home)
         .into_iter()
+        .filter(|site| only.is_none_or(|only| only == site.name))
         .map(|site| {
             let last = check::last(&ctx.home, &site.name)
                 .map(|last| json!({"at": last.at, "verdict": last.verdict, "hint": last.hint}));

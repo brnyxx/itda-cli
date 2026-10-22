@@ -59,6 +59,8 @@ pub async fn run(home: &Path, site: &str, yes: bool) -> AppResult<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     refresh::apply(home, &plan)?;
+    // What the user may have reviewed is no longer what would be sent.
+    ctx.approvals.invalidate(Some(site), None).await?;
     eprintln!("{}", tf("refresh_written", &[("site", site)]));
     let outcomes = check::run(&ctx.runtime, std::slice::from_ref(&plan.spec), None).await;
     let verdicts = check::verdicts(&outcomes);

@@ -89,9 +89,7 @@ impl Approvals {
             account_id: request.account_id.clone(),
             account_label,
             inputs,
-            expires_at: chrono::DateTime::from_timestamp_millis(expires_ms)
-                .expect("current timestamp")
-                .to_rfc3339(),
+            expires_at: rfc3339(expires_ms),
             status: "pending".into(),
             request: Some(request.clone()),
         };
@@ -124,6 +122,8 @@ impl Approvals {
             })
             .await
     }
+    /// A pending or granted approval, for the person to look at. Anything
+    /// used up, rejected or expired is `approval_expired`.
     pub async fn review(&self, id: &str) -> AppResult<Approval> {
         let id = id.to_owned();
         let row: Option<(String, String, String, i64)> = self
@@ -140,29 +140,83 @@ impl Approvals {
             .await?;
         let (review, request, state, expires) =
             row.ok_or_else(|| AppError::api("not_found", 404))?;
-        if state != "pending" || expires <= util::unix_ms() {
+        if !matches!(state.as_str(), "pending" | "approved") || expires <= util::unix_ms() {
             return Err(AppError::api("approval_expired", 409));
         }
         let mut review: Approval = serde_json::from_str(&review)?;
+        review.status = state;
         review.request = Some(serde_json::from_str(&request)?);
         Ok(review)
     }
     /// Use an approval the user granted with [`Approvals::claim`]. The request
     /// must match the approved one exactly, it works once, and it is used up
     /// before any network request, so a failed change cannot be replayed.
+    ///
+    /// While the user has not answered, the call fails with
+    /// `approval_pending` and the approval stays as it is. A call with other
+    /// inputs than the ones the user saw withdraws the approval: it is
+    /// rejected and `approval_expired` says why.
     pub async fn consume(&self, id: &str, request: &ExecutionRequest) -> AppResult<()> {
         let (id, digest) = (id.to_owned(), request.digest()?);
-        self.changed_once(move |conn| {
-            Ok(conn.execute("UPDATE approvals SET state='consumed' WHERE id=?1 AND digest=?2 AND state='approved' AND expires_ms>?3", params![id, digest, util::unix_ms()])?)
-        })
-        .await
+        self.store
+            .call(move |conn| {
+                let now = util::unix_ms();
+                let row: Option<(String, String, i64)> = conn
+                    .query_row(
+                        "SELECT state, digest, expires_ms FROM approvals WHERE id=?1",
+                        [&id],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                    )
+                    .optional()?;
+                let Some((state, approved_digest, expires_ms)) = row else {
+                    return Err(AppError::api("approval_expired", 409));
+                };
+                if expires_ms <= now {
+                    return Err(AppError::api("approval_expired", 409));
+                }
+                if state == "pending" {
+                    let mut error = AppError::api("approval_pending", 409)
+                        .with("approval", id.clone())
+                        .with("expires_at", rfc3339(expires_ms))
+                        .with("command", format!("itda approve {id}"));
+                    error.msg = format!("the user has not answered approval {id} yet");
+                    return Err(error);
+                }
+                if state != "approved" {
+                    return Err(AppError::api("approval_expired", 409));
+                }
+                if approved_digest != digest {
+                    conn.execute(
+                        "UPDATE approvals SET state='rejected' WHERE id=?1",
+                        [&id],
+                    )?;
+                    let mut error = AppError::api("approval_expired", 409)
+                        .with("approval", id.clone())
+                        .with("reason", "inputs_changed");
+                    error.msg = format!(
+                        "the inputs differ from the ones the user approved; approval {id} was withdrawn"
+                    );
+                    return Err(error);
+                }
+                let changed = conn.execute(
+                    "UPDATE approvals SET state='consumed' WHERE id=?1 AND digest=?2 AND state='approved' AND expires_ms>?3",
+                    params![id, digest, now],
+                )?;
+                if changed != 1 {
+                    return Err(AppError::api("approval_expired", 409));
+                }
+                Ok(())
+            })
+            .await
     }
+    /// Refuse an approval the user has not answered, or withdraw one they
+    /// granted and have not used.
     pub async fn reject(&self, id: &str) -> AppResult<()> {
         let id = id.to_owned();
         self.store
             .call(move |conn| {
                 conn.execute(
-                    "UPDATE approvals SET state='rejected' WHERE id=?1 AND state='pending'",
+                    "UPDATE approvals SET state='rejected' WHERE id=?1 AND state IN ('pending','approved')",
                     [id],
                 )?;
                 Ok(())
@@ -179,11 +233,17 @@ impl Approvals {
         })
         .await
     }
+    /// Withdraw every pending or granted approval for a site, or for one
+    /// account on it: the definition or the credential the user reviewed is
+    /// no longer the one that would be used. With neither, nothing changes.
     pub async fn invalidate(&self, site: Option<&str>, account: Option<&str>) -> AppResult<()> {
+        if site.is_none() && account.is_none() {
+            return Ok(());
+        }
         let (site, account) = (site.map(str::to_owned), account.map(str::to_owned));
         self.store
             .call(move |conn| {
-                conn.execute("UPDATE approvals SET state='rejected' WHERE state IN ('pending','approved') AND ((?1 IS NOT NULL AND json_extract(request,'$.site_id')=?1) OR (?2 IS NOT NULL AND json_extract(request,'$.account_id')=?2))", params![site, account])?;
+                conn.execute("UPDATE approvals SET state='rejected' WHERE state IN ('pending','approved') AND (?1 IS NULL OR json_extract(request,'$.site_id')=?1) AND (?2 IS NULL OR json_extract(request,'$.account_id')=?2)", params![site, account])?;
                 Ok(())
             })
             .await
@@ -199,4 +259,10 @@ impl Approvals {
         }
         Ok(())
     }
+}
+
+fn rfc3339(unix_ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(unix_ms)
+        .map(|at| at.to_rfc3339())
+        .unwrap_or_default()
 }

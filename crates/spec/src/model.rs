@@ -83,13 +83,13 @@ pub fn duration(text: &str) -> Option<std::time::Duration> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthStrategy {
     pub name: String,
-    pub kind: String, // none | header | browser | derived
+    pub kind: String, // none | header | browser
     #[serde(default)]
     pub header: String,
     #[serde(default)]
     pub prefix: String,
     #[serde(default, rename = "value_from")]
-    pub value_from: String, // store:<site>/<key> | cookie:<name> | storage:<key>[#<pointer>]
+    pub value_from: String, // store:<site>/<key> | cookie:<name>
     /// Exact credential destination; legacy definitions use the site's base origin.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub origin: String,
@@ -395,10 +395,11 @@ impl Spec {
             .find(|o| o.name == name)
             .ok_or_else(|| {
                 let names: Vec<&str> = self.operations.iter().map(|o| o.name.as_str()).collect();
-                apperr::spec(
-                    format!("Unknown operation: {name}"),
-                    format!("Available: {}", names.join(", ")),
-                )
+                let remedy = match itda_types::util::nearest(name, names.iter().copied()) {
+                    Some(close) => format!("Did you mean {close}? Available: {}", names.join(", ")),
+                    None => format!("Available: {}", names.join(", ")),
+                };
+                apperr::spec(format!("Unknown operation: {name}"), remedy)
             })
     }
 }

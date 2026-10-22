@@ -1619,6 +1619,7 @@ dependencies = [
 name = "itda-vault"
 version = "0.4.0"
 dependencies = [
+ "aws-lc-rs",
  "itda-store",
  "itda-types",
  "keyring",

@@ -132,5 +132,8 @@ pub async fn keep(
             Secret::new(session.cookies),
         )
         .await?;
+    // Approvals were bound to the credential the user saw; a new one needs
+    // a new look.
+    ctx.approvals.invalidate(Some(site), Some(account)).await?;
     crate::resume(ctx, site, Some(account)).await
 }

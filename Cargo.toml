@@ -25,6 +25,7 @@ itda-mcp = { path = "crates/mcp" }
 itda-prep = { path = "crates/prep" }
 itda-setup = { path = "crates/setup" }
 
+aws-lc-rs = { version = "1.18.2", default-features = false, features = ["aws-lc-sys"] }
 axum = "0.8.9"
 clap = { version = "4.6.7", features = ["derive"] }
 chrono = { version = "0.4.45", features = ["serde"] }

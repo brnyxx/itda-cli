@@ -37,6 +37,20 @@ pub const MAX_INTERVAL: Duration = Duration::from_secs(30);
 /// A cooldown this long or shorter is waited out; a longer one fails at once.
 pub const SHORT_COOLDOWN: Duration = Duration::from_secs(10);
 
+/// Mark an error raised before any request left this machine, so a change
+/// that fails this way is reported as not sent rather than as an unknown
+/// outcome. See [`sent`].
+pub fn not_sent(error: AppError) -> AppError {
+    error.with("sent", false)
+}
+
+/// Whether the request this error ended may have reached the site. Errors
+/// from waiting for a turn, resolving the name or connecting say `false`;
+/// every other error leaves it open.
+pub fn sent(error: &AppError) -> bool {
+    error.extra.get("sent").and_then(serde_json::Value::as_bool) != Some(false)
+}
+
 static SCHEMA: Migration = Migration {
     component: "gate",
     steps: &["CREATE TABLE request_gate(scope TEXT PRIMARY KEY, lease TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0, cooldown INTEGER NOT NULL DEFAULT 0, paused TEXT NOT NULL DEFAULT '');
@@ -150,7 +164,7 @@ impl Gate {
         let deadline = Duration::from_secs(45);
         let slot = tokio::time::timeout(deadline, self.slot(scope).lock_owned())
             .await
-            .map_err(|_| AppError::api("timeout", 408))?;
+            .map_err(|_| not_sent(AppError::api("timeout", 408)))?;
         let interval_ms = interval
             .map(|wanted| wanted.min(MAX_INTERVAL).as_millis() as i64)
             .unwrap_or(0)
@@ -175,7 +189,7 @@ impl Gate {
                 });
             }
             if self.now() - start > deadline.as_millis() as i64 {
-                return Err(AppError::api("timeout", 408));
+                return Err(not_sent(AppError::api("timeout", 408)));
             }
             tokio::time::sleep(Duration::from_millis(wait.min(500) as u64)).await;
         }

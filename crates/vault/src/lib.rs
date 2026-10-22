@@ -1,12 +1,15 @@
 //! Website accounts and their secrets.
 //!
 //! Account metadata (site, account id, label) lives in the local store; secret
-//! values live in a [`SecretStore`], the OS keyring by default. Agents only
-//! ever see account ids. The store also records which secret names each
+//! values live in a [`SecretStore`], the OS keyring by default, with long ones
+//! such as browser sessions sealed into a file by a key from the keyring
+//! ([`SealedStore`]). Agents only ever see account ids. The store also records which secret names each
 //! account has, so removing an account removes its secrets without listing
 //! the keyring.
+mod sealed;
 mod secret;
 
+pub use sealed::{SEAL_OVER, SEALED_FILE, SealedStore};
 pub use secret::{EnvStore, KeyringStore, MemoryStore, Secret, SecretKey, SecretStore};
 
 use itda_store::{Migration, Store};

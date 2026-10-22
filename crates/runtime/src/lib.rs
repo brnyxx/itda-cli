@@ -25,11 +25,13 @@ mod pagination;
 mod preflight;
 use itda_net::{Network, Request};
 use itda_policy::{
-    Approvals, Cursors, Effect, ExecutionRequest, ReviewInput, operation_effect, validate_spec,
+    Approvals, Cursors, Effect, ExecutionRequest, ReviewInput, operation_effect, overrides_method,
+    safe_read_url, validate_spec,
 };
 use itda_spec::{Operation, Spec, interpolate_template_str};
 use itda_types::{
     error::{AppError, AppResult, usage},
+    json::resolve_pointer,
     url::{same_site_origin, validate_url},
     util,
 };
@@ -306,9 +308,9 @@ impl Runtime {
                         .request_approval(
                             execution,
                             title(&spec.site.title, &spec.site.name),
-                            title(&op.desc, &op.name),
+                            op.name.clone(),
                             request.account_id.clone(),
-                            review_inputs(&request.method, &url, &call.args),
+                            review_inputs(op, &request.method, &url, &call.args),
                         )
                         .await?;
                     let mut error = AppError::api("approval_required", 409)
@@ -369,13 +371,59 @@ impl Runtime {
                     }),
             );
             exposed.extend(found.into_values().filter(|value| value.len() >= 8));
+            // The request is classified again from what will actually be
+            // sent: a value a step found must not turn a read into a change.
+            if approvals.is_none() {
+                let final_url = validate_url(&request.url)?;
+                let mut effective = args.clone();
+                for (name, param) in op
+                    .params
+                    .iter()
+                    .chain(op.query.iter())
+                    .chain(op.body.iter().flat_map(|body| body.inputs()))
+                    .filter(|(_, param)| param.from_step())
+                {
+                    if let Some(template) = param.default.as_ref().and_then(Value::as_str) {
+                        effective.insert(
+                            name.clone(),
+                            interpolate_template_str(template, &BTreeMap::new(), &args),
+                        );
+                    }
+                }
+                if operation_effect(op, &effective) != Effect::Read || !safe_read_url(&final_url) {
+                    let mut error = AppError::api("effect_changed", 409);
+                    error.msg = format!(
+                        "{}.{} is a read, but the request built after preflight would change the site",
+                        spec.site.name, op.name
+                    );
+                    return Err(error);
+                }
+            }
+        }
+        if let Some((name, _)) = request
+            .headers
+            .iter()
+            .find(|(name, _)| overrides_method(name))
+        {
+            return Err(usage(
+                format!(
+                    "{}.{} sets {name}, which overrides the method",
+                    spec.site.name, op.name
+                ),
+                "itda sends the method it reviewed; remove the header from the definition.",
+            ));
         }
 
         let read = approvals.is_none();
+        let graphql = op.graphql_query(&call.args);
         let response = match self.net.fetch(request).await {
             Ok(response) => response,
+            // A change that failed after it may have reached the site has an
+            // unknown outcome. One that never left (waiting for a turn, name
+            // lookup, connecting) was simply not sent and keeps its own code.
             Err(error)
                 if !read
+                    && itda_net::sent(&error)
                     && matches!(
                         error.public_code.as_str(),
                         "timeout" | "request_failed" | "too_large"
@@ -388,6 +436,21 @@ impl Runtime {
 
         if !response.successful() {
             return Err(refusal(&response, account.is_some()));
+        }
+        // A GraphQL answer can carry errors behind a 2xx. For a change that
+        // means the site may or may not have applied it; for a read it is
+        // the query that failed, not the site that changed.
+        if graphql && graphql_errors(&response) {
+            return Err(if read {
+                AppError::api("query_failed", 502).with("upstream_status", response.status)
+            } else {
+                let mut error = AppError::api("action_outcome_unknown", 502)
+                    .with("upstream_status", response.status);
+                error.msg =
+                    "the site answered the change with errors; it may or may not have applied it"
+                        .into();
+                error
+            });
         }
         if read && !op.matches_response(&response) {
             return Err(AppError::api("response_mismatch", 502));
@@ -528,17 +591,54 @@ fn title(preferred: &str, fallback: &str) -> String {
     .to_owned()
 }
 
-/// What the user reviews: the exact request line and every input.
-fn review_inputs(method: &str, url: &str, args: &BTreeMap<String, String>) -> Vec<ReviewInput> {
-    std::iter::once(ReviewInput {
+/// What the user reviews: what the action does in the definition's words,
+/// the exact request line and every input, long values cut with their length.
+fn review_inputs(
+    op: &Operation,
+    method: &str,
+    url: &str,
+    args: &BTreeMap<String, String>,
+) -> Vec<ReviewInput> {
+    let mut inputs = Vec::new();
+    if !op.desc.is_empty() {
+        inputs.push(ReviewInput {
+            label: "does".into(),
+            value: op.desc.clone(),
+        });
+    }
+    inputs.push(ReviewInput {
         label: "request".into(),
         value: format!("{method} {url}"),
-    })
-    .chain(args.iter().map(|(label, value)| ReviewInput {
+    });
+    inputs.extend(args.iter().map(|(label, value)| ReviewInput {
         label: label.clone(),
-        value: value.clone(),
-    }))
-    .collect()
+        value: shown(value),
+    }));
+    inputs
+}
+
+/// At most this many characters of one input value are shown in a review.
+const REVIEW_VALUE_LIMIT: usize = 500;
+
+/// A value as the review shows it: whole when short, else its start and
+/// how long it is.
+pub fn shown(value: &str) -> String {
+    if value.chars().count() <= REVIEW_VALUE_LIMIT {
+        return value.to_owned();
+    }
+    let start: String = value.chars().take(REVIEW_VALUE_LIMIT).collect();
+    format!("{start}... ({} characters in all)", value.chars().count())
+}
+
+/// Whether a JSON answer carries a non-empty top-level `errors` list, as
+/// GraphQL servers report failures.
+fn graphql_errors(response: &itda_net::Response) -> bool {
+    response
+        .json()
+        .as_ref()
+        .and_then(|json| resolve_pointer(json, "/errors"))
+        .and_then(Value::as_array)
+        .is_some_and(|errors| !errors.is_empty())
 }
 
 /// Every input must be declared and not filled by a preflight step or by the
@@ -563,20 +663,51 @@ fn check_inputs(op: &Operation, args: &BTreeMap<String, String>) -> AppResult<()
             })
             .is_some_and(|param| !param.from_step());
         if !declared {
-            return Err(usage(
-                format!("Unknown input: {name}"),
-                "Use only the inputs the action declares.",
-            ));
+            let declared: Vec<&str> = op
+                .params
+                .keys()
+                .chain(op.query.keys())
+                .chain(
+                    op.body
+                        .iter()
+                        .flat_map(|body| body.inputs().map(|(n, _)| n)),
+                )
+                .map(String::as_str)
+                .collect();
+            let remedy = match util::nearest(name, declared.iter().copied()) {
+                Some(close) => {
+                    format!("Did you mean {close}? Use only the inputs the action declares.")
+                }
+                None => "Use only the inputs the action declares.".into(),
+            };
+            return Err(usage(format!("Unknown input: {name}"), remedy));
         }
     }
     Ok(())
 }
 
 /// Why a response that was not a success failed. Blocks and expired sessions
-/// have already paused the scope in the network layer.
+/// have already paused the scope in the network layer. Every refusal carries
+/// `upstream_status`; a 403 that is not a sign-in problem is `api_denied`,
+/// with the site's own short reason when it gave one.
 pub fn refusal(response: &itda_net::Response, signed_in: bool) -> AppError {
-    match (response.defense.as_str(), response.status) {
-        ("none", 401 | 403) if signed_in => AppError::api("auth_required", 401),
+    let reason = provider_reason(response);
+    let error = match (response.defense.as_str(), response.status) {
+        ("none", 401) if signed_in => AppError::api("auth_required", 401),
+        ("none", 403) if signed_in && reason.as_deref().is_some_and(session_rejected) => {
+            AppError::api("auth_required", 401)
+        }
+        ("none", 403) => {
+            let mut error = AppError::api("api_denied", 403);
+            error.msg = match &reason {
+                Some(reason) => format!("the site refused this request ({reason})"),
+                None => "the site refused this request".into(),
+            };
+            if let Some(reason) = &reason {
+                error = error.with("provider_reason", reason.clone());
+            }
+            error
+        }
         ("none", 404) => AppError::api("not_found", 404),
         ("none", 429) | ("rate-limit", _) => {
             let mut error = AppError::api("site_rate_limited", 429);
@@ -589,7 +720,57 @@ pub fn refusal(response: &itda_net::Response, signed_in: bool) -> AppError {
         }
         ("none", _) => AppError::api("request_failed", 502),
         _ => AppError::api("blocked_by_site", 403),
-    }
+    };
+    error.with("upstream_status", response.status)
+}
+
+/// The reasons a site may give for a refusal that itda passes on. Anything
+/// else in the answer stays out of the error: a body can hold private data.
+const PROVIDER_REASONS: [&str; 12] = [
+    "access_denied",
+    "permission_denied",
+    "insufficient_scope",
+    "insufficient_permissions",
+    "service_disabled",
+    "forbidden",
+    "not_authorized",
+    "unauthenticated",
+    "invalid_token",
+    "token_expired",
+    "session_expired",
+    "login_required",
+];
+
+/// A 403 whose reason says the session itself was rejected is a sign-in
+/// problem, not a permission problem.
+fn session_rejected(reason: &str) -> bool {
+    matches!(
+        reason,
+        "unauthenticated"
+            | "invalid_token"
+            | "token_expired"
+            | "session_expired"
+            | "login_required"
+    )
+}
+
+/// The site's own reason for a refusal, when its JSON answer names one of
+/// [`PROVIDER_REASONS`] at a usual place. Free text is never taken.
+fn provider_reason(response: &itda_net::Response) -> Option<String> {
+    let json = response.json()?;
+    [
+        "/code",
+        "/error/code",
+        "/error/type",
+        "/error/status",
+        "/error",
+        "/reason",
+    ]
+    .iter()
+    .filter_map(|pointer| resolve_pointer(&json, pointer))
+    .filter_map(Value::as_str)
+    .map(|value| value.trim().to_ascii_lowercase().replace('-', "_"))
+    .find(|value| PROVIDER_REASONS.contains(&value.as_str()))
 }
 
 /// The data the response contract describes, projected through the action's

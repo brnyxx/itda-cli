@@ -77,6 +77,7 @@ pub async fn keep(
 ) -> AppResult<()> {
     ctx.vault.add_account(site, account, "").await?;
     ctx.vault.set_secret(site, account, name, secret).await?;
+    ctx.approvals.invalidate(Some(site), Some(account)).await?;
     crate::resume(ctx, site, Some(account)).await
 }
 
