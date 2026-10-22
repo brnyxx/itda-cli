@@ -13,6 +13,11 @@ loaders is [skills/itda/SKILL.md](skills/itda/SKILL.md).
   `<site>.<action>`, with a JSON Schema for its inputs. With more, three
   tools stay fixed: `itda_search` (find by keywords), `itda_describe` (one
   action's inputs and effect) and `itda_call` (run one).
+- Over MCP, `itda_sites` lists what is set up with the last check's verdict,
+  and five tools (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`,
+  `itda_manage`) do what the commands below do without a terminal. When a
+  site is set up or removed, the server sends `notifications/tools/list_changed`
+  and the next `tools/list` has the new tools.
 - Pick the action whose description matches what the user asked. Do not
   guess inputs the action does not declare; unknown inputs are refused.
 
@@ -60,28 +65,45 @@ Do not retry blindly and do not draft a new definition. Run
 itda check <site>
 ```
 
-It runs every read that needs no input, never sends a change, and ends each
-site with a verdict and what to do:
+or, over MCP, call `itda_check` with the site. It runs every read that needs
+no input, never sends a change, and ends each site with a verdict and what
+to do:
 
 | Verdict | Meaning | What to do |
 |---|---|---|
 | `ok` | every read still matches | retry the action; the failure was not the site |
-| `signed_out` | the account is no longer accepted | ask the user to run `itda login <site>` |
-| `site_changed` | a page or answer no longer matches its definition | ask the user to run `itda setup <url>` again |
-| `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site in a browser, then run `itda resume <site>` |
+| `signed_out` | the account is no longer accepted | ask the user to run `itda login <site>`, or call `itda_login` over MCP |
+| `site_changed` | a page or answer no longer matches its definition | ask the user to run `itda setup <url>` again, or call `itda_setup` with `replace` over MCP |
+| `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site in a browser, then run `itda resume <site>` (or confirm `itda_manage` `resume` over MCP) |
 | `unreachable` | the site did not answer | wait, then check again |
 
 `itda check --json` carries the verdict as `verdict` and per site under
-`sites`; the exit code follows the worst verdict.
+`sites`; the exit code follows the worst verdict. `itda_check` returns the
+same data.
 
 ## Set up a new site
 
-Run `itda setup <url>`, or tell the user to type `itda` and paste the
-address. itda looks at the page (or opens the user's browser and watches
-when the page needs a sign-in), names the actions in plain words, tries
-every read and asks the user before saving and before connecting an agent.
-Let the user answer those questions. Public APIs with a ready-made
+Over MCP, call `itda_setup` with the address of a page on the site. itda
+looks at the page as itself, names the actions in plain words, tries every
+read once, keeps the ones that work, and the site's actions appear as tools
+in the same conversation. A page that needs a sign-in or is drawn by
+scripts cannot be set up this way: the result says what the user should run
+in a terminal instead. If a read then says to sign in (`auth_required`),
+call `itda_login` with the site: the user signs in in their own browser and
+you only ever see the account id.
+
+In a terminal, run `itda setup <url>`, or tell the user to type `itda` and
+paste the address. itda looks at the page (or opens the user's browser and
+watches when the page needs a sign-in), names the actions in plain words,
+tries every read and asks the user before saving and before connecting an
+agent. Let the user answer those questions. Public APIs with a ready-made
 definition install with `itda add github` (also `npm`, `crates-io`, `pypi`).
+
+`itda_manage` covers the rest without a terminal: `remove` and `resume`
+ask the user to confirm in a form the client shows them (a client that
+cannot show forms gets the command for the user to run), `approvals` lists
+the changes waiting for the user, and `audit` shows the last entries of the
+audit log. None of them approves a change.
 
 ## Report a problem
 

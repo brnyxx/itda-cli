@@ -21,8 +21,9 @@ Each crate depends only on crates in a lower layer. Cargo rejects cycles;
 | 6 | `itda-browser` | Opens the user's own browser in a fresh profile: for sign-in, reading its cookies over DevTools; for `itda record`, watching the requests its pages make | browser |
 | 7 | `itda-runtime` | Runs an action end to end; approvals for changes; audit log | files |
 | 8 | `itda-prep` | Drafts definitions from OpenAPI documents, recordings and fetched pages; no I/O, the CLI fetches | none |
-| 9 | `itda-mcp` | MCP server over stdio | stdio |
-| 10 | `apps/cli` | The `itda` command; the only place that picks paths and settings | all |
+| 9 | `itda-setup` | The steps behind `itda setup`, `login` and `check`: probe, draft, try every read, keep what works; the installed sites; questions answered through a trait, progress through a callback, so the CLI and the MCP server share them | network, files, browser |
+| 10 | `itda-mcp` | MCP server over stdio; with a setup context, `itda_setup`, `itda_login`, `itda_check`, `itda_sites` and `itda_manage` | stdio |
+| 11 | `apps/cli` | The `itda` command; the only place that picks paths and settings | all |
 
 `itda-spec` never does I/O: response checks take a `ResponseLike` trait, so the
 format can be tested and reused without a network stack.

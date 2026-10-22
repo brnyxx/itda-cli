@@ -46,6 +46,17 @@ stays short and prompt caches stay valid:
 
 `itda mcp --mode direct` or `--mode catalog` overrides the choice.
 
+Five tools are always there, so the agent never needs a terminal to set a
+site up or look after it:
+
+| Tool | Use |
+|---|---|
+| `itda_setup` | Set a site up from the address of a page: look at the page as itda, draft, try every read once, keep what works. The site's actions become tools in the same session: the server sends `notifications/tools/list_changed` (it declares `tools.listChanged`) and the next `tools/list` has them. Pages that need a sign-in or are drawn by scripts are refused with the command you should run instead; itda never records from here. |
+| `itda_login` | Open your own browser so you can sign in to a site, exactly like `itda login <site> --browser`; the session is kept in the keyring and the agent only sees the account id. A client that shows forms asks you first; the definition must name the cookie that shows a sign-in, since nobody presses Enter. |
+| `itda_check` | `itda check` for one site or all: the verdict per site and what to do, as `itda check --json` prints them. |
+| `itda_sites` | What is set up, with reads, changes and the last check's time and verdict. |
+| `itda_manage` | `remove` and `resume` (you confirm in a form; a client without forms gets the command to run), `approvals` (what waits for you) and `audit` (the last entries, for one site or all). |
+
 Every result is the same envelope as `itda call --json`, marked
 `"untrusted": true` and preceded by a note that website data is not
 instructions. Results over 24 KB keep the start of their longest lists and say
