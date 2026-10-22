@@ -2,9 +2,11 @@
 
 Self-hosted software behind a sign-in, so itda's sign-in paths are tested
 against real software rather than fixtures: Gitea, Redmine, WordPress,
-MediaWiki and a small legacy intranet written for the lab. Every public-site
-number itda reports is measured; this is where the numbers for "the old
-intranet behind a login" come from.
+MediaWiki, a small legacy intranet written for the lab, and three uglier cases
+built the harder ways (a board inside an iframe, a table a script draws from an
+XHR, a session carried in the URL). Every public-site number itda reports is
+measured; this is where the numbers for "the old intranet behind a login" come
+from.
 
 Nothing here is published anywhere. Images are pinned by digest in
 `compose.yaml`, every port binds to 127.0.0.1, and the only account is
@@ -17,6 +19,9 @@ Nothing here is published anywhere. Images are pinned by digest in
 | WordPress | http://127.0.0.1:8083 | 6.8.3 (MariaDB 11.4.13) | lists private posts and publishes one through the REST API with the session and a `rest-nonce` |
 | MediaWiki | http://127.0.0.1:8084 | 1.43.11 | lists the pages of a private wiki and edits one through the API with a csrf token |
 | legacy intranet | http://127.0.0.1:8085 | `intranet/server.py` on Python 3.12 | a login form with a CSRF token, a session cookie, a notices table with paging, a search form, a post form that needs the token |
+| framed | http://127.0.0.1:8086 | `intranet/framed.py` on Python 3.12 | the notices table two iframes deep (`/` -> `/frame/board` -> `/frame/list`), each behind the same sign-in; a plain fetch of the home page sees only the shell |
+| scripted | http://127.0.0.1:8087 | `intranet/scripted.py` on Python 3.12 | an empty `/board` shell a script fills from `GET /api/notices` (JSON), public to read; a post needs the session and the `X-CSRF-Token` the shell carries in `<meta name="csrf-token">` |
+| urltoken | http://127.0.0.1:8088 | `intranet/urltoken.py` on Python 3.12 | no cookie at all: the sign-in redirects to `/notices?sid=<token>` and every link and form carries the `sid`; a request without a valid one goes to `/login` |
 
 ## Run it
 
@@ -74,6 +79,15 @@ second call with the same approval is refused, the read shows the change,
 `itda audit --verify` passes and names the approval and the change, `itda
 check` says `ok`.
 
+The three uglier cases have their own tests. `framed` and `scripted` run from
+the reviewed definition to an approved change the same way; `scripted` also has
+a test that drives the browser watch, which needs `ITDA_TEST_BROWSER` set to a
+Chrome or Chromium binary (it is skipped without one) and runs on Unix only.
+The two itda cannot do today, `framed` from the shell and `urltoken`, are
+written for the behaviour we want and marked `#[ignore = "needs
+feature/frames-and-url-tokens"]`; `cargo test ... -- --ignored` shows them
+failing with the exact reason in the comment above each.
+
 Sessions are sealed under each test's data directory (`vault.sealed`), with
 one master key per directory in the real system keyring, under `itda` /
 `itda/vault/master-key-<hash>`. Each test removes its key at the end with
@@ -98,6 +112,47 @@ behind, which Keychain Access shows under that name.
 - WordPress's REST API needs a nonce with the session, which `/wp-admin/admin-ajax.php?action=rest-nonce`
   hands out as text: a preflight step reads it with `css:body`. The lab's
   WordPress has plain permalinks, so the API is at `/?rest_route=...`.
+
+## What itda does on each, measured
+
+Run on this machine against the lab above, with the itda binary built from this
+branch. These three are the uglier ones, alongside the five earlier services.
+
+- **framed (8086).** `itda setup http://127.0.0.1:8086/` drafts one read,
+  `home`, of the shell's `<h1>` ("사내 인트라넷") and nothing else: the notices
+  table two iframes down is never reached, so no read answers with records.
+  Pointed at the frame instead, `itda setup http://127.0.0.1:8086/frame/list
+  --user lab` sees the redirect to the sign-in, signs in through the form (2
+  cookies) and drafts the board the same way the intranet is drafted: a list of
+  ten records, a per-notice read, and a post with a `_csrf` preflight. The
+  reviewed `specs/framed.yaml` targets the frame: a read answers with the
+  notices (25 across three pages, ten per page), a post waits for an approval
+  and, once approved, lands once (a 303 to the new notice, reported as landed);
+  a second call with the same approval is refused, and `itda audit --verify` and
+  `itda check` pass. Following the iframe from the shell waits on
+  `feature/frames-and-url-tokens`.
+- **scripted (8087).** `itda setup http://127.0.0.1:8087/board --watch-only`
+  opens a browser, watches the page load (2 calls, 1 read drafted) and drafts
+  `list-notices` from the `GET /api/notices` the script makes by itself; the
+  read then answers with records. No post happens while itda only watches, so
+  the reviewed `specs/scripted.yaml` adds it by hand: `POST /api/notices` with
+  the session cookie and the `X-CSRF-Token` read from `<meta name="csrf-token">`
+  in a preflight step. With that, a post waits for an approval and lands once
+  (HTTP 201 with the created notice); `itda audit --verify` and `itda check`
+  pass. This case passes today, through the automatic browser watch.
+- **urltoken (8088).** `itda setup http://127.0.0.1:8088/notices --user lab`
+  sees the redirect to the sign-in and signs in through the form, but the site
+  answers the sign-in with a redirect to `/notices?sid=<token>` and sets no
+  cookie. itda keeps sessions in cookies, so it stops with `accepted the
+  sign-in but set no cookie` and writes no definition; the URL `sid` is dropped.
+  A reviewed definition cannot express it either: itda's `auth` kinds are
+  `none`, `header` and `browser` (a cookie), not a session carried in a query
+  parameter. This waits on `feature/frames-and-url-tokens`.
+
+The test suite below encodes these outcomes: the framed and scripted cases run
+to an approved change and the browser watch is checked, while the two the
+product cannot do today are written for the behaviour we want and marked
+`#[ignore = "needs feature/frames-and-url-tokens"]`.
 
 ## What it does not cover
 

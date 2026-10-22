@@ -59,6 +59,18 @@ change the definition format or the CLI.
   `ITDA_LAB=1`, `apps/cli/tests/lab.rs` walks each one from `itda setup
   --user` through `itda login`, a read, a change approved in a terminal and
   the audit log. CI never runs it.
+- `examples/lab`: three uglier intranets alongside the five, to measure what
+  itda does on pages built the harder ways (`intranet/framed.py`,
+  `scripted.py`, `urltoken.py`, standard library only). `framed` (8086) keeps
+  the notices table two iframes deep, so setup from the home page finds only
+  the shell; pointed at the frame it signs in and reads and writes the board,
+  and `specs/framed.yaml` runs to an approved change. `scripted` (8087) draws
+  the table from `GET /api/notices` in a script, so `itda setup --watch-only`
+  watches the browser load it and drafts the read, and `specs/scripted.yaml`
+  posts with the `X-CSRF-Token` from `<meta name="csrf-token">`. `urltoken`
+  (8088) carries its session in `?sid=` with no cookie, which setup cannot
+  keep today. `README.md` records the measured outcome per case; the two itda
+  cannot do yet are tests marked `#[ignore]` with the reason.
 
 - Sites that run known software are recognised. `itda setup` reads the
   page's HTML for GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
