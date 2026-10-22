@@ -282,6 +282,15 @@ change the definition format or the CLI.
 
 ### Fixed
 
+- Signing in from a shell whose frame redirects to a login. When a page is a
+  shell and its same-origin frame answers with a redirect to a sign-in page,
+  `itda setup` now treats it as if the top-level page had: with `--user` it
+  signs in through that form and reads the frame again with the session, then
+  drafts from it, instead of drafting only the shell's title. Following the
+  frame's redirect to read the login form is a read; nothing is posted without
+  the person's credentials and the usual consent. Without `--user`, setup names
+  the sign-in the frame leads to, and `itda draft page` notes that the frame
+  leads to a sign-in rather than only that it was not read.
 - Approving in the client works on MCP protocol 2026-07-28, which Claude
   Code 2.1.289 negotiates: that revision took server-to-client requests
   away, so the `elicitation/create` request itda sent was dropped unseen
