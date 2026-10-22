@@ -56,6 +56,10 @@ pub struct Request {
     pub record: bool,
     /// Whether to use a ready-made template for software the site runs.
     pub template: Template,
+    /// When the page shows itda nothing but a title and carries scripts that
+    /// could fetch something, open the browser on it and watch what it loads
+    /// by itself before asking anyone to record.
+    pub watch: bool,
 }
 
 /// Which ready-made template to use, when the site runs software itda
@@ -161,13 +165,71 @@ pub fn refusal(url: &str, response: &itda_net::Response) -> Option<Refused> {
 fn signin_redirect(url: &str, response: &itda_net::Response) -> Option<String> {
     let page = url::Url::parse(url).ok()?;
     let target = page.join(response.header("location")).ok()?;
-    let signin = target.path().split('/').any(|segment| {
+    signin_path(&target).then(|| page.path().to_owned())
+}
+
+/// Whether an address looks like a sign-in page: a path segment such as
+/// `login`, `signin` or `sso`.
+fn signin_path(url: &url::Url) -> bool {
+    url.path().split('/').any(|segment| {
         matches!(
             segment.to_ascii_lowercase().as_str(),
             "login" | "signin" | "sign-in" | "sign_in" | "sso" | "oauth" | "authenticate"
         )
+    })
+}
+
+/// The sign-in a watched page ran into, from its recording: the page's own
+/// request answered with a redirect to a sign-in page, or the last page the
+/// browser showed on the site being a sign-in page its scripts went to.
+/// `None` when the page stayed on itself.
+pub fn signin_in_recording(url: &str, har: &serde_json::Value) -> Option<Refused> {
+    let page = url::Url::parse(url).ok()?;
+    if signin_path(&page) {
+        return None;
+    }
+    let entries = har["log"]["entries"].as_array()?;
+    let redirected = entries.iter().any(|entry| {
+        let status = entry["response"]["status"].as_u64().unwrap_or(0);
+        let request = entry["request"]["url"].as_str().unwrap_or_default();
+        if !matches!(status, 301 | 302 | 303 | 307 | 308) || request != page.as_str() {
+            return false;
+        }
+        entry["response"]["headers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|h| {
+                h["name"]
+                    .as_str()
+                    .is_some_and(|n| n.eq_ignore_ascii_case("location"))
+            })
+            .filter_map(|h| page.join(h["value"].as_str()?).ok())
+            .any(|target| signin_path(&target))
     });
-    signin.then(|| page.path().to_owned())
+    // The last page the browser showed on the site, not any page it
+    // fetched: a public page may prefetch its own sign-in page.
+    let opened = entries
+        .iter()
+        .filter(|entry| {
+            entry["request"]["method"].as_str() == Some("GET")
+                && entry["response"]["status"]
+                    .as_u64()
+                    .is_some_and(|s| (200..300).contains(&s))
+                && entry["response"]["content"]["mimeType"]
+                    .as_str()
+                    .is_some_and(|m| m.contains("html"))
+        })
+        .filter_map(|entry| url::Url::parse(entry["request"]["url"].as_str()?).ok())
+        .rfind(|u| u.host_str() == page.host_str())
+        .is_some_and(|last| signin_path(&last));
+    (redirected || opened).then(|| Refused {
+        host: page.host_str().unwrap_or_default().to_owned(),
+        kind: Refusal::SignInRedirect {
+            path: page.path().to_owned(),
+        },
+        error: AppError::api("auth_required", 401),
+    })
 }
 
 /// What the page offers, counted. The caller puts it in words.
@@ -186,6 +248,19 @@ pub struct PageSummary {
     /// The page has a sign-in form as well: the site may need an account to
     /// be useful.
     pub sign_in_form: bool,
+}
+
+impl PageSummary {
+    /// Nothing but a title: no records, no embedded data, no form, no feed
+    /// and no API description. Such a page is worth watching in a browser
+    /// when its scripts could fetch something.
+    pub fn bare(&self) -> bool {
+        self.records.is_none_or(|n| n == 0)
+            && !self.embedded_data
+            && self.forms == 0
+            && !self.feed
+            && !self.description_link
+    }
 }
 
 /// The questions on the way, each answered by whoever runs the steps: a
@@ -226,6 +301,18 @@ pub enum Progress<'a> {
     Described(&'a Described),
     /// The page refused itda; what the gate saw.
     Refused(&'a Refused),
+    /// A browser window is opening on the page, to watch what it loads by
+    /// itself; it closes on its own.
+    Watching {
+        host: &'a str,
+    },
+    /// The window closed: how many calls the page made, and how many reads
+    /// beyond a title check the recording gave. Zero means the question
+    /// comes next.
+    Watched {
+        calls: usize,
+        reads: usize,
+    },
     /// The page is not enough; recording is the way.
     NeedsRecord(Fallback),
     Recording(record::Progress),
@@ -318,6 +405,9 @@ pub async fn run(
     let mut record = request.record;
     let mut draft = None;
     let mut recognised = None;
+    // The recording a watched load or the person left: its pages are the
+    // site's pages for a refresh.
+    let mut har = Vec::new();
     if !record {
         let probed = probe(ctx, url.as_str()).await?;
         // The software the site runs decides first, from the page's HTML,
@@ -355,31 +445,62 @@ pub async fn run(
                 if summary.sign_in_form && answers.record_anyway()? {
                     record = true;
                 } else {
-                    draft = Some(
-                        draft_page(ctx, &page, &mut options, recognised.as_ref(), report).await?,
-                    );
+                    if recognised.is_none()
+                        && request.watch
+                        && summary.bare()
+                        && evidence::fetches_by_itself(&page.html)
+                    {
+                        match watch_site(ctx, url.as_str(), &mut options, report).await? {
+                            Watched::Drafted { draft: d, har: h } => {
+                                draft = Some(d);
+                                har = h;
+                            }
+                            Watched::SignIn(refused) => report(Progress::Refused(&refused)),
+                            Watched::Nothing | Watched::NoBrowser => {}
+                        }
+                    }
+                    if draft.is_none() {
+                        draft = Some(
+                            draft_page(ctx, &page, &mut options, recognised.as_ref(), report)
+                                .await?,
+                        );
+                    }
                 }
             }
-            Err((why, refused)) => {
-                if let Some(refused) = &refused {
-                    report(Progress::Refused(refused));
-                }
-                // A page that is not enough on its own still gets the
-                // software's API when the software is known.
-                if let Some(found) = &recognised {
-                    draft = Some(itda_prep::from_template(&fill(found), &[], None, &options)?);
-                } else {
-                    report(Progress::NeedsRecord(why));
-                    if !answers.record(why)? {
-                        return Ok(Finished::Stopped(Stopped::NoRecord { why, refused }));
+            Err((mut why, mut refused)) => {
+                if recognised.is_none() && why == Fallback::Scripted && request.watch {
+                    match watch_site(ctx, url.as_str(), &mut options, report).await? {
+                        Watched::Drafted { draft: d, har: h } => {
+                            draft = Some(d);
+                            har = h;
+                        }
+                        Watched::SignIn(signin) => {
+                            why = Fallback::SignIn;
+                            refused = Some(signin);
+                        }
+                        Watched::Nothing | Watched::NoBrowser => {}
                     }
-                    record = true;
+                }
+                if draft.is_none() {
+                    if let Some(refused) = &refused {
+                        report(Progress::Refused(refused));
+                    }
+                    // A page that is not enough on its own still gets the
+                    // software's API when the software is known.
+                    if let Some(found) = &recognised {
+                        draft = Some(itda_prep::from_template(&fill(found), &[], None, &options)?);
+                    } else {
+                        report(Progress::NeedsRecord(why));
+                        if !answers.record(why)? {
+                            return Ok(Finished::Stopped(Stopped::NoRecord { why, refused }));
+                        }
+                        record = true;
+                    }
                 }
             }
         }
     }
     let mut recording = None;
-    let mut har = Vec::new();
     if record {
         let rec = record_site(url.as_str(), answers.recording_done(), report).await?;
         har = serde_json::to_vec(&rec.har)?;
@@ -395,7 +516,7 @@ pub async fn run(
     let spec = itda_spec::parse(draft.yaml.as_bytes())?;
     report(Progress::Drafted(&spec));
     // The recording stays in memory, so a refresh reads its pages again.
-    let pages = if record {
+    let pages = if !har.is_empty() {
         itda_prep::pages_in_recording(&har, &spec.site.base_url)
     } else {
         vec![request.url.clone()]
@@ -636,6 +757,83 @@ async fn introspect(
         report(Progress::SchemaAsked { url: &schema.url });
     }
     schemas
+}
+
+/// What watching a page load in the browser gave.
+enum Watched {
+    /// Reads drafted from the calls the page made by itself, with the
+    /// recording they came from.
+    Drafted { draft: Draft, har: Vec<u8> },
+    /// The page made no call worth a read; the question comes next.
+    Nothing,
+    /// The browser went to a sign-in page instead; nobody typed anything.
+    SignIn(Refused),
+    /// No browser on this computer; the step is skipped without a word.
+    NoBrowser,
+}
+
+/// Open the browser on the page, watch what it loads by itself and on one
+/// scroll, and draft from that as `itda draft har` would. The window is the
+/// same fresh profile recording uses; nothing in it is clicked or typed, and
+/// what it signed in with is never kept, since nobody signed in.
+async fn watch_site(
+    ctx: &Context,
+    url: &str,
+    options: &mut Options,
+    report: &mut (dyn FnMut(Progress<'_>) + Send),
+) -> AppResult<Watched> {
+    let Ok(browser) = itda_browser::find() else {
+        return Ok(Watched::NoBrowser);
+    };
+    let host = url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_default();
+    report(Progress::Watching { host: &host });
+    let page = url.to_owned();
+    let rec = tokio::task::spawn_blocking(move || record::watch(&browser, &page))
+        .await
+        .map_err(|_| AppError::api("internal", 500))??;
+    let calls = rec.har["log"]["entries"]
+        .as_array()
+        .map(Vec::len)
+        .unwrap_or(0);
+    if let Some(refused) = signin_in_recording(url, &rec.har) {
+        report(Progress::Watched { calls, reads: 0 });
+        return Ok(Watched::SignIn(refused));
+    }
+    let har = serde_json::to_vec(&rec.har)?;
+    let endpoints = itda_prep::graphql::endpoints_in_recording(&har);
+    options.schemas = introspect(ctx, &endpoints, report).await;
+    // The page's own address first, so what the page itself shows is never
+    // lost to a busier API elsewhere; then the way `itda draft har` picks.
+    let origin = url::Url::parse(url)
+        .map(|u| u.origin().ascii_serialization())
+        .ok();
+    let mut best: Option<Draft> = None;
+    for base in [origin, None] {
+        options.base_url = base;
+        let draft = match itda_prep::from_recording(&har, options, "`itda setup`") {
+            Ok(draft) => draft,
+            Err(error) if itda_prep::drafted_nothing(&error) => continue,
+            Err(error) => return Err(error),
+        };
+        if draft.reads > draft.thin_reads {
+            best = Some(draft);
+            break;
+        }
+    }
+    let Some(draft) = best else {
+        options.base_url = None;
+        options.schemas.clear();
+        report(Progress::Watched { calls, reads: 0 });
+        return Ok(Watched::Nothing);
+    };
+    report(Progress::Watched {
+        calls,
+        reads: draft.reads - draft.thin_reads,
+    });
+    Ok(Watched::Drafted { draft, har })
 }
 
 /// Record off the async runtime, passing what the recording says along as

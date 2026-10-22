@@ -130,9 +130,29 @@ pub fn t(key: &str) -> &'static str {
             "페이지를 읽지 못했고 --no-record 때문에 브라우저를 열 수 없습니다.",
         ),
         (
+            "watching",
+            "Opening your browser on {host} to watch what the page loads by itself. Nothing is clicked or typed; the window closes on its own.",
+            "{host} 페이지가 스스로 무엇을 불러오는지 보려고 브라우저를 엽니다. 아무것도 누르거나 입력하지 않으며, 창은 저절로 닫힙니다.",
+        ),
+        (
+            "watched",
+            "Watched the page load: {n} calls, {k} reads drafted.",
+            "페이지가 뜨는 동안 지켜봤습니다: 호출 {n}건, 읽기 {k}개 초안.",
+        ),
+        (
+            "watched_nothing",
+            "Watched the page load: {n} calls, nothing to draft.",
+            "페이지가 뜨는 동안 지켜봤습니다: 호출 {n}건, 초안으로 만들 것은 없음.",
+        ),
+        (
+            "watch_only_stop",
+            "Watching the page load was not enough ({why}), and --watch-only skips recording. Run again without it to record yourself using the site.",
+            "페이지가 뜨는 동안 지켜본 것으로는 부족했고({why}), --watch-only는 녹화를 건너뜁니다. 직접 쓰는 모습을 녹화하려면 이 옵션 없이 다시 실행하세요.",
+        ),
+        (
             "no_terminal",
-            "This needs a terminal to ask you questions; pass --no-record or --record, --client and --yes to run without one.",
-            "질문을 하려면 터미널이 필요합니다. 터미널 없이 돌리려면 --no-record 또는 --record, --client, --yes를 주세요.",
+            "This needs a terminal to ask you questions; pass --no-record, --watch-only or --record, with --client and --yes, to run without one.",
+            "질문을 하려면 터미널이 필요합니다. 터미널 없이 돌리려면 --no-record, --watch-only, --record 중 하나와 --client, --yes를 주세요.",
         ),
         ("step", "{n}/5", "{n}/5"),
         (

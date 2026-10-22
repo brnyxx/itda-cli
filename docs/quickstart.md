@@ -34,11 +34,16 @@ ok    local addresses  refused (ITDA_ALLOW_LOCAL=1 allows them)
 ## Set up a site you use
 
 Type `itda`, paste the address of a site you use, and press Enter. itda looks
-at the page (or opens your browser and watches when the page needs a sign-in),
-shows what agents will be able to do, tries every read, and connects the agent
-apps it finds on your computer after one more Enter. From then on, ask your
-agent for things on that site. `itda setup <address>` does the same from a
-script; `itda setup --help` lists the flags.
+at the page; when the page is drawn by scripts and shows itda only a title,
+it opens your browser on it for a few seconds, watches what the page loads by
+itself and drafts from those calls (nothing is clicked or typed, and the
+window closes on its own); when the page needs a sign-in, it asks to open your
+browser and watch while you use the site. It then shows what agents will be
+able to do, tries every read, and connects the agent apps it finds on your
+computer after one more Enter. From then on, ask your agent for things on
+that site. `itda setup <address>` does the same from a script (`--no-record`
+never opens the browser, `--watch-only` watches but never asks you to
+record); `itda setup --help` lists the flags.
 
 A site that runs software itda knows (GitLab, Jira, Confluence, Redmine,
 Discourse, MediaWiki, WordPress, Gitea or Forgejo) is recognised from its
@@ -54,7 +59,9 @@ Once itda is connected (`itda mcp install <client>`, or the question at the
 end of a setup), you can skip the terminal for the next sites. Tell your
 agent "use news.ycombinator.com": it calls `itda_setup` with the address,
 the site is looked at, drafted and tried the same way, and its actions show
-up as tools in the same conversation. When a read says to sign in, the agent
+up as tools in the same conversation. A page drawn by scripts opens briefly
+in a browser window on your screen so itda can watch what it loads; nothing
+in it is clicked or typed. When a read says to sign in, the agent
 calls `itda_login` and your own browser opens for you to sign in; the agent
 only ever sees the account id. `itda_check`, `itda_sites` and `itda_manage`
 cover checking, listing, removing and resuming sites and reading approvals

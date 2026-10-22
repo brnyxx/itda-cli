@@ -5,7 +5,16 @@ use itda_types::{
     url::validate_url,
 };
 use serde_json::Value;
-use std::{sync::mpsc, time::Duration};
+use std::{
+    sync::mpsc,
+    time::{Duration, Instant},
+};
+
+/// The network has to be quiet for this long before a watched load counts
+/// as finished...
+const QUIET: Duration = Duration::from_secs(2);
+/// ...and this is the longest one wait lasts, quiet or not.
+const WAIT_CAP: Duration = Duration::from_secs(10);
 
 /// What a recording session leaves behind: the HAR document and the cookies
 /// the browser held for the site when it closed.
@@ -65,4 +74,39 @@ pub fn browser(
     }
     report(Progress::Finished(count));
     Ok(Recording { har, cookies })
+}
+
+/// Open `browser` at `page`, watch what the page loads on its own, scroll
+/// once to the bottom, watch what that loads, and close the window: the
+/// calls a page drawn by scripts makes without anyone clicking. Each wait
+/// ends when the network has been quiet for two seconds, or after ten.
+/// Nothing is clicked or typed, and no cookie is read back. Blocks; run it
+/// off the async runtime. The recording may be empty.
+pub fn watch(browser: &std::path::Path, page: &str) -> AppResult<Recording> {
+    let page = validate_url(page)?;
+    let mut recorder = itda_browser::Recorder::open(browser, &page)?;
+    settle(&mut recorder)?;
+    if recorder.is_open() {
+        recorder.scroll_to_bottom()?;
+        settle(&mut recorder)?;
+    }
+    // Replies to the last body fetches may still be on the way.
+    recorder.poll(Duration::from_millis(750))?;
+    Ok(Recording {
+        har: recorder.finish(),
+        cookies: Vec::new(),
+    })
+}
+
+/// Handle what the browser sends until the network has been quiet for
+/// [`QUIET`], the window closed, or [`WAIT_CAP`] passed.
+fn settle(recorder: &mut itda_browser::Recorder) -> AppResult<()> {
+    let started = Instant::now();
+    while started.elapsed() < WAIT_CAP {
+        recorder.poll(Duration::from_millis(250))?;
+        if !recorder.is_open() || recorder.quiet_for().is_some_and(|quiet| quiet >= QUIET) {
+            break;
+        }
+    }
+    Ok(())
 }

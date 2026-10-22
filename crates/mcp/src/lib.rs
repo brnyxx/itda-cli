@@ -87,7 +87,8 @@ When the verdict is site_changed, call itda_manage with action refresh and the s
 it again from the same sources, the user confirms what changes in a form, and the site is \
 checked again (itda refresh <site> in a terminal). \
 If a site is not set up, call itda_setup with the address of a page on it: the site's actions \
-become tools in this session. If a read says to sign in, call itda_login with the site: the user \
+become tools in this session (a page drawn by scripts opens briefly in a browser window on the \
+user's screen; nothing in it is clicked or typed). If a read says to sign in, call itda_login with the site: the user \
 signs in in their own browser and you only ever see the account id. itda_sites lists what is set \
 up; itda_manage removes or resumes a site after the user confirms, and shows approvals and the \
 audit log. itda setup <url> and itda login <site> --browser do the same in a terminal; a problem \

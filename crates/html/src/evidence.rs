@@ -1798,6 +1798,41 @@ pub fn script_shell(html: &str) -> bool {
     text.len() < 400 && scripts >= 1
 }
 
+/// True when the page could fetch something by itself once a browser runs
+/// it: it loads a script file (a `script src`, or a module it preloads), or
+/// an inline script mentions `fetch`, `XMLHttpRequest`, `graphql`, `api` or
+/// imports a module. Embedded JSON does not count. A page without any of
+/// that has shown a plain fetch all it has.
+pub fn fetches_by_itself(html: &str) -> bool {
+    let document = Html::parse_document(html);
+    let preloads = Selector::parse("link[rel=modulepreload]")
+        .map(|s| document.select(&s).count())
+        .unwrap_or(0);
+    if preloads > 0 {
+        return true;
+    }
+    let Ok(selector) = Selector::parse("script") else {
+        return false;
+    };
+    document.select(&selector).any(|script| {
+        let kind = script
+            .value()
+            .attr("type")
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if kind.contains("json") || kind == "text/template" {
+            return false;
+        }
+        if script.value().attr("src").is_some() {
+            return true;
+        }
+        let text = script.text().collect::<String>().to_ascii_lowercase();
+        ["fetch", "xmlhttprequest", "graphql", "api", "import("]
+            .iter()
+            .any(|word| text.contains(word))
+    })
+}
+
 /// A header cell's text as a field name: `Posted on` becomes `posted-on`.
 fn field_name(text: &str) -> String {
     let mut out = String::new();
@@ -2050,5 +2085,33 @@ mod tests {
         assert!(found.inline_scripts[0].contains("appSubUrl"));
         assert!(found.body_has_class("mediawiki"));
         assert!(!found.body_has_class("skin"));
+    }
+
+    #[test]
+    fn a_page_fetches_by_itself_only_through_scripts() {
+        assert!(fetches_by_itself(
+            "<div id=root></div><script src=/app.js></script>"
+        ));
+        assert!(fetches_by_itself(
+            "<h1>Board</h1><script>fetch('/api/items').then(r => r.json())</script>"
+        ));
+        assert!(fetches_by_itself(
+            "<h1>Board</h1><script>var x = new XMLHttpRequest()</script>"
+        ));
+        assert!(!fetches_by_itself(
+            "<h1>Board</h1><p>Text only.</p><script type='application/ld+json'>{\"url\": \"https://a.example/api\"}</script>"
+        ));
+        assert!(fetches_by_itself(
+            "<div></div><script>import('/_app/start.js').then(k => k.init())</script>"
+        ));
+        assert!(fetches_by_itself(
+            "<link href='/_app/entry.js' rel='modulepreload'><div></div>"
+        ));
+        assert!(!fetches_by_itself(
+            "<h1>Board</h1><script>document.title = 'Board'</script>"
+        ));
+        assert!(!fetches_by_itself(
+            "<h1>Board</h1><p>Nothing runs here.</p>"
+        ));
     }
 }
