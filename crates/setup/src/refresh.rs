@@ -188,7 +188,7 @@ pub async fn plan(
     let Some(sources) = sources(&ctx.home, site) else {
         sites::load(&ctx.home, site)?;
         return Err(usage(
-            format!("No sources are known for '{site}'"),
+            format!("No known sources for '{site}'"),
             "It was installed by hand or by an older itda. Set it up again with `itda setup <url>`.",
         ));
     };
@@ -450,7 +450,7 @@ fn cannot_read(url: &str, why: crate::Fallback, refused: Option<crate::Refused>)
             error
         }
         crate::Fallback::Scripted => usage(
-            format!("{url} is drawn by scripts and shows little to a plain fetch"),
+            format!("Scripts draw {url}; a plain fetch shows little"),
             "Record yourself using the site with `itda record <url> --save <file> --install --force`.",
         ),
         crate::Fallback::Blocked => AppError::api("blocked_by_site", 403),
@@ -603,7 +603,7 @@ fn split(yaml: &str) -> AppResult<(String, Mapping)> {
     let (header, body): (Vec<&str>, Vec<&str>) = yaml.lines().partition(|l| l.starts_with('#'));
     let doc: Yaml = serde_norway::from_str(&body.join("\n")).map_err(|error| {
         itda_types::error::spec(
-            format!("The definition could not be read ({error})"),
+            format!("itda could not read the definition ({error})"),
             "Fix the YAML, or set the site up again.",
         )
     })?;

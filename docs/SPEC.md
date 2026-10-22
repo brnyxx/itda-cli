@@ -472,7 +472,7 @@ auth:
 ```console
 $ itda login intranet --user me
     Password for me on intranet (sent once to the site's own sign-in form, never saved):
-Signed in. The session for intranet/default (2 cookies) is sealed under the data directory with a key in the system keyring; agents only see the account id.
+Signed in. itda sealed the session for intranet/default (2 cookies) under the data directory with a key in the system keyring; agents only see the account id.
 ```
 
 itda reads the page at `path` as itself and selects the same-site `POST` form
@@ -537,7 +537,7 @@ Sign in once in your own browser:
 $ itda login intranet --browser
 Sign in to intranet in the browser window that just opened.
 itda continues when the JSESSIONID cookie appears, or press Enter once you are signed in.
-Saved the session for intranet/default (3 cookies); it is sealed under the data directory with a key in the system keyring. Agents only see the account id.
+Saved the session for intranet/default (3 cookies). It is sealed under the data directory with a key in the system keyring. Agents only see the account id.
 ```
 
 itda opens Chrome, Edge or Chromium (or `ITDA_BROWSER`) in a fresh, empty

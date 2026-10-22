@@ -40,13 +40,13 @@ pub(crate) fn tools() -> Vec<Tool> {
                 "url": {"type": "string", "description": "The address of a page on the site."},
                 "name": {"type": "string", "description": "Site id to save under; taken from the host name when left out."},
                 "replace": {"type": "boolean", "description": "Replace a site already set up under that name. Off unless the user asked for it."},
-                "template": {"type": "string", "description": "Force a software template (gitlab, jira, confluence, redmine, discourse, mediawiki, wordpress, gitea) whatever the page says, or \"none\" to read the page like any other. Left out, the software is recognised from the page."}
+                "template": {"type": "string", "description": "Force a software template (gitlab, jira, confluence, redmine, discourse, mediawiki, wordpress, gitea) whatever the page says, or \"none\" to read the page like any other. Omit to let itda recognise the software from the page."}
             }, "required": ["url"], "additionalProperties": false})),
         )
         .with_annotations(ToolAnnotations::new().read_only(false).open_world(true)),
         Tool::new(
             "itda_login",
-            "Open the user's own browser so they can sign in to a site that is set up; itda keeps the session for that one site and agents only ever see the account id. Call it when a read answers auth_required or itda_check says signed_out. Returns once the sign-in cookie the definition names appears.",
+            "Open the user's browser to sign in to a site already set up. itda keeps the session for that site; agents only see the account id. Call when a read returns auth_required or itda_check says signed_out. Returns when the sign-in cookie named in the definition appears.",
             schema(json!({"type": "object", "properties": {
                 "site": {"type": "string"},
                 "account": {"type": "string", "description": "Account id to keep the session as; defaults to \"default\"."},
@@ -56,7 +56,7 @@ pub(crate) fn tools() -> Vec<Tool> {
         .with_annotations(ToolAnnotations::new().read_only(false).open_world(true)),
         Tool::new(
             "itda_check",
-            "Run every read that needs no input, for one site or all, and say per site whether it is ok, signed_out, site_changed, blocked or unreachable, with what to do. Never sends a change. Call it before retrying an action that used to work.",
+            "Run all reads needing no input for one site or all. Report each site's status (ok, signed_out, site_changed, blocked or unreachable) and what to do. Never sends a change. Call before retrying an action that used to work.",
             schema(json!({"type": "object", "properties": {
                 "site": {"type": "string", "description": "One site; every site when left out."},
                 "account": {"type": "string"}
@@ -219,9 +219,9 @@ impl Server {
                 return failure(&coded(
                     "needs_recording",
                     422,
-                    format!("The page could not be read as itda ({why}).{seen}"),
+                    format!("itda could not read the page as itself ({why}).{seen}"),
                     format!(
-                        "Ask the user to run `itda setup {url}` in a terminal and answer yes when it offers to open their browser and record; or `itda record {url} --install`."
+                        "Ask the user to run `itda setup {url}` in a terminal and accept the offer to open their browser and record, or run `itda record {url} --install`."
                     ),
                 ));
             }
@@ -237,7 +237,7 @@ impl Server {
                 return failure(&coded(
                     "nothing_works",
                     422,
-                    "No read worked, so nothing was kept",
+                    "No read worked, so itda kept nothing",
                     format!(
                         "Ask the user to run `itda record {url} --install` in a terminal and use the site while it watches."
                     ),
@@ -305,12 +305,12 @@ impl Server {
                         "before": before,
                         "verdict": before.first().map(|v| v.verdict),
                         "hint": before.first().map(|v| v.hint.clone()),
-                        "note": "The sources draft the same actions; the definition was left as it is.",
+                        "note": "The sources draft the same actions; itda left the definition as is.",
                         "untrusted": true,
                     }));
                 }
                 let mut message = format!(
-                    "Refresh '{site}'? itda drafted it again from the same sources. The sign-in, the site's name and the actions you edited by hand are kept. This would change:"
+                    "Refresh '{site}'? itda drafted it again from the same sources. itda keeps the sign-in, the site's name and actions you edited by hand. This would change:"
                 );
                 for change in &plan.changes {
                     message.push_str("\n- ");
@@ -365,7 +365,7 @@ impl Server {
                     return failure(&error);
                 }
                 let message = format!(
-                    "Forget the site '{site}'? Its definition is deleted from this computer. Accounts signed in to it stay until itda logout."
+                    "Forget the site '{site}'? itda deletes its local definition. Accounts signed in to it stay until itda logout."
                 );
                 match confirmed(caller, message, "Remove this site").await {
                     Confirmed::Yes => {}
@@ -397,7 +397,7 @@ impl Server {
                     return failure(&error);
                 }
                 let message = format!(
-                    "Resume '{site}'? It was paused because the site refused or rate limited itda. Check the site in your browser first; resuming lets agents call it again."
+                    "Resume '{site}'? itda paused it: the site refused or rate limited itda. Check the site in your browser first; resuming lets agents call it again."
                 );
                 match confirmed(caller, message, "Resume this site").await {
                     Confirmed::Yes => {}
@@ -515,7 +515,7 @@ async fn login(
         return failure(&error);
     }
     let message = format!(
-        "Open your browser to sign in to {site}? itda keeps the session cookies for {site} as account '{account}', sealed under its data directory with a key from the system keyring. Agents only see the account id."
+        "Open your browser to sign in to {site}? itda keeps the session cookies for {site} as account '{account}' and seals them under its data directory with a system keyring key. Agents only see the account id."
     );
     match confirmed(caller, message, "Open the browser").await {
         Confirmed::No => return failure(&declined("login", site)),
@@ -543,7 +543,7 @@ async fn login(
             "site": site,
             "account": account,
             "cookies": count,
-            "note": "The session is sealed under the data directory with a key from the system keyring. Agents only see the account id.",
+            "note": "itda seals the session under the data directory with a system keyring key. Agents only see the account id.",
         })),
         Err(error) => failure(&error),
     }

@@ -37,7 +37,7 @@ impl Spec {
                 if p.required {
                     return Err(apperr::usage(
                         format!("Missing required input: {name}"),
-                        "Provide the input shown by describe.",
+                        "Provide the input describe shows.",
                     ));
                 }
                 continue;

@@ -75,12 +75,12 @@ pub fn t(key: &str) -> &'static str {
         (
             "described",
             "Read its API description at {url}: {reads} reads, {changes} changes noted.",
-            "{url}의 API 설명을 읽었습니다: 읽기 {reads}개, 변경 {changes}개는 메모로 남김.",
+            "{url}의 API 설명을 읽었습니다: 읽기 {reads}개, 메모로 남긴 변경 {changes}개.",
         ),
         (
             "needs_record",
-            "The page could not be read as itself ({why}). itda can open your browser and watch while you use the site instead.",
-            "itda 이름으로는 이 페이지를 읽지 못했습니다({why}). 대신 브라우저를 열어, 사이트를 쓰시는 동안 지켜볼 수 있습니다.",
+            "itda could not read the page as itself ({why}). itda can open your browser and watch as you use the site instead.",
+            "itda 이름으로는 이 페이지를 읽지 못했습니다({why}). 대신 브라우저를 열어 사이트를 쓰는 동안 지켜볼 수 있습니다.",
         ),
         ("why_blocked", "it refused", "거부됨"),
         (
@@ -126,7 +126,7 @@ pub fn t(key: &str) -> &'static str {
         (
             "redirect_signin_fix",
             "Pages behind a sign-in: record yourself using them with `itda record`, or `itda setup` and answer yes to recording.",
-            "로그인이 필요한 페이지는 `itda record`로 직접 쓰는 모습을 녹화하거나, `itda setup`에서 녹화에 예라고 답하세요.",
+            "로그인이 필요한 페이지는 `itda record`로 직접 쓰는 모습을 녹화하거나 `itda setup`에서 녹화에 예라고 답하세요.",
         ),
         (
             "rate_limited_fix",
@@ -151,28 +151,28 @@ pub fn t(key: &str) -> &'static str {
         ),
         (
             "no_record_allowed",
-            "The page could not be read and --no-record forbids the browser.",
+            "itda could not read the page; --no-record forbids the browser.",
             "페이지를 읽지 못했고 --no-record 때문에 브라우저를 열 수 없습니다.",
         ),
         (
             "watching",
-            "Opening your browser on {host} to watch what the page loads by itself. Nothing is clicked or typed; the window closes on its own.",
-            "{host} 페이지가 스스로 무엇을 불러오는지 보려고 브라우저를 엽니다. 아무것도 누르거나 입력하지 않으며, 창은 저절로 닫힙니다.",
+            "Opening your browser on {host} to watch what the page loads by itself. itda does not click or type; the window closes on its own.",
+            "{host} 페이지가 스스로 무엇을 불러오는지 보려고 브라우저를 엽니다. 아무것도 누르거나 입력하지 않으며 창은 저절로 닫힙니다.",
         ),
         (
             "watched",
             "Watched the page load: {n} calls, {k} reads drafted.",
-            "페이지가 뜨는 동안 지켜봤습니다: 호출 {n}건, 읽기 {k}개 초안.",
+            "페이지가 뜨는 동안 지켜봤습니다: 호출 {n}건, 읽기 초안 {k}개.",
         ),
         (
             "watched_nothing",
             "Watched the page load: {n} calls, nothing to draft.",
-            "페이지가 뜨는 동안 지켜봤습니다: 호출 {n}건, 초안으로 만들 것은 없음.",
+            "페이지가 뜨는 동안 지켜봤습니다: 호출 {n}건, 초안으로 만들 것 없음.",
         ),
         (
             "watch_only_stop",
             "Watching the page load was not enough ({why}), and --watch-only skips recording. Run again without it to record yourself using the site.",
-            "페이지가 뜨는 동안 지켜본 것으로는 부족했고({why}), --watch-only는 녹화를 건너뜁니다. 직접 쓰는 모습을 녹화하려면 이 옵션 없이 다시 실행하세요.",
+            "페이지가 뜨는 동안 지켜본 것으로는 부족했고({why}) --watch-only는 녹화를 건너뜁니다. 직접 쓰는 모습을 녹화하려면 이 옵션 없이 다시 실행하세요.",
         ),
         (
             "no_terminal",
@@ -259,7 +259,7 @@ pub fn t(key: &str) -> &'static str {
         (
             "later",
             "Connect an agent any time with: itda mcp install claude-desktop (or cursor, vscode, codex, claude-code)",
-            "에이전트 연결은 언제든: itda mcp install claude-desktop (또는 cursor, vscode, codex, claude-code)",
+            "언제든 에이전트 연결: itda mcp install claude-desktop (또는 cursor, vscode, codex, claude-code)",
         ),
         (
             "ask_connect",
@@ -376,7 +376,7 @@ pub fn t(key: &str) -> &'static str {
         (
             "ask_sign_in",
             "Sign in to {host} here, with your user name and password? itda fills in the site's own sign-in form, as itself, and keeps the session sealed under the data directory. [Y/n] ",
-            "{host}에 여기서 아이디와 비밀번호로 로그인할까요? itda가 사이트의 로그인 폼을 itda 이름으로 보내고, 세션은 데이터 폴더에 봉인해 보관합니다. [Y/n] ",
+            "{host}에 여기서 아이디와 비밀번호로 로그인할까요? itda가 사이트의 로그인 폼을 itda 이름으로 보내고 세션은 데이터 폴더에 봉인해 보관합니다. [Y/n] ",
         ),
         ("ask_user", "User name for {site}: ", "{site} 아이디: "),
         (
@@ -388,7 +388,7 @@ pub fn t(key: &str) -> &'static str {
         (
             "no_user_fix",
             "Pass --user <name>, and the password as the first line of stdin.",
-            "--user <아이디>를 주고, 비밀번호는 stdin 첫 줄로 넘기세요.",
+            "--user <아이디>를 주고 비밀번호는 stdin 첫 줄로 넘기세요.",
         ),
         (
             "no_password",
@@ -398,7 +398,7 @@ pub fn t(key: &str) -> &'static str {
         (
             "no_password_fix",
             "Type it after the question, or pipe it on stdin, for example from your password manager.",
-            "질문 뒤에 입력하거나, 비밀번호 관리자 등에서 stdin으로 넘기세요.",
+            "질문 뒤에 입력하거나 비밀번호 관리자 등에서 stdin으로 넘기세요.",
         ),
         (
             "signed_in",
@@ -412,13 +412,13 @@ pub fn t(key: &str) -> &'static str {
         ),
         (
             "session_saved",
-            "Signed in. The session for {site}/{account} ({n} cookies) is sealed under the data directory with a key in the system keyring; agents only see the account id.",
-            "로그인했습니다. {site}/{account} 세션(쿠키 {n}개)은 데이터 폴더에 봉인돼 있고(키는 시스템 키링에), 에이전트는 계정 id만 봅니다.",
+            "Signed in. itda sealed the session for {site}/{account} ({n} cookies) under the data directory with a key in the system keyring; agents only see the account id.",
+            "로그인했습니다. {site}/{account} 세션(쿠키 {n}개)을 데이터 폴더에 봉인했고(키는 시스템 키링에), 에이전트는 계정 id만 봅니다.",
         ),
         (
             "cookie_missing",
             "{site} accepted the sign-in, but the {name} cookie its definition names did not appear",
-            "{site}가 로그인을 받아들였지만 정의가 말한 {name} 쿠키가 오지 않았습니다",
+            "{site}가 로그인을 받아들였지만 정의에 적힌 {name} 쿠키가 오지 않았습니다",
         ),
         (
             "cookie_missing_fix",
@@ -442,7 +442,7 @@ pub fn t(key: &str) -> &'static str {
         ),
         (
             "nothing_works",
-            "No read worked, so nothing was kept. Try `itda record {url}` and use the site while it watches.",
+            "No read worked; itda kept nothing. Try `itda record {url}` and use the site while it watches.",
             "동작하는 읽기가 없어 아무것도 남기지 않았습니다. `itda record {url}`로 사이트를 쓰는 모습을 녹화해 보세요.",
         ),
     ];

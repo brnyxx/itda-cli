@@ -68,7 +68,7 @@ fn a_board_page_becomes_a_list_a_search_a_post_and_a_feed() {
         draft
             .notes
             .iter()
-            .any(|n| n.starts_with("GET /board/{id}: reads one record where the list's links go")),
+            .any(|n| n.starts_with("GET /board/{id}: reads one record at the list's links")),
         "{:?}",
         draft.notes
     );
@@ -247,7 +247,7 @@ fn a_linked_description_adds_its_reads_and_notes_its_changes() {
     );
     assert!(
         draft.notes.iter().any(|n| n
-            == "GET /secure: left out; its input apikey is a credential, which goes in auth, never through the agent."),
+            == "GET /secure: left out; credential input apikey goes in auth, never through the agent."),
         "{:?}",
         draft.notes
     );
@@ -365,7 +365,7 @@ fn a_description_elsewhere_or_unreadable_leaves_the_page_draft_alone() {
         draft
             .notes
             .iter()
-            .any(|n| n.contains("could not be read as an API description")),
+            .any(|n| n.contains("as an API description")),
         "{:?}",
         draft.notes
     );
@@ -714,7 +714,7 @@ fn a_page_with_nothing_to_read_is_still_only_a_title_check() {
         draft
             .notes
             .iter()
-            .any(|n| n.contains("drawn by scripts") || n.contains("only the title is checked")),
+            .any(|n| n.contains("scripts draw the page") || n.contains("checks only the title")),
         "{:?}",
         draft.notes
     );

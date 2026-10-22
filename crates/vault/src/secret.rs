@@ -147,7 +147,7 @@ fn keyring_error(error: &keyring::Error) -> AppError {
             "The system keyring is not available"
         }
         keyring::Error::BadEncoding(_) | keyring::Error::BadDataFormat(..) => {
-            "A stored secret could not be read"
+            "itda could not read a stored secret"
         }
         keyring::Error::TooLong(..) => "The secret is too long for the system keyring",
         _ => "The system keyring refused the operation",

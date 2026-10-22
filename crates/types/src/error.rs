@@ -100,7 +100,7 @@ fn remedy(public_code: &str) -> &'static str {
             "The user has not answered yet. Wait, then call again with the same inputs and the same approval id; do not request a new one."
         }
         "effect_changed" => {
-            "The values a preflight step found would turn this read into a change, so nothing was sent. Review the site definition."
+            "Values from a preflight step would turn this read into a change, so itda sent nothing. Review the site definition."
         }
         "response_mismatch" => {
             "The website returned a different response than this action expects. Reconnect if signed out, or review the site definition."

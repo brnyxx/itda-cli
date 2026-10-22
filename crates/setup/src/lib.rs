@@ -927,7 +927,7 @@ async fn sign_in_as_itda(
             Ok((page, signed))
         }
         Err((Fallback::Scripted, _)) => Err(usage(
-            format!("{host} accepted the sign-in, but the page is drawn by scripts"),
+            format!("{host} accepted the sign-in, but scripts draw the page"),
             "Record yourself using the site instead: itda record <url>.",
         )),
         Err(_) => Err(usage(

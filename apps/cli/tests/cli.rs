@@ -1545,7 +1545,7 @@ async fn a_well_known_path_answers_with_the_api_description() {
     assert!(done.status.success(), "{said}");
     assert!(
         said.contains(&format!(
-            "{base}/openapi.json의 API 설명을 읽었습니다: 읽기 1개, 변경 1개는 메모로 남김."
+            "{base}/openapi.json의 API 설명을 읽었습니다: 읽기 1개, 메모로 남긴 변경 1개."
         )),
         "{said}"
     );
@@ -1586,7 +1586,7 @@ async fn an_unreadable_description_leaves_the_page_draft_as_it_is() {
     assert!(printed.status.success(), "{said}");
     assert!(
         said.contains(&format!(
-            "note: {base}/openapi.json could not be read as an API description"
+            "note: Could not read {base}/openapi.json as an API description"
         )),
         "{said}"
     );
@@ -1943,7 +1943,7 @@ async fn refresh_drafts_a_changed_site_again_and_keeps_what_was_edited_by_hand()
     let none = itda(&home, &["refresh", "fixture", "-y"], &[("ITDA_LANG", "en")]).await;
     assert_eq!(none.status.code(), Some(2), "{none:?}");
     let said = String::from_utf8_lossy(&none.stderr);
-    assert!(said.contains("No sources are known"), "{said}");
+    assert!(said.contains("No known sources"), "{said}");
     std::fs::remove_dir_all(home).ok();
 }
 

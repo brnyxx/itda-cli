@@ -217,7 +217,7 @@ fn a_sealed_file_without_its_key_fails_plainly() {
     // The key is gone: the file cannot be read, and the error says so.
     let without = SealedStore::new(&home, Arc::new(MemoryStore::default()));
     let error = without.get(&session).unwrap_err();
-    assert!(error.msg.contains("could not be read"), "{}", error.msg);
+    assert!(error.msg.contains("could not read"), "{}", error.msg);
     assert!(error.remedy.contains("Sign the affected sites in again"));
     std::fs::remove_dir_all(home).ok();
     std::fs::remove_dir_all(elsewhere).ok();

@@ -78,7 +78,7 @@ pub(crate) fn add_schemas(parts: &mut Parts, options: &Options, lang: &str) {
             .filter(|rest| rest.is_empty() || rest.starts_with('/'));
         let Some(rest) = rest else {
             parts.notes.push(format!(
-                "{}: its schema was left out; it is not under {}.",
+                "{}: left out its schema; it is not under {}.",
                 schema.url, parts.base_url
             ));
             continue;
@@ -302,7 +302,7 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
         if pages.len() == 20 {
             parts
                 .notes
-                .push("Only the first 20 pages of the recording were analysed.".into());
+                .push("itda analysed only the first 20 pages of the recording.".into());
             break;
         }
     }

@@ -97,7 +97,7 @@ fn what_was_left_out_is_listed() {
     assert!(notes.contains("POST /api/v1/files: skipped"), "{notes}");
     assert!(notes.contains("left out csrf_token"), "{notes}");
     assert!(
-        notes.contains("_csrf come from /board/writeForm.do through a preflight step"),
+        notes.contains("a preflight step reads _csrf fresh from /board/writeForm.do"),
         "{notes}"
     );
 }
@@ -190,7 +190,7 @@ fn a_header_token_is_read_from_the_page_meta_tag() {
     );
     let notes = draft.notes.join("\n");
     assert!(
-        notes.contains("X-CSRF-Token comes from the csrf-token tag"),
+        notes.contains("a preflight step reads X-CSRF-Token fresh from the csrf-token tag"),
         "{notes}"
     );
 }

@@ -200,7 +200,7 @@ impl SecretStore for SealedStore {
 fn unreadable() -> AppError {
     AppError::new(
         Code::Runtime,
-        "The sealed secrets could not be read",
+        "itda could not read the sealed secrets",
         "The master key in the system keyring no longer matches vault.sealed. Sign the affected sites in again.",
     )
 }
@@ -208,7 +208,7 @@ fn unreadable() -> AppError {
 fn sealing_failed() -> AppError {
     AppError::new(
         Code::Runtime,
-        "The secret could not be sealed",
+        "itda could not seal the secret",
         "Check the data directory and the system keyring, then try again.",
     )
 }

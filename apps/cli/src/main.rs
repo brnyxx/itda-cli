@@ -655,7 +655,7 @@ fn first_command(typed: &str) -> Option<First> {
 fn home() -> AppResult<PathBuf> {
     itda_types::paths::home().ok_or_else(|| {
         usage(
-            "No data directory could be found",
+            "itda found no data directory",
             "Set ITDA_HOME to a directory itda may use.",
         )
     })
@@ -1245,7 +1245,7 @@ async fn login_browser(
     let count = session.count;
     itda_setup::login::keep(&ctx, site, account, label, session, "").await?;
     eprintln!(
-        "Saved the session for {site}/{account} ({count} cookies); it is sealed under the data directory with a key in the system keyring. Agents only see the account id."
+        "Saved the session for {site}/{account} ({count} cookies). It is sealed under the data directory with a key in the system keyring. Agents only see the account id."
     );
     Ok(ExitCode::SUCCESS)
 }
@@ -1965,7 +1965,7 @@ async fn mcp(
 fn mcp_install(client: &str, dry_run: bool, approve_in_client: bool) -> AppResult<ExitCode> {
     let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
-        .ok_or_else(|| usage("No home directory was found", "Set HOME and try again."))?;
+        .ok_or_else(|| usage("itda found no home directory", "Set HOME and try again."))?;
     let exe = std::env::current_exe()?;
     // Clients start itda without this shell's environment, so the settings
     // that change where data lives or what may be reached are passed along.
