@@ -319,7 +319,7 @@ impl Server {
                 match confirmed(caller, message, "Refresh this site").await {
                     Confirmed::Yes => {}
                     Confirmed::No => return failure(&declined("refresh", site)),
-                    Confirmed::Unanswered => {
+                    Confirmed::Unanswered | Confirmed::Asked => {
                         return failure(&unanswered(format!("itda refresh {site}")));
                     }
                     Confirmed::CannotAsk => {
@@ -370,7 +370,7 @@ impl Server {
                 match confirmed(caller, message, "Remove this site").await {
                     Confirmed::Yes => {}
                     Confirmed::No => return failure(&declined("remove", site)),
-                    Confirmed::Unanswered => {
+                    Confirmed::Unanswered | Confirmed::Asked => {
                         return failure(&unanswered(format!("itda remove {site}")));
                     }
                     Confirmed::CannotAsk => {
@@ -402,7 +402,7 @@ impl Server {
                 match confirmed(caller, message, "Resume this site").await {
                     Confirmed::Yes => {}
                     Confirmed::No => return failure(&declined("resume", site)),
-                    Confirmed::Unanswered => {
+                    Confirmed::Unanswered | Confirmed::Asked => {
                         return failure(&unanswered(format!("itda resume {site}")));
                     }
                     Confirmed::CannotAsk => {
@@ -521,7 +521,7 @@ async fn login(
         Confirmed::No => return failure(&declined("login", site)),
         // A form nobody answered is not a yes. A client that cannot ask
         // still gets the window: the person sees it open, or closes it.
-        Confirmed::Unanswered => {
+        Confirmed::Unanswered | Confirmed::Asked => {
             return failure(&unanswered(format!("itda login {site} --browser")));
         }
         Confirmed::Yes | Confirmed::CannotAsk => {}

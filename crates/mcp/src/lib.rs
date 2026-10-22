@@ -13,7 +13,9 @@
 //! to the person in the MCP client itself, as an elicitation form showing the
 //! exact request. The agent never sees or answers that form; only the client's
 //! user does. Without it, or when the client cannot show forms, the agent gets
-//! the approval id and the person runs `itda approve`.
+//! the approval id and the person runs `itda approve`. Up to protocol
+//! 2025-11-25 the form is a request to the client; from 2026-07-28 it is the
+//! call's result, and the client calls again with the answer (see `elicit`).
 //!
 //! With [`Server::with_setup`], the agent can also set a site up, sign the
 //! person in, check sites and manage them from inside the conversation
@@ -47,6 +49,15 @@ use rmcp::{
 pub(crate) struct Caller<'a> {
     pub(crate) peer: &'a Peer<RoleServer>,
     pub(crate) capabilities: Option<ClientCapabilities>,
+    /// From protocol 2026-07-28 the client takes no requests: a form is this
+    /// call's result, and the client calls again with the answer.
+    pub(crate) rounds: Option<elicit::Rounds>,
+}
+
+/// Protocol 2026-07-28 and newer carry forms in results, not in requests.
+/// Versions are dates, so they compare as text.
+fn carries_forms_in_results(version: Option<&rmcp::model::ProtocolVersion>) -> bool {
+    version.is_some_and(|version| version.as_str() >= "2026-07-28")
 }
 use serde_json::{Map, Value, json};
 use std::{
@@ -343,6 +354,18 @@ impl Server {
             next,
             discovery: false,
         };
+        // The person answered the form of the previous round in the client.
+        if let (None, Some(caller), Some(client)) = (&call.approval, caller, &self.client_approval)
+            && let Some(decision) = client
+                .answered(caller, &entry.site.site.name, &entry.action, &call.args)
+                .await
+        {
+            match decision {
+                elicit::Decision::Approved(id) => call.approval = Some(id),
+                elicit::Decision::Rejected(error) => return failure(&error),
+                elicit::Decision::Asked => return failure(&AppError::api("approval_pending", 409)),
+            }
+        }
         let mut outcome = self.runtime.call(&entry.site, call.clone()).await;
         if let (Err(error), Some(caller), Some(client)) = (&outcome, caller, &self.client_approval)
             && error.public_code == "approval_required"
@@ -552,17 +575,27 @@ impl ServerHandler for Server {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
+        let rounds = carries_forms_in_results(context.protocol_version().as_ref())
+            .then(|| elicit::Rounds::new(request.input_responses, request.request_state));
         let caller = Caller {
             peer: &context.peer,
             capabilities: context.client_capabilities(),
+            rounds,
         };
-        Ok(self
+        let result = self
             .call_from(
                 &request.name,
                 request.arguments.unwrap_or_default(),
                 Some(&caller),
             )
-            .await
-            .into())
+            .await;
+        // A form the call asked the person is the result; the client shows
+        // it and calls again with the answer.
+        Ok(
+            match caller.rounds.as_ref().and_then(elicit::Rounds::take_form) {
+                Some(form) => CallToolResponse::InputRequired(form),
+                None => result.into(),
+            },
+        )
     }
 }
