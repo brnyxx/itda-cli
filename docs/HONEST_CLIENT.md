@@ -9,7 +9,7 @@ rules are fixed. Pull requests that weaken them are declined.
 | Rule | Where it is enforced today |
 |---|---|
 | Every request identifies itself as `itda/<version>`. | `itda-net`: `USER_AGENT` |
-| No browser imitation: no browser user agent, no `sec-ch-ua` or `sec-fetch-*` headers. | `itda-net` default headers; `itda-policy` refuses `sec-*` headers in definitions |
+| No browser imitation: no browser user agent, no `sec-ch-ua` or `sec-fetch-*` headers. Besides `User-Agent`, a request carries a plain `Accept` (HTML, or JSON for API paths), `Accept-Language: *` (no preference), a same-origin `Referer` for API calls, signed-in requests and changes, an `Origin` for changes, and the headers its definition declares. | `itda-net` default headers; `itda-policy` refuses `sec-*` headers in definitions |
 | A block, challenge or CAPTCHA pauses the whole site, for every account, until the user resumes it. | `itda-net` `Gate` (`blocked_by_site`) |
 | A signed-in request answered with 401 pauses only that account (`auth_required`). | `itda-net` `Gate` |
 | One request at a time per site, about 1.2 seconds apart (a definition may ask for more with `defaults.interval`), shared by every itda process on the same data directory, during discovery as well as for actions. | `itda-net` `Gate` |

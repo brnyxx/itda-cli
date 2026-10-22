@@ -4,7 +4,8 @@
 //!
 //! Derived from Hycli `src/net.rs` (Apache-2.0). Changes:
 //! - The client identifies itself (`itda/<version>`) instead of presenting a
-//!   Chrome user agent and `sec-ch-ua`/`sec-fetch-*` headers.
+//!   Chrome user agent and `sec-ch-ua`/`sec-fetch-*` headers, and states no
+//!   language preference (`Accept-Language: *`) instead of a Korean list.
 //! - The in-page browser fetch and rendered-page fallbacks used after a block
 //!   (`fetch_browser_in_page`, `fetch_rendered`) were removed, together with the
 //!   strategy records that chose them.
@@ -385,9 +386,11 @@ fn default_headers(target: &url::Url, input: &Request, origin: &str) -> AppResul
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }),
     );
+    // itda has no language preference of its own: an agent reads any language,
+    // and a stated language changes which page some sites serve.
     headers.insert(
         HeaderName::from_static("accept-language"),
-        HeaderValue::from_static("ko-KR,ko;q=0.9,en;q=0.8"),
+        HeaderValue::from_static("*"),
     );
     // Same-origin Referer/Origin let first-party CSRF checks pass for the user's own session.
     if (has_json_hint || is_mutation || !input.account_id.is_empty())
@@ -492,5 +495,30 @@ mod tests {
         assert_eq!(retry_after(&header("Wed, 21 Oct 2015 07:28:00 GMT")), None);
         assert_eq!(retry_after(&header("soon")), None);
         assert_eq!(retry_after(&[]), None);
+    }
+
+    #[test]
+    fn a_read_asks_for_any_language_and_sends_no_browser_headers() {
+        let names = |input: &Request| {
+            let target = url::Url::parse(&input.url).unwrap();
+            let origin = target.origin().ascii_serialization();
+            let headers = default_headers(&target, input, &origin).unwrap();
+            let mut names: Vec<String> = headers.keys().map(|k| k.as_str().to_owned()).collect();
+            names.sort();
+            (names, headers)
+        };
+        let (page, headers) = names(&Request::read("https://example.org/project/requests/"));
+        assert_eq!(page, ["accept", "accept-language"]);
+        assert!(headers["accept"].to_str().unwrap().starts_with("text/html"));
+        assert_eq!(headers["accept-language"], "*");
+        let (api, headers) = names(&Request::read("https://example.org/api/items"));
+        assert_eq!(api, ["accept", "accept-language", "referer"]);
+        assert_eq!(headers["accept"], "application/json, text/plain, */*");
+        assert_eq!(headers["accept-language"], "*");
+        let mut asked = Request::read("https://example.org/page");
+        asked.headers = vec![("Accept-Language".into(), "ko".into())];
+        let (with_language, headers) = names(&asked);
+        assert_eq!(with_language, ["accept", "accept-language"]);
+        assert_eq!(headers["accept-language"], "ko");
     }
 }

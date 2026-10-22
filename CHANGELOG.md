@@ -373,6 +373,16 @@ change the definition format or the CLI.
   and one that does not parse leaves the page draft as it is. The
   header comment and each merged action's `evidence` name where it came from,
   and `itda setup` says what it read in one line.
+- Requests send `Accept-Language: *` (no preference) instead of
+  `ko-KR,ko;q=0.9,en;q=0.8`, a value left over from the browser header block
+  itda was derived from. pypi.org answered a project page asked for with any
+  Korean `Accept-Language` (`ko`, `ko-KR` or that list) with a 3 KB "Client
+  Challenge" page and kept challenging every request from the same address
+  for a few minutes after, so `itda draft page
+  https://pypi.org/project/requests/` drafted the challenge instead of the
+  322 KB page. Leaving the header out is not enough: amazon.com then sends a
+  gzip body itda does not decode. A definition that needs a language can
+  still set one in `defaults.headers`.
 
 ## [0.4.0] - 2026-10-22
 
