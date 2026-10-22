@@ -15,6 +15,8 @@ pub enum Label<'a> {
     /// Read one kind of record a page embeds, named in plain words
     /// (`news articles`, `products`).
     Records { what: &'a str, title: &'a str },
+    /// Read one of the records a page lists, by its id.
+    One { what: &'a str, title: &'a str },
     /// A search form on a page.
     Search { title: &'a str },
     /// A form that changes the site.
@@ -66,6 +68,9 @@ fn korean(label: &Label<'_>) -> String {
         Label::Records { what, title } => {
             format!("{}의 {} 목록 읽기", subject(title), korean_what(what))
         }
+        Label::One { what, title } => {
+            format!("{}의 {} 하나 읽기", subject(title), korean_what(what))
+        }
         Label::Search { title } => format!("{}에서 검색", subject(title)),
         Label::Submit { title } => format!("{}의 폼 보내기", subject(title)),
         Label::Feed { title } => {
@@ -111,6 +116,7 @@ fn english(label: &Label<'_>) -> String {
         Label::List { title } => format!("List what {} shows", subject(title)),
         Label::Embedded { title } => format!("Read the data behind {}", subject(title)),
         Label::Records { what, title } => format!("List the {what} on {}", subject(title)),
+        Label::One { what, title } => format!("Read one of the {what} on {}", subject(title)),
         Label::Search { title } => format!("Search on {}", subject(title)),
         Label::Submit { title } => format!("Submit the form on {}", subject(title)),
         Label::Feed { title } => {
@@ -162,9 +168,41 @@ fn korean_what(what: &str) -> &str {
         "people" | "persons" => "사람",
         "places" => "장소",
         "comments" => "댓글",
+        "replies" => "답글",
         "reviews" => "후기",
         "content" => "콘텐츠",
-        "items" => "항목",
+        "items" | "entries" => "항목",
+        "stories" | "submissions" => "글",
+        "answers" => "답변",
+        "lessons" => "강의",
+        "releases" => "릴리스",
+        "issues" => "이슈",
+        "bugs" => "버그",
+        "topics" => "주제",
+        "threads" => "스레드",
+        "discussions" => "토론",
+        "notices" => "공지",
+        "packages" => "패키지",
+        "files" => "파일",
+        "versions" => "버전",
+        "commits" => "커밋",
+        "tags" => "태그",
+        "repositories" => "저장소",
+        "papers" => "논문",
+        "results" => "결과",
+        "messages" => "메시지",
+        "documents" => "문서",
+        "photos" => "사진",
+        "images" => "이미지",
+        "offers" | "deals" => "할인",
+        "listings" => "매물",
+        "apps" => "앱",
+        "episodes" => "에피소드",
+        "tracks" => "곡",
+        "albums" => "앨범",
+        "movies" => "영화",
+        "games" => "게임",
+        "talks" => "발표",
         other => other,
     }
 }

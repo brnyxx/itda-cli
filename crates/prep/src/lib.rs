@@ -13,7 +13,9 @@ mod page;
 
 pub use har::{from_har, redacted_recording};
 pub use openapi::{from_openapi, is_openapi};
-pub use page::{DESCRIPTION_PATH, Description, Page, from_pages, from_pages_and_description};
+pub use page::{
+    DESCRIPTION_PATH, Description, Page, embeds_lists, from_pages, from_pages_and_description,
+};
 
 use itda_types::error::AppResult;
 

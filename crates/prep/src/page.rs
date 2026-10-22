@@ -289,7 +289,7 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
         let lang = language(&options.lang, &page_lang(&page.html));
         let page_title = title_of(&page.html);
         let listings = embedded_lists(&page.html);
-        if let Some(entry) = page_action(
+        for entry in page_actions(
             page,
             &url,
             &path,
@@ -298,6 +298,7 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
             &mut notes,
             &lang,
             !listings.is_empty(),
+            (&origin, &prefix),
         ) {
             push(entry, &mut notes);
         }
@@ -493,12 +494,15 @@ fn page_lang(html: &str) -> String {
     .unwrap_or_default()
 }
 
-/// The page itself as a read: its records, its embedded data, or at least
-/// its title, so the action fails when the page changes. A page whose
-/// records live only in an embedded payload gets no read of its own: the
-/// typed reads of those lists (`has_lists`) are its reads.
+/// The page itself as reads: its records, its own content when it is one
+/// thing, its embedded data, or at least its title, so the action fails
+/// when the page changes. A page that is one thing with a named list on
+/// it (a package with its releases) gets both reads, and a list whose
+/// links share one shape gets a read of one record by its id. A page
+/// whose records live only in an embedded payload gets no read of its
+/// own: the typed reads of those lists (`has_lists`) are its reads.
 #[allow(clippy::too_many_arguments)]
-fn page_action(
+fn page_actions(
     page: &Page,
     url: &url::Url,
     path: &str,
@@ -507,60 +511,156 @@ fn page_action(
     notes: &mut Vec<String>,
     lang: &str,
     has_lists: bool,
-) -> Option<Mapping> {
+    site: (&url::Origin, &str),
+) -> Vec<Mapping> {
     let title = evidence::title_field(&page.html);
     let page_title = title_of(&page.html);
     let extraction = evidence::infer_extraction(&page.html, url.as_str());
-    if has_lists && extraction.is_none() {
-        return None;
-    }
-    let name = if path == "/" {
-        "home".to_owned()
+    // A page whose scripts are handed lists of records is a list page,
+    // whatever its headline says.
+    let main = if has_lists {
+        None
     } else {
-        action_name("GET", path)
+        evidence::main_content(&page.html, extraction.as_ref().map(|e| e.items.as_str()))
     };
-    let name = unique(names, &name);
-    let mut entry = Mapping::new();
-    entry.insert("name".into(), name.into());
+    if has_lists && extraction.is_none() {
+        return Vec::new();
+    }
     let subject = if page_title.is_empty() {
         url.path().to_owned()
     } else {
         page_title.clone()
     };
-    entry.insert(
-        "desc".into(),
-        describe(&Label::Page { title: &subject }, lang).into(),
-    );
-    entry.insert("method".into(), "GET".into());
-    entry.insert("path".into(), path.into());
-    entry.insert("effect".into(), "read".into());
-    page_inputs(&mut entry, page, url, params);
-
-    let mut response = Mapping::new();
-    response.insert("format".into(), "html".into());
     let label = format!("GET {}", url.path());
-    if let Some(extraction) = extraction {
-        entry.insert(
-            "desc".into(),
-            describe(&Label::List { title: &subject }, lang).into(),
-        );
-        let count = extraction.fields.len();
+    let what = extraction.as_ref().and_then(|e| what_of_items(&e.items));
+    let records: Vec<Value> = extraction
+        .as_ref()
+        .and_then(|e| e.extract(&page.html, url.as_str()))
+        .and_then(|value| value.get("items").and_then(Value::as_array).cloned())
+        .unwrap_or_default();
+    let start = |name: &str, desc: &str| {
+        let mut entry = Mapping::new();
+        entry.insert("name".into(), name.into());
+        entry.insert("desc".into(), desc.into());
+        entry.insert("method".into(), "GET".into());
+        entry.insert("path".into(), path.into());
+        entry.insert("effect".into(), "read".into());
+        page_inputs(&mut entry, page, url, params);
+        entry
+    };
+    let page_name = if path == "/" {
+        "home".to_owned()
+    } else {
+        action_name("GET", path)
+    };
+    let list_read = |name: &str, extraction: &itda_html::Extraction| {
+        let desc = match &what {
+            Some(what) => Label::Records {
+                what,
+                title: &subject,
+            },
+            None => Label::List { title: &subject },
+        };
+        let mut entry = start(name, &describe(&desc, lang));
+        let mut response = Mapping::new();
+        response.insert("format".into(), "html".into());
         if let Some(title) = &title {
             response.insert(
                 "required_html_fields".into(),
                 fields_yaml(std::slice::from_ref(title)),
             );
         }
-        response.insert("html".into(), extraction_yaml(&extraction));
+        response.insert("html".into(), extraction_yaml(extraction));
         entry.insert(
             "evidence".into(),
             format!(
-                "{label} shows one record per `{}` with {count} fields",
-                extraction.items
+                "{label} shows one record per `{}` with {} fields",
+                extraction.items,
+                extraction.fields.len()
             )
             .into(),
         );
-    } else if !has_lists && let Some((key, pointer, pointers)) = embedded(&page.html) {
+        entry.insert("response".into(), Yaml::Mapping(response));
+        entry
+    };
+    let mut out = Vec::new();
+    let mut listed = false;
+    if let Some(main) = &main {
+        let name = if path == "/" {
+            "home".to_owned()
+        } else if path.ends_with('}') {
+            action_name("GET", path)
+        } else {
+            let last = path
+                .rsplit('/')
+                .find(|s| !s.is_empty() && !s.starts_with('{'))
+                .unwrap_or("page");
+            slug(&format!("get-{}", last.split('.').next().unwrap_or(last)))
+        };
+        let name = unique(names, &name);
+        let mut entry = start(&name, &describe(&Label::Page { title: &subject }, lang));
+        let mut response = Mapping::new();
+        response.insert("format".into(), "html".into());
+        response.insert(
+            "required_html_fields".into(),
+            fields_yaml(std::slice::from_ref(&main.headline)),
+        );
+        let mut html = Mapping::new();
+        html.insert("page".into(), page_fields_yaml(&main.fields));
+        response.insert("html".into(), Yaml::Mapping(html));
+        entry.insert("response".into(), Yaml::Mapping(response));
+        let mut parts = vec!["a headline".to_owned()];
+        if main.body {
+            parts.push("a body".into());
+        }
+        let other = main.fields.len() - 1 - usize::from(main.body) - main.values;
+        if other > 0 {
+            parts.push(format!("{other} more fields"));
+        }
+        if main.values > 0 {
+            parts.push(format!("{} labelled values", main.values));
+        }
+        entry.insert(
+            "evidence".into(),
+            format!("{label} is one page with {}", parts.join(", ")).into(),
+        );
+        notes.push(format!(
+            "{label}: reads the page's own content as {} fields; add html fields for anything else agents should read.",
+            main.fields.len()
+        ));
+        out.push(entry);
+        if let (Some(extraction), Some(what)) = (&extraction, &what)
+            && records.len() >= 5
+        {
+            let name = unique(names, &slug(&format!("list-{what}")));
+            out.push(list_read(&name, extraction));
+            listed = true;
+        }
+    } else if let Some(extraction) = &extraction {
+        let name = unique(names, &page_name);
+        out.push(list_read(&name, extraction));
+        listed = true;
+    }
+    if listed && let Some(detail) = detail_link(&records, site.0, site.1) {
+        out.push(detail_action(
+            &detail,
+            what.as_deref(),
+            &subject,
+            &label,
+            names,
+            notes,
+            lang,
+        ));
+    }
+    if !out.is_empty() {
+        return out;
+    }
+
+    let name = unique(names, &page_name);
+    let mut entry = start(&name, &describe(&Label::Page { title: &subject }, lang));
+    let mut response = Mapping::new();
+    response.insert("format".into(), "html".into());
+    if !has_lists && let Some((key, pointer, pointers)) = embedded(&page.html) {
         entry.insert(
             "desc".into(),
             describe(&Label::Embedded { title: &subject }, lang).into(),
@@ -615,7 +715,7 @@ fn page_action(
             )
         } else {
             format!(
-                "{label}: no table, list or embedded data was found; only the title is checked. Add html fields for what agents should read."
+                "{label}: no table, list, embedded data or main content was found; only the title is checked. Add html fields for what agents should read."
             )
         });
     } else {
@@ -623,10 +723,10 @@ fn page_action(
         notes.push(format!(
             "{label}: no title, records or embedded data were found; add a response check by hand."
         ));
-        return Some(entry);
+        return vec![entry];
     }
     entry.insert("response".into(), Yaml::Mapping(response));
-    Some(entry)
+    vec![entry]
 }
 
 /// The page's path inputs and its query string as inputs with defaults, plus
@@ -656,17 +756,328 @@ fn page_inputs(entry: &mut Mapping, page: &Page, url: &url::Url, params: &[Strin
         );
         query.insert(key.as_ref().into(), Yaml::Mapping(field));
     }
-    if let Some(key) = evidence::page_key(&page.html, url.as_str())
-        && !query.contains_key(key.as_str())
+    if let Some(pages) = evidence::pagination(&page.html, url.as_str())
+        && !query.contains_key(pages.key.as_str())
     {
         let mut field = Mapping::new();
         field.insert("type".into(), "int".into());
-        field.insert("default".into(), 1.into());
-        query.insert(key.into(), Yaml::Mapping(field));
+        field.insert("default".into(), pages.default.into());
+        query.insert(pages.key.into(), Yaml::Mapping(field));
     }
     if !query.is_empty() {
         entry.insert("query".into(), Yaml::Mapping(query));
     }
+}
+
+/// Kinds of record a page lists, as the words sites name them with.
+const KINDS: &[&str] = &[
+    "story",
+    "post",
+    "article",
+    "product",
+    "question",
+    "answer",
+    "project",
+    "event",
+    "job",
+    "recipe",
+    "video",
+    "book",
+    "course",
+    "lesson",
+    "person",
+    "place",
+    "comment",
+    "reply",
+    "review",
+    "release",
+    "issue",
+    "bug",
+    "topic",
+    "thread",
+    "discussion",
+    "notice",
+    "package",
+    "file",
+    "version",
+    "commit",
+    "tag",
+    "repository",
+    "paper",
+    "result",
+    "message",
+    "document",
+    "photo",
+    "image",
+    "offer",
+    "deal",
+    "listing",
+    "app",
+    "episode",
+    "track",
+    "album",
+    "movie",
+    "game",
+    "submission",
+    "talk",
+    "entry",
+];
+
+/// What the records a selector picks are, in plain words, from the names
+/// the page gives them and their list: `ol.stories > li.story` lists
+/// `stories`, `#articles > dt` lists `articles`, `tr.athing` says nothing.
+fn what_of_items(items: &str) -> Option<String> {
+    let steps: Vec<&str> = items.split(" > ").collect();
+    let names = steps
+        .into_iter()
+        .rev()
+        .flat_map(|step| step.split_whitespace())
+        .filter_map(|step| {
+            let step = step.split(':').next().unwrap_or(step);
+            step.split_once('.')
+                .map(|(_, class)| class)
+                .or_else(|| step.strip_prefix('#'))
+        });
+    for name in names {
+        let words = words(&slug(name));
+        for word in words.split_whitespace().rev() {
+            let one = singular(word);
+            if KINDS.contains(&one.as_str()) {
+                return Some(plural(&one));
+            }
+        }
+    }
+    None
+}
+
+/// Where the links of a list's records go: one path with one segment that
+/// differs per record (`/item/{id}`), or one path with one query key that
+/// does (`/item?id=`). Only when every link fits.
+struct Detail {
+    path: String,
+    /// The query key that names the record, when the id is in the query.
+    query: Option<String>,
+    /// `int` or `string`, as the ids look.
+    kind: &'static str,
+    /// Query keys every link sends with the same value.
+    constants: Vec<(String, String)>,
+}
+
+impl Detail {
+    fn shape(&self) -> String {
+        match &self.query {
+            Some(key) => format!("{}?{key}=", self.path),
+            None => self.path.clone(),
+        }
+    }
+}
+
+fn detail_link(records: &[Value], origin: &url::Origin, prefix: &str) -> Option<Detail> {
+    let mut links: Vec<url::Url> = Vec::new();
+    for record in records {
+        let Some(link) = record.get("link").and_then(Value::as_str) else {
+            continue;
+        };
+        let url = url::Url::parse(link).ok()?;
+        if url.origin() != *origin || !url.path().starts_with(prefix) {
+            return None;
+        }
+        if !links
+            .iter()
+            .any(|l| l.path() == url.path() && l.query() == url.query())
+        {
+            links.push(url);
+        }
+    }
+    if links.len() < 3 {
+        return None;
+    }
+    let kind_of = |values: &[String]| {
+        if values.iter().all(|v| Kind::of_text(v) == Kind::Int) {
+            "int"
+        } else {
+            "string"
+        }
+    };
+    if links.iter().all(|l| l.query().is_none()) {
+        let paths: Vec<Vec<&str>> = links
+            .iter()
+            .map(|l| l.path()[prefix.len()..].split('/').collect())
+            .collect();
+        let width = paths[0].len();
+        if paths.iter().any(|p| p.len() != width) {
+            return None;
+        }
+        let differing: Vec<usize> = (0..width)
+            .filter(|&i| paths.iter().any(|p| p[i] != paths[0][i]))
+            .collect();
+        let [at] = differing.as_slice() else {
+            return None;
+        };
+        let values: Vec<String> = paths.iter().map(|p| p[*at].to_owned()).collect();
+        if values.iter().any(|v| v.is_empty() || secret_field(v)) {
+            return None;
+        }
+        let path: Vec<&str> = paths[0]
+            .iter()
+            .enumerate()
+            .map(|(i, s)| if i == *at { "{id}" } else { *s })
+            .collect();
+        return Some(Detail {
+            path: path.join("/"),
+            query: None,
+            kind: kind_of(&values),
+            constants: Vec::new(),
+        });
+    }
+    let path = &links[0].path()[prefix.len()..];
+    if links.iter().any(|l| &l.path()[prefix.len()..] != path) {
+        return None;
+    }
+    let queries: Vec<Vec<(String, String)>> = links
+        .iter()
+        .map(|l| {
+            l.query_pairs()
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect()
+        })
+        .collect();
+    let keys: Vec<&String> = queries[0].iter().map(|(k, _)| k).collect();
+    if queries
+        .iter()
+        .any(|q| q.len() != keys.len() || q.iter().zip(&keys).any(|((k, _), key)| k != *key))
+    {
+        return None;
+    }
+    let mut varying = Vec::new();
+    let mut constants = Vec::new();
+    for (i, key) in keys.iter().enumerate() {
+        let values: Vec<String> = queries.iter().map(|q| q[i].1.clone()).collect();
+        if values.iter().all(|v| *v == values[0]) {
+            constants.push(((*key).clone(), values[0].clone()));
+        } else {
+            varying.push(((*key).clone(), values));
+        }
+    }
+    let [(key, values)] = varying.as_slice() else {
+        return None;
+    };
+    if secret_field(key) || values.iter().any(|v| v.is_empty()) {
+        return None;
+    }
+    Some(Detail {
+        path: path.to_owned(),
+        query: Some(key.clone()),
+        kind: kind_of(values),
+        constants,
+    })
+}
+
+/// A read of one record by its id, where the list's links go. No response
+/// check yet: the page it opens was not fetched.
+fn detail_action(
+    detail: &Detail,
+    what: Option<&str>,
+    subject: &str,
+    list_label: &str,
+    names: &mut BTreeSet<String>,
+    notes: &mut Vec<String>,
+    lang: &str,
+) -> Mapping {
+    let one = what.map(singular).unwrap_or_else(|| {
+        detail
+            .path
+            .split('/')
+            .rfind(|s| !s.is_empty() && !s.starts_with('{'))
+            .map(|s| singular(s.split('.').next().unwrap_or(s)))
+            .unwrap_or_else(|| "item".into())
+    });
+    // The list of a board is `get-board`; one of its records is then
+    // `get-board-by-id`, not `get-board-2`.
+    let plain = slug(&format!("get-{one}"));
+    let name = if names.contains(&plain) {
+        unique(names, &format!("{plain}-by-id"))
+    } else {
+        unique(names, &plain)
+    };
+    let mut entry = Mapping::new();
+    entry.insert("name".into(), name.into());
+    entry.insert(
+        "desc".into(),
+        describe(
+            &Label::One {
+                what: what.unwrap_or("items"),
+                title: subject,
+            },
+            lang,
+        )
+        .into(),
+    );
+    entry.insert("method".into(), "GET".into());
+    entry.insert("path".into(), detail.path.clone().into());
+    entry.insert("effect".into(), "read".into());
+    entry.insert(
+        "evidence".into(),
+        format!("the records of {list_label} link to {}", detail.shape()).into(),
+    );
+    let mut id = Mapping::new();
+    id.insert("type".into(), detail.kind.into());
+    id.insert("required".into(), true.into());
+    match &detail.query {
+        None => {
+            let mut params = Mapping::new();
+            params.insert("id".into(), Yaml::Mapping(id));
+            entry.insert("params".into(), Yaml::Mapping(params));
+        }
+        Some(key) => {
+            let mut query = Mapping::new();
+            query.insert(key.clone().into(), Yaml::Mapping(id));
+            for (key, value) in &detail.constants {
+                if secret_field(key) {
+                    continue;
+                }
+                let kind = Kind::of_text(value);
+                let mut field = Mapping::new();
+                field.insert("type".into(), kind.name().into());
+                field.insert(
+                    "default".into(),
+                    match kind {
+                        Kind::Int => value
+                            .parse::<i64>()
+                            .map(Yaml::from)
+                            .unwrap_or(value.as_str().into()),
+                        Kind::Bool => (value == "true").into(),
+                        _ => value.as_str().into(),
+                    },
+                );
+                query.insert(key.clone().into(), Yaml::Mapping(field));
+            }
+            entry.insert("query".into(), Yaml::Mapping(query));
+        }
+    }
+    notes.push(format!(
+        "GET {}: reads one record where the list's links go, with no response check yet; run it once with an id, then declare what the page shows.",
+        detail.shape()
+    ));
+    entry
+}
+
+/// Page-level fields as people write them: only what differs from the
+/// defaults.
+fn page_fields_yaml(fields: &std::collections::BTreeMap<String, itda_html::OutputField>) -> Yaml {
+    let mut out = Mapping::new();
+    for (name, field) in fields {
+        let mut entry = Mapping::new();
+        entry.insert("selector".into(), field.selector.clone().into());
+        if !field.attribute.is_empty() {
+            entry.insert("attribute".into(), field.attribute.clone().into());
+        }
+        if field.required {
+            entry.insert("required".into(), true.into());
+        }
+        out.insert(name.clone().into(), Yaml::Mapping(entry));
+    }
+    Yaml::Mapping(out)
 }
 
 /// One list of records inside an embedded payload: where it is, what it
@@ -894,6 +1305,13 @@ const GENERIC: &[&str] = &[
     "itemlistelement",
     "blocks",
 ];
+
+/// Does the page embed lists of records for its scripts? Such a page is a
+/// list page, and gets typed reads of those lists rather than a read of
+/// its own content.
+pub fn embeds_lists(html: &str) -> bool {
+    !embedded_lists(html).is_empty()
+}
 
 /// Lists of records in the page's embedded payloads, each with the fields
 /// a model should keep: in ld+json an `ItemList` or an array of one typed

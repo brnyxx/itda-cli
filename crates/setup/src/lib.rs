@@ -158,6 +158,8 @@ pub struct PageSummary {
     pub records: Option<usize>,
     /// Data the page embeds, when there is no list.
     pub embedded_data: bool,
+    /// The page is one thing with content of its own to read.
+    pub main: bool,
     /// Forms other than a sign-in.
     pub forms: usize,
     pub feed: bool,
@@ -443,11 +445,16 @@ pub async fn probe(
 /// What the page offers, counted.
 pub fn summarize(page: &Page) -> PageSummary {
     let mut summary = PageSummary::default();
-    if let Some(extraction) = evidence::infer_extraction(&page.html, &page.url)
+    let extraction = evidence::infer_extraction(&page.html, &page.url);
+    // The same rule the draft applies: a page that embeds lists is a list.
+    summary.main = !itda_prep::embeds_lists(&page.html)
+        && evidence::main_content(&page.html, extraction.as_ref().map(|e| e.items.as_str()))
+            .is_some();
+    if let Some(extraction) = extraction
         && let Some(value) = extraction.extract(&page.html, &page.url)
     {
         summary.records = Some(value["items"].as_array().map(Vec::len).unwrap_or(0));
-    } else if !itda_html::extract_ssr_map(&page.html).is_empty() {
+    } else if !summary.main && !itda_html::extract_ssr_map(&page.html).is_empty() {
         summary.embedded_data = true;
     }
     let forms = evidence::forms(&page.html, &page.url);

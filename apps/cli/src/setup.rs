@@ -258,6 +258,9 @@ fn step(n: u8, text: &str) {
 /// "a list of 42 records, 2 forms, a feed": what the page offers, in words.
 fn describe_page(summary: &itda_setup::PageSummary) -> String {
     let mut parts = Vec::new();
+    if summary.main {
+        parts.push(t("found_main").to_owned());
+    }
     if let Some(n) = summary.records {
         parts.push(tf("found_list", &[("n", &n.to_string())]));
     } else if summary.embedded_data {
