@@ -7,6 +7,15 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
+Uglier sites, fewer steps, and a bundle for Claude Desktop. `itda setup` now
+reads pages whose content sits in frames, signs in with a password without a
+browser, follows a session carried in the address, turns pages, recognises
+known software, and refreshes a definition when the site changed. The landing
+page says plainly what works and what does not. Every release now carries an
+MCP Bundle per platform, so Claude Desktop installs itda by opening a file.
+
 ### Added
 
 - Frames: when `itda draft page` or `itda setup` fetches a page that is a
@@ -33,7 +42,7 @@ change the definition format or the CLI.
   recorded pages). `value_from` on a `browser` entry now accepts `query:<key>`
   beside `cookie:<name>`, with a validation error for anything else. Because
   the value rides in URLs, `docs/THREAT_MODEL.md` notes it can reach server
-  and proxy logs. SPEC bump to come with the next minor.
+  and proxy logs. The definition format is unchanged: `spec_version` stays 1.
 - `cargo xtask check-changelog`, run by CI: the changelog has one of each
   section per release, the newest release matches the workspace version, and
   the landing page and quickstart print the same version. CONTRIBUTING.md
@@ -637,7 +646,8 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/brnyxx/itda-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/brnyxx/itda-cli/compare/v0.1.0...v0.2.0
