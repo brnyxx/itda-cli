@@ -357,7 +357,11 @@ async fn draft(
         for url in &sources.pages {
             let probed = crate::probe(ctx, url, None).await?;
             match (probed.outcome, probed.page) {
-                (Ok(()), Some(page)) => pages.push(page),
+                (Ok(()), Some(page)) => {
+                    let mut framed = crate::frames::follow(&ctx.net, &page, None).await?;
+                    pages.push(page);
+                    pages.append(&mut framed.pages);
+                }
                 (Err((_, Some(refused))), _) => report(Progress::Refused(&refused)),
                 _ => {}
             }
@@ -385,7 +389,13 @@ async fn draft(
         for url in &sources.pages {
             let probed = crate::probe(ctx, url, None).await?;
             match (probed.outcome, probed.page) {
-                (Ok(()), Some(page)) => pages.push(page),
+                (Ok(()), Some(page)) => {
+                    // The frames a shell showed are followed again, the way
+                    // the first draft read them.
+                    let mut framed = crate::frames::follow(&ctx.net, &page, None).await?;
+                    pages.push(page);
+                    pages.append(&mut framed.pages);
+                }
                 (Err((why, refused)), _) => {
                     if let Some(refused) = &refused {
                         report(Progress::Refused(refused));

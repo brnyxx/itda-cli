@@ -191,3 +191,66 @@ async fn a_wrong_password_is_reported_and_never_retried() {
     };
     assert!(error.msg.contains("another site"), "{}", error.msg);
 }
+
+/// A site that keeps its session in the address: the form page hands out a
+/// token, the sign-in answers with a redirect carrying `sid`, and no cookie.
+const QUERY_FORM: &str = r#"<html><head><title>Sign in</title></head><body>
+<form action="/session" method="post">
+<input type="hidden" name="_csrf" value="token-q">
+<input name="user_name">
+<input type="password" name="password">
+</form></body></html>"#;
+
+async fn serve_query_session() -> String {
+    let token = "9f8e7d6c5b4a3210fedc";
+    let router = Router::new()
+        .route("/login", get(|| async { Html(QUERY_FORM) }))
+        .route(
+            "/session",
+            axum::routing::post(
+                move |Form(fields): Form<HashMap<String, String>>| async move {
+                    if fields.get("password").map(String::as_str) != Some("right") {
+                        return Html(QUERY_FORM.replace("<form", "<p>Wrong</p><form"))
+                            .into_response();
+                    }
+                    Redirect::to(&format!("/portal/main.do?sid={token}")).into_response()
+                },
+            ),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_the_site_carries_in_the_query_is_captured_from_the_redirect() {
+    let base = serve_query_session().await;
+    let net = network();
+    let scope = url::Url::parse(&base).unwrap();
+    let signed = form(
+        &net,
+        &scope,
+        &format!("{base}/login"),
+        None,
+        &credentials("right"),
+        None,
+    )
+    .await
+    .unwrap();
+    // No cookie was set; the session is the query the redirect carried.
+    assert_eq!(signed.session.count, 0);
+    assert_eq!(
+        signed
+            .session
+            .query
+            .as_ref()
+            .map(|(k, v)| (k.as_str(), v.as_str())),
+        Some(("sid", "9f8e7d6c5b4a3210fedc"))
+    );
+    assert_eq!(signed.session.value_from(None), "query:sid");
+    assert_eq!(
+        signed.session.secret_for("query:sid").expose(),
+        "9f8e7d6c5b4a3210fedc"
+    );
+}

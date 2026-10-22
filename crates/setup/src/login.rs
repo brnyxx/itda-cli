@@ -12,10 +12,34 @@ use itda_types::{
 use itda_vault::Secret;
 use std::{sync::mpsc, time::Duration};
 
-/// A signed-in session as a `Cookie` header value, and how many cookies it holds.
+/// A signed-in session as a `Cookie` header value, how many cookies it
+/// holds, and, when the site carries its session in the address instead,
+/// the query key and value the sign-in handed out.
 pub struct Session {
     pub cookies: String,
     pub count: usize,
+    pub query: Option<(String, String)>,
+}
+
+impl Session {
+    /// What goes in the keyring for a definition whose `value_from` is
+    /// `from`: the query value for `query:<key>`, else the cookies.
+    pub fn secret_for(&self, from: &str) -> Secret {
+        match (&self.query, from.strip_prefix("query:")) {
+            (Some((key, value)), Some(named)) if key == named => Secret::new(value.clone()),
+            _ => Secret::new(self.cookies.clone()),
+        }
+    }
+
+    /// The `value_from` a definition should carry for this session: the
+    /// query key when the sign-in handed one out, else the cookie, else none.
+    pub fn value_from(&self, cookie: Option<&str>) -> String {
+        match (&self.query, cookie) {
+            (Some((key, _)), _) => format!("query:{key}"),
+            (None, Some(cookie)) => format!("cookie:{cookie}"),
+            (None, None) => String::new(),
+        }
+    }
 }
 
 /// What the sign-in says while it waits.
@@ -111,19 +135,23 @@ pub fn browser(
             return Ok(Session {
                 cookies: itda_browser::header(&cookies),
                 count: cookies.len(),
+                query: None,
             });
         }
     }
 }
 
 /// Keep the session as `site/account` and lift any pause on the site: a new
-/// sign-in replaces an expired one, so the account may run again.
+/// sign-in replaces an expired one, so the account may run again. `from` is
+/// the definition's `value_from`, which says whether the cookies or the
+/// query value are the session.
 pub async fn keep(
     ctx: &Context,
     site: &str,
     account: &str,
     label: &str,
     session: Session,
+    from: &str,
 ) -> AppResult<()> {
     ctx.vault.add_account(site, account, label).await?;
     ctx.vault
@@ -131,7 +159,7 @@ pub async fn keep(
             site,
             account,
             itda_runtime::SESSION_SECRET,
-            Secret::new(session.cookies),
+            session.secret_for(from),
         )
         .await?;
     // Approvals were bound to the credential the user saw; a new one needs
@@ -146,10 +174,11 @@ pub struct Credentials {
     pub password: Secret,
 }
 
-/// A sign-in through the site's own form: the session, the cookie that
-/// appeared with it (the one a definition can name as proof of the sign-in),
-/// and the form as a definition describes it, so `itda login` can sign in
-/// again the same way.
+/// A sign-in through the site's own form: the session (its cookies, or the
+/// query value the site handed out instead), the cookie that appeared with
+/// it (the one a definition can name as proof of the sign-in), and the form
+/// as a definition describes it, so `itda login` can sign in again the same
+/// way.
 pub struct Signed {
     pub session: Session,
     pub cookie: Option<String>,
@@ -252,7 +281,13 @@ pub async fn form(
     }
     let after = set_cookies(&answer);
     let jar = merge(before, &after);
-    if jar.is_empty() {
+    // A site that keeps its session in the address hands it out with the
+    // redirect, or on the links of the first page after the sign-in.
+    let mut query = session_in_redirect(&action, &answer);
+    if query.is_none() && jar.is_empty() {
+        query = session_on_next_page(net, scope, &action, &answer, interval).await;
+    }
+    if jar.is_empty() && query.is_none() {
         return Err(usage(
             format!("{host} accepted the sign-in but set no cookie"),
             "The site keeps its session some other way; sign in with --browser instead.",
@@ -271,10 +306,44 @@ pub async fn form(
         session: Session {
             count: jar.len(),
             cookies: header(&jar),
+            query,
         },
         cookie,
         form,
     })
+}
+
+/// The query key and value a sign-in's redirect carries the session in,
+/// when its address has a parameter whose value looks like one.
+fn session_in_redirect(action: &url::Url, answer: &Response) -> Option<(String, String)> {
+    let target = action.join(answer.header("location")).ok()?;
+    target
+        .query_pairs()
+        .find(|(_, value)| itda_types::url::session_value(value))
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+}
+
+/// The session the first page after the sign-in puts on its links, when a
+/// site that set no cookie keeps it in the address: one read of the
+/// redirect's target, on the same site, with the cookies the answer set.
+async fn session_on_next_page(
+    net: &Network,
+    scope: &url::Url,
+    action: &url::Url,
+    answer: &Response,
+    interval: Option<Duration>,
+) -> Option<(String, String)> {
+    let target = action.join(answer.header("location")).ok()?;
+    if !same_site_origin(scope, &target) || !matches!(target.scheme(), "http" | "https") {
+        return None;
+    }
+    let mut request = Request::read(target.as_str());
+    request.interval = interval;
+    let page = net.fetch(request).await.ok()?;
+    if !page.successful() || !page.header("content-type").contains("html") {
+        return None;
+    }
+    itda_html::evidence::session_in_links(&String::from_utf8_lossy(&page.bytes), &page.url)
 }
 
 /// A cookie as a `Set-Cookie` header gave it: its name, its value, and
@@ -357,8 +426,50 @@ fn proof(after: &[SetCookie]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SetCookie, merge, proof, set_cookies};
+    use super::{Session, SetCookie, merge, proof, session_in_redirect, set_cookies};
     use itda_net::Response;
+
+    #[test]
+    fn a_session_in_the_redirect_is_named_and_kept_only_when_the_definition_asks() {
+        let answer = Response {
+            url: "https://site.example/login".into(),
+            status: 303,
+            headers: vec![(
+                "location".into(),
+                "/portal/main.do?sid=9f8e7d6c5b4a3210&next=%2Fnotices".into(),
+            )],
+            bytes: Vec::new(),
+            duration_ms: 1,
+            defense: "none".into(),
+        };
+        let action = url::Url::parse("https://site.example/login").unwrap();
+        let query = session_in_redirect(&action, &answer);
+        assert_eq!(
+            query,
+            Some(("sid".to_owned(), "9f8e7d6c5b4a3210".to_owned()))
+        );
+        let session = Session {
+            cookies: "lang=en".into(),
+            count: 1,
+            query,
+        };
+        assert_eq!(session.value_from(Some("lang")), "query:sid");
+        assert_eq!(session.secret_for("query:sid").expose(), "9f8e7d6c5b4a3210");
+        assert_eq!(session.secret_for("cookie:lang").expose(), "lang=en");
+        assert_eq!(session.secret_for("").expose(), "lang=en");
+        let plain = Session {
+            cookies: "SID=x".into(),
+            count: 1,
+            query: None,
+        };
+        assert_eq!(plain.value_from(Some("SID")), "cookie:SID");
+        assert_eq!(plain.value_from(None), "");
+        let elsewhere = Response {
+            headers: vec![("location".into(), "/notices?page=2".into())],
+            ..answer
+        };
+        assert_eq!(session_in_redirect(&action, &elsewhere), None);
+    }
 
     fn response(set: &[&str]) -> Response {
         Response {

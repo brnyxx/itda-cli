@@ -802,6 +802,7 @@ fn pages_read_signed_in_keep_the_sign_in_and_need_the_session_everywhere() {
             name: Some("board".into()),
             session: Some(itda_prep::SessionAuth {
                 cookie: "JSESSIONID".into(),
+                query: None,
                 login: itda_spec::LoginForm {
                     path: "/login".into(),
                     user: "user_id".into(),
@@ -834,4 +835,114 @@ fn pages_read_signed_in_keep_the_sign_in_and_need_the_session_everywhere() {
             .any(|n| n.contains("`itda login board` signs in"))
     );
     assert!(!draft.notes.iter().any(|n| n.contains("--browser")));
+}
+
+#[test]
+fn a_portal_shell_drafts_its_frame_pages_under_their_own_addresses() {
+    let shell = page("https://intranet.example.co.kr/portal/", "portal.html");
+    let board = page(
+        "https://intranet.example.co.kr/frame/board.do?bbs=1",
+        "frame-board.html",
+    );
+    // The caller fetched the same-origin frame and passes it along; each
+    // page is drafted under the address a request to the server would use.
+    let draft = from_pages(&[shell.clone(), board], &Options::default()).unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = spec_of(&draft);
+    let names: Vec<&str> = spec.operations.iter().map(|o| o.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["get-portal", "get-board", "get-view", "post-write"],
+        "{}",
+        draft.yaml
+    );
+    let list = spec.op("get-board").unwrap();
+    assert_eq!(list.path, "/frame/board.do");
+    assert_eq!(list.query["bbs"].default, Some(1.into()));
+    let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
+    assert_eq!(html.items, "table tbody tr");
+    assert_eq!(html.fields["title"].selector, "td:nth-child(2)");
+    let view = spec.op("get-view").unwrap();
+    assert_eq!(view.path, "/frame/view.do");
+    assert!(view.query["id"].required);
+    let write = spec.op("post-write").unwrap();
+    assert_eq!(write.path, "/frame/write.do");
+    assert_eq!(write.preflight[0].path, "/frame/board.do?bbs=1");
+    assert!(!draft.yaml.contains("frame-token-9"));
+    assert_eq!(
+        draft.thin_reads, 1,
+        "only the shell checks nothing but a title"
+    );
+    assert!(
+        draft.notes.iter().any(|n| n
+            == "/portal/: shows https://cdn.example.net/widget in a frame on another site; left out."),
+        "{:?}",
+        draft.notes
+    );
+    assert!(
+        !draft.notes.iter().any(|n| n.contains("was not read")),
+        "{:?}",
+        draft.notes
+    );
+
+    // The shell alone is a title check, and the draft says what it skipped.
+    let alone = from_pages(std::slice::from_ref(&shell), &Options::default()).unwrap();
+    assert_eq!(
+        (alone.operations, alone.thin_reads),
+        (1, 1),
+        "{}",
+        alone.yaml
+    );
+    assert!(
+        alone.notes.iter().any(|n| n.starts_with(
+            "/portal/: shows /frame/board.do in a frame that was not read; `itda draft page` and `itda setup` follow"
+        )),
+        "{:?}",
+        alone.notes
+    );
+
+    // A frame page that is itself a frameset names its own frames the same way.
+    let nested = from_pages(
+        &[page(
+            "https://intranet.example.co.kr/frame/main.do",
+            "frame-nested.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    let noted: Vec<&String> = nested
+        .notes
+        .iter()
+        .filter(|n| n.contains("in a frame that was not read"))
+        .collect();
+    assert_eq!(noted.len(), 2, "{:?}", nested.notes);
+    assert!(noted[0].contains("/frame/menu.do"), "{:?}", noted);
+    assert!(noted[1].contains("/frame/board.do"), "{:?}", noted);
+}
+
+#[test]
+fn pages_read_with_a_query_session_name_the_query_key_instead_of_a_cookie() {
+    let draft = from_pages(
+        &[page("https://intranet.example.co.kr/board", "board.html")],
+        &Options {
+            name: Some("board".into()),
+            session: Some(itda_prep::SessionAuth {
+                cookie: "lang".into(),
+                query: Some("sid".into()),
+                login: itda_spec::LoginForm {
+                    path: "/login".into(),
+                    user: "user_id".into(),
+                    password: "pw".into(),
+                },
+            }),
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    let spec = spec_of(&draft);
+    itda_policy::validate_spec(&spec).unwrap();
+    let session = spec.find_auth("session").unwrap();
+    assert_eq!(session.value_from, "query:sid");
+    assert!(session.login.is_some());
+    assert!(spec.operations.iter().all(|op| op.auth == "session"));
 }

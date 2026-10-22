@@ -233,10 +233,17 @@ impl Runtime {
         });
         let mut secrets = Vec::new();
         let mut exposed = Vec::new();
+        // A session the site keeps in the query goes on the address of each
+        // request just before it is sent, the way a cookie goes in a header;
+        // the address the user reviews and the audit log never carry it.
+        let mut query_session = None;
         if let Some(account) = &account
             && let Some(credential) = self.credential(spec, op, account, &destination).await?
         {
-            headers.push((credential.header, credential.value));
+            if !credential.header.is_empty() {
+                headers.push((credential.header, credential.value));
+            }
+            query_session = credential.query;
             exposed.extend(credential.redact);
             secrets.push(credential.secret);
         }
@@ -344,7 +351,16 @@ impl Runtime {
         }
 
         if !op.preflight.is_empty() {
-            let found = preflight::run(&self.net, spec, op, &args, &request, &destination).await?;
+            let found = preflight::run(
+                &self.net,
+                spec,
+                op,
+                &args,
+                &request,
+                &destination,
+                query_session.as_ref(),
+            )
+            .await?;
             let preflight::Found {
                 values: found,
                 cookies,
@@ -423,6 +439,9 @@ impl Runtime {
 
         let read = approvals.is_none();
         let graphql = op.graphql_query(&call.args);
+        if let Some((key, value)) = &query_session {
+            request.url = itda_types::url::with_query_pair(&request.url, key, value);
+        }
         let response = match self.net.fetch(request).await {
             Ok(response) => response,
             // A change that failed after it may have reached the site has an
@@ -558,6 +577,7 @@ impl Runtime {
                     value: format!("{}{}", auth.prefix, secret.expose()),
                     redact: Vec::new(),
                     secret,
+                    query: None,
                 }))
             }
             "browser" => {
@@ -573,6 +593,25 @@ impl Runtime {
                     .vault
                     .secret(&spec.site.name, account, SESSION_SECRET)
                     .await?;
+                // A session the site carries in the query: the secret is
+                // the value itself, sent as `key=value` on every request.
+                if let Some(key) = auth.value_from.strip_prefix("query:") {
+                    let value = secret.expose().trim().to_owned();
+                    if value.is_empty() {
+                        return Err(AppError::api("auth_required", 401));
+                    }
+                    let redact = (value.len() >= 8)
+                        .then(|| value.clone())
+                        .into_iter()
+                        .collect();
+                    return Ok(Some(Credential {
+                        header: String::new(),
+                        value: String::new(),
+                        redact,
+                        secret,
+                        query: Some((key.to_owned(), value)),
+                    }));
+                }
                 let cookies = cookie_pairs(secret.expose());
                 // A jar without the cookie that proves sign-in is a signed-out session.
                 if let Some(required) = auth.value_from.strip_prefix("cookie:")
@@ -590,6 +629,7 @@ impl Runtime {
                     value: secret.expose().to_owned(),
                     redact,
                     secret,
+                    query: None,
                 }))
             }
             _ => Err(usage(
@@ -600,12 +640,14 @@ impl Runtime {
     }
 }
 
-/// A credential ready to send, and the values to keep out of results.
+/// A credential ready to send, and the values to keep out of results: a
+/// header (empty for a session that goes in the query) or a query pair.
 struct Credential {
     header: String,
     value: String,
     redact: Vec<String>,
     secret: Secret,
+    query: Option<(String, String)>,
 }
 
 /// The `name=value` pairs of a `Cookie` header value.

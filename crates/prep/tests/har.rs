@@ -342,3 +342,166 @@ fn a_recorded_page_number_declares_page_turning() {
     assert!(spec.op("get-notice").unwrap().pagination.is_none());
     assert!(spec.op("create-notice").unwrap().pagination.is_none());
 }
+
+/// A site that keeps its session in the address: the sign-in answers with
+/// a redirect carrying `sid`, and every page and call after it sends it.
+fn url_session_recording(redirect_carries_it: bool) -> serde_json::Value {
+    let token = "9f8e7d6c5b4a3210fedc";
+    let location = if redirect_carries_it {
+        format!("/portal/main.do?sid={token}")
+    } else {
+        "/portal/main.do".to_owned()
+    };
+    let page = |url: String, html: &str| {
+        serde_json::json!({
+            "request": {"method": "GET", "url": url, "headers": [], "queryString": []},
+            "response": {"status": 200, "headers": [], "content": {"mimeType": "text/html", "text": html}}
+        })
+    };
+    serde_json::json!({"log": {"entries": [
+        {
+            "request": {"method": "GET", "url": "https://portal.example.com/login?returnTo=%2Fportal", "headers": []},
+            "response": {"status": 200, "headers": [], "content": {"mimeType": "text/html", "text":
+                "<title>Sign in</title><form method='post' action='/login'><input name='user_id'><input type='password' name='pw'></form>"}}
+        },
+        {
+            "request": {"method": "POST", "url": "https://portal.example.com/login", "headers": [],
+                "postData": {"mimeType": "application/x-www-form-urlencoded", "text": "user_id=kim&pw=PW-VALUE"}},
+            "response": {"status": 302, "headers": [{"name": "Location", "value": location}],
+                "content": {"mimeType": "text/html", "text": ""}}
+        },
+        page(format!("https://portal.example.com/portal/main.do?sid={token}"),
+            &format!("<title>Main</title><h1>Notices</h1><table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                <tr><td>2</td><td><a href='/portal/view.do?sid={token}&id=2'>Second</a></td></tr>
+                <tr><td>1</td><td><a href='/portal/view.do?sid={token}&id=1'>First</a></td></tr></table>")),
+        {
+            "request": {"method": "GET", "url": format!("https://portal.example.com/api/notices?sid={token}&page=1"), "headers": [], "queryString": [{"name": "sid", "value": token}, {"name": "page", "value": "1"}]},
+            "response": {"status": 200, "headers": [], "content": {"mimeType": "application/json", "text": "{\"items\": [], \"total\": 2}"}}
+        },
+        {
+            "request": {"method": "GET", "url": format!("https://portal.example.com/api/notices/2?sid={token}"), "headers": []},
+            "response": {"status": 200, "headers": [], "content": {"mimeType": "application/json", "text": "{\"id\": 2, \"title\": \"t\"}"}}
+        },
+        {
+            "request": {"method": "POST", "url": format!("https://portal.example.com/api/notices?sid={token}"), "headers": [],
+                "postData": {"mimeType": "application/json", "text": "{\"title\": \"typed\"}"}},
+            "response": {"status": 302, "headers": [{"name": "Location", "value": format!("/portal/view.do?sid={token}&id=3")}], "content": {"mimeType": "text/html", "text": ""}}
+        }
+    ]}})
+}
+
+#[test]
+fn a_session_the_site_carries_in_the_query_becomes_a_browser_entry_on_that_key() {
+    for redirect_carries_it in [true, false] {
+        let har = url_session_recording(redirect_carries_it);
+        let text = serde_json::to_vec(&har).unwrap();
+        assert_eq!(
+            itda_prep::query_session_key(har["log"]["entries"].as_array().unwrap()).as_deref(),
+            Some("sid"),
+            "redirect carries it: {redirect_carries_it}"
+        );
+        let draft = itda_prep::from_recording(&text, &Options::default(), "`itda record`").unwrap();
+        assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+        let everything = format!("{}\n{}", draft.yaml, draft.notes.join("\n"));
+        assert!(!everything.contains("9f8e7d6c5b4a3210fedc"), "{everything}");
+        assert!(!everything.contains("PW-VALUE"), "{everything}");
+        let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+        itda_policy::validate_spec(&spec).unwrap();
+        assert_eq!(spec.auth.len(), 1, "{}", draft.yaml);
+        let session = &spec.auth[0];
+        assert_eq!(
+            (session.name.as_str(), session.kind.as_str()),
+            ("session", "browser")
+        );
+        assert_eq!(session.value_from, "query:sid");
+        let login = session.login.as_ref().unwrap();
+        assert_eq!(
+            (
+                login.path.as_str(),
+                login.user.as_str(),
+                login.password.as_str()
+            ),
+            ("/login", "user_id", "pw")
+        );
+        for op in spec.operations.iter().filter(|op| op.path != "/login") {
+            assert_eq!(op.auth, "session", "{}: {}", op.name, draft.yaml);
+            assert!(!op.query.contains_key("sid"), "{}: {}", op.name, draft.yaml);
+        }
+        assert!(
+            spec.op("post-login").is_err(),
+            "the sign-in is a person's:\n{}",
+            draft.yaml
+        );
+        assert!(
+            draft
+                .notes
+                .iter()
+                .any(|n| n.starts_with("POST /login: the sign-in; left out.")),
+            "{:?}",
+            draft.notes
+        );
+        let list = spec.op("list-notices").unwrap();
+        assert!(list.query["page"].required);
+        let main = spec.op("get-main").unwrap();
+        assert_eq!(main.path, "/portal/main.do");
+        assert!(main.query.is_empty(), "{}", draft.yaml);
+        assert!(
+            draft
+                .notes
+                .iter()
+                .any(|n| n.contains("carry the sid query parameter")),
+            "{:?}",
+            draft.notes
+        );
+        let in_recording = itda_prep::pages_in_recording(&text, "https://portal.example.com");
+        assert!(
+            in_recording.contains(&"https://portal.example.com/portal/main.do".to_owned()),
+            "{in_recording:?}"
+        );
+        assert!(
+            in_recording.iter().all(|url| !url.contains("sid=")),
+            "no page address keeps the session: {in_recording:?}"
+        );
+
+        // The copy kept for a refresh has the session blanked everywhere it
+        // appeared: addresses, the redirect, the links in the page.
+        let kept = String::from_utf8(redacted_recording(&text).unwrap()).unwrap();
+        assert!(!kept.contains("9f8e7d6c5b4a3210fedc"), "{kept}");
+        assert!(
+            kept.contains("sid=%3Credacted%3E") || kept.contains("sid=<redacted>"),
+            "{kept}"
+        );
+        assert!(kept.contains("page=1"), "other values stay: {kept}");
+        // The kept copy still drafts the query session and the same API
+        // actions. The sign-in page's HTML is wiped for privacy, so the
+        // login form and the login page it gave cannot come back from it;
+        // that is the redaction working, not a regression.
+        let same = itda_prep::from_recording(kept.as_bytes(), &Options::default(), "`itda record`")
+            .unwrap();
+        let same_spec = itda_spec::parse(same.yaml.as_bytes()).unwrap();
+        assert_eq!(
+            same_spec.find_auth("session").unwrap().value_from,
+            "query:sid"
+        );
+        let api = |s: &itda_spec::Spec| -> Vec<String> {
+            s.operations
+                .iter()
+                .filter(|op| op.path != "/login")
+                .map(|op| format!("{} {} {}", op.name, op.path, op.auth))
+                .collect()
+        };
+        assert_eq!(
+            api(&same_spec),
+            api(&spec),
+            "the API actions draft the same"
+        );
+    }
+
+    // Without a sign-in, no key is a session, however it looks.
+    let mut har = url_session_recording(true);
+    har["log"]["entries"].as_array_mut().unwrap().drain(..2);
+    assert_eq!(
+        itda_prep::query_session_key(har["log"]["entries"].as_array().unwrap()),
+        None
+    );
+}

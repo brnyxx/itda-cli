@@ -11,7 +11,7 @@ pub mod label;
 mod openapi;
 mod page;
 
-pub use har::{from_har, redacted_recording};
+pub use har::{from_har, query_session_key, redacted_recording};
 pub use openapi::{from_openapi, is_openapi};
 pub use page::{
     DESCRIPTION_PATH, Description, Page, embeds_lists, from_pages, from_pages_and_description,
@@ -42,10 +42,14 @@ pub struct Options {
 }
 
 /// A sign-in the pages were read with: the cookie that shows it (empty when
-/// none could be told) and the form that gave it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// none could be told), or the query key the site carries the session in
+/// (which then takes the cookie's place), and the form that gave it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionAuth {
     pub cookie: String,
+    /// The query key every signed-in request carries, such as `sid`, when
+    /// the site keeps its session in the address rather than a cookie.
+    pub query: Option<String>,
     pub login: itda_spec::LoginForm,
 }
 
@@ -229,9 +233,13 @@ impl Parts {
 }
 
 /// The addresses of the pages a recording holds under `base_url`, the ones
-/// [`from_recording`] drafts from, so they can be fetched again later.
+/// [`from_recording`] drafts from, so they can be fetched again later. A
+/// session the site carries in the query is taken off each address.
 pub fn pages_in_recording(text: &[u8], base_url: &str) -> Vec<String> {
     let doc: serde_json::Value = serde_json::from_slice(text).unwrap_or_default();
+    let session_key = doc["log"]["entries"]
+        .as_array()
+        .and_then(|entries| query_session_key(entries));
     let mut pages: Vec<String> = Vec::new();
     for entry in doc["log"]["entries"].as_array().into_iter().flatten() {
         if !har::html_page(entry) {
@@ -241,10 +249,14 @@ pub fn pages_in_recording(text: &[u8], base_url: &str) -> Vec<String> {
             continue;
         };
         let url = url.split('#').next().unwrap_or(url);
-        if pages.iter().any(|page| page == url) || !url.starts_with(base_url) {
+        let url = match &session_key {
+            Some(key) => itda_types::url::without_query_key(url, key),
+            None => url.to_owned(),
+        };
+        if pages.contains(&url) || !url.starts_with(base_url) {
             continue;
         }
-        pages.push(url.to_owned());
+        pages.push(url);
         if pages.len() == 20 {
             break;
         }
@@ -259,6 +271,11 @@ pub fn pages_in_recording(text: &[u8], base_url: &str) -> Vec<String> {
 pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult<Draft> {
     let mut parts = har::har_parts(text, options)?;
     let doc: serde_json::Value = serde_json::from_slice(text).unwrap_or_default();
+    // A session carried in the query is auth, never an input with the
+    // session as its default: it comes off every page address first.
+    let session_key = doc["log"]["entries"]
+        .as_array()
+        .and_then(|entries| query_session_key(entries));
     let mut pages: Vec<Page> = Vec::new();
     for entry in doc["log"]["entries"].as_array().into_iter().flatten() {
         if !har::html_page(entry) {
@@ -271,11 +288,15 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
             continue;
         };
         let url = url.split('#').next().unwrap_or(url);
+        let url = match &session_key {
+            Some(key) => itda_types::url::without_query_key(url, key),
+            None => url.to_owned(),
+        };
         if pages.iter().any(|page| page.url == url) || !url.starts_with(&parts.base_url) {
             continue;
         }
         pages.push(Page {
-            url: url.to_owned(),
+            url,
             html: html.to_owned(),
         });
         if pages.len() == 20 {
@@ -286,13 +307,28 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
         }
     }
     if !pages.is_empty() {
+        // A session the site carries in the query makes the pages read
+        // signed in too, so they carry `auth: session` like the calls; the
+        // auth entry itself is already on `parts`, so the merge keeps that
+        // one and only the per-operation auth comes from here.
+        let session = url::Url::parse(&parts.base_url).ok().and_then(|base| {
+            let prefix = base.path().trim_end_matches('/').to_owned();
+            har::query_session_auth(
+                &doc["log"]["entries"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
+                &base.origin(),
+                &prefix,
+            )
+        });
         let page_options = Options {
             name: Some(parts.site.clone()),
             base_url: Some(parts.base_url.clone()),
             include: options.include.clone(),
             lang: options.lang.clone(),
             schemas: Vec::new(),
-            session: None,
+            session,
         };
         parts.merge(page::page_parts(&pages, &page_options)?);
     }

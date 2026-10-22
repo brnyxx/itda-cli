@@ -537,7 +537,7 @@ async fn login(
         Err(_) => return failure(&AppError::api("internal", 500)),
     };
     let count = session.count;
-    match itda_setup::login::keep(ctx, site, account, "", session).await {
+    match itda_setup::login::keep(ctx, site, account, "", session, "").await {
         Ok(()) => structured(json!({
             "status": "ok",
             "site": site,

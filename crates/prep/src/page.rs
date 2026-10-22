@@ -419,6 +419,26 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
                 url.path()
             ));
         }
+        // The pages in the page's frames are pages of the site when they
+        // are on its origin; the caller fetches them and passes them along.
+        // One on another site is only named, never fetched.
+        for frame in evidence::frames(&page.html, url.as_str()) {
+            if !frame.same_origin {
+                notes.push(format!(
+                    "{}: shows {} in a frame on another site; left out.",
+                    url.path(),
+                    frame.url
+                ));
+            } else if !pages.iter().any(|p| p.url == frame.url) {
+                notes.push(format!(
+                    "{}: shows {} in a frame that was not read; `itda draft page` and `itda setup` follow a site's own frames.",
+                    url.path(),
+                    url::Url::parse(&frame.url)
+                        .map(|f| f.path().to_owned())
+                        .unwrap_or(frame.url)
+                ));
+            }
+        }
     }
     let mut auth = Vec::new();
     if let Some(session) = &options.session {
@@ -427,7 +447,9 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
         let mut strategy = Mapping::new();
         strategy.insert("name".into(), "session".into());
         strategy.insert("kind".into(), "browser".into());
-        if !session.cookie.is_empty() {
+        if let Some(key) = &session.query {
+            strategy.insert("value_from".into(), format!("query:{key}").into());
+        } else if !session.cookie.is_empty() {
             strategy.insert(
                 "value_from".into(),
                 format!("cookie:{}", session.cookie).into(),

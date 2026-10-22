@@ -1188,18 +1188,39 @@ async fn login_form(
             t("cookie_missing_fix"),
         ));
     }
+    // A session the site carries in the query: the sign-in must have handed
+    // out the key the definition names, in its redirect or on the first page.
+    let query = value_from.strip_prefix("query:");
+    if let Some(required) = query
+        && signed
+            .session
+            .query
+            .as_ref()
+            .is_none_or(|(key, _)| key != required)
+    {
+        return Err(usage(
+            tf("query_missing", &[("name", required), ("site", site)]),
+            t("query_missing_fix"),
+        ));
+    }
     let count = signed.session.count;
-    itda_setup::login::keep(&ctx, site, account, label, signed.session).await?;
+    itda_setup::login::keep(&ctx, site, account, label, signed.session, value_from).await?;
     eprintln!(
         "{}",
-        tf(
-            "session_saved",
-            &[
-                ("site", site),
-                ("account", account),
-                ("n", &count.to_string())
-            ]
-        )
+        match query {
+            Some(key) => tf(
+                "session_saved_query",
+                &[("site", site), ("account", account), ("name", key)]
+            ),
+            None => tf(
+                "session_saved",
+                &[
+                    ("site", site),
+                    ("account", account),
+                    ("n", &count.to_string())
+                ]
+            ),
+        }
     );
     Ok(ExitCode::SUCCESS)
 }
@@ -1222,7 +1243,7 @@ async fn login_browser(
     .await
     .map_err(|_| AppError::api("internal", 500))??;
     let count = session.count;
-    itda_setup::login::keep(&ctx, site, account, label, session).await?;
+    itda_setup::login::keep(&ctx, site, account, label, session, "").await?;
     eprintln!(
         "Saved the session for {site}/{account} ({count} cookies); it is sealed under the data directory with a key in the system keyring. Agents only see the account id."
     );
@@ -1462,10 +1483,18 @@ async fn draft_page(
             response.url,
             response.bytes.len().div_ceil(1024)
         );
-        pages.push(itda_prep::Page {
+        let page = itda_prep::Page {
             url: response.url.clone(),
             html: String::from_utf8_lossy(&response.bytes).into_owned(),
-        });
+        };
+        // A shell whose content is in frames on its own origin is read
+        // through them, each frame page under its own address.
+        let mut framed = itda_setup::frames::follow(&net, &page, None).await?;
+        if let Some(line) = text::followed_frames(&framed.followed) {
+            eprintln!("{line}");
+        }
+        pages.push(page);
+        pages.append(&mut framed.pages);
     }
     let endpoints = itda_setup::introspect::endpoints_in_pages(&pages);
     if !endpoints.is_empty() {
