@@ -2,7 +2,7 @@
 
 <p align="center"><strong>itda 뒤에 주소만 쓰면 AI가 사이트를 써요.</strong></p>
 
-<p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
+<p align="center"><a href="README.md">English</a> | <b>한국어</b> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.de.md">Deutsch</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.vi.md">Tiếng Việt</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.ru.md">Русский</a></p>
 
 <p align="center">
   <a href="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml"><img src="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -179,13 +179,13 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 터미널 없이 Claude Desktop에서: [macOS (Apple silicon)](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-aarch64-apple-darwin.mcpb),
 [macOS (Intel)](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-apple-darwin.mcpb),
 [Windows](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-pc-windows-msvc.mcpb) 중 내 컴퓨터에 맞는 번들을 받아서
-열면 됩니다. Claude Desktop이 itda와 도구를 설치하고, 대화 안에서 "내가-쓰는-사이트.example
+열면 됩니다. Claude Desktop이 itda와 도구를 설치하고, 대화 안에서 "the-site-you-use.example
 써 줘"라고 하면 사이트가 세팅됩니다. 변경 승인은 여전히 터미널의 `itda approve`에서
 하니, 변경까지 쓰려면 명령도 설치하세요.
 
 `itda` 뒤에 내가 쓰는 사이트 주소를 쓰면 됩니다. 내 컴퓨터의 에이전트 앱을 찾아
-Enter 한 번에 연결합니다. 한국어 환경이면 한국어로 말합니다. 그냥 `itda`만 치면
-주소를 물어보고, 스크립트에서는 `itda setup <주소>`에 옵션을 줍니다.
+Enter 한 번에 연결합니다. 12개 언어로 말합니다. `LANG`에 따라
+고르고 `ITDA_LANG`이 있으면 그것을 따릅니다. 그냥 `itda`만 치면 주소를 물어보고, 스크립트에서는 `itda setup <주소>`에 옵션을 줍니다.
 
 잘 알려진 소프트웨어로 돌아가는 사이트는 알아봅니다. 페이지가 GitLab, Jira,
 Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea(Forgejo 포함)라고
@@ -212,10 +212,10 @@ Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea(Forgejo 포함)라�
 이걸 건네세요:
 
 ```text
-itda를 설치하고 내가-쓰는-사이트.example을 세팅해 줘.
+itda를 설치하고 the-site-you-use.example을 세팅해 줘.
 1. 설치: curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh
    (Windows면: irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex)
-2. 실행: itda setup https://내가-쓰는-사이트.example --client claude-code -y
+2. 실행: itda setup https://the-site-you-use.example --client claude-code -y
    (네가 cursor, codex, claude-desktop이면 그 이름으로)
 3. https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md 를 읽고 itda로 그 사이트를 써.
    읽기는 그냥 하면 돼. 사이트를 바꾸는 건 내 승인을 기다려.

@@ -2,7 +2,7 @@
 
 <p align="center"><strong>Just type an address after itda and your AI can use the site.</strong></p>
 
-<p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><b>English</b> | <a href="README.ko.md">한국어</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.de.md">Deutsch</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.vi.md">Tiếng Việt</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.ru.md">Русский</a></p>
 
 <p align="center">
   <a href="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml"><img src="https://github.com/brnyxx/itda-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -185,9 +185,9 @@ a site up from inside the conversation. Approving a change still happens in a
 terminal with `itda approve`, so for changes install the command too.
 
 Type `itda` and the address of a site you use. It finds agent apps on your
-computer and connects them after one Enter. `ITDA_LANG=ko` makes it speak
-Korean. A bare `itda` asks for the address; `itda setup <address>` takes flags
-for scripts.
+computer and connects them after one Enter. It speaks twelve languages: `LANG`
+picks one and `ITDA_LANG` overrides it. A bare `itda` asks for the address;
+`itda setup <address>` takes flags for scripts.
 
 itda recognises sites that run known software. When the page says it is a
 GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress or Gitea

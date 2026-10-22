@@ -106,16 +106,21 @@ html[lang="ko"] .eyebrow { text-transform: none; }
 .nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; color: var(--muted); }
 .nav-links a:hover { color: var(--text); }
 .lang {
-  font: 500 13px var(--sans); color: var(--muted); background: none; cursor: pointer;
-  padding: 6px 12px; border: 1px solid var(--edge); border-radius: 999px;
+  font: 500 13px var(--sans); color: var(--muted); cursor: pointer; color-scheme: dark;
+  padding: 6px 28px 6px 12px; border: 1px solid var(--edge); border-radius: 999px;
   background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+  appearance: none; -webkit-appearance: none; max-width: 42vw;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%23a8b0c0' stroke-width='1.5'/%3E%3C/svg%3E"), linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+  background-repeat: no-repeat; background-position: right 10px center, 0 0; background-size: 12px, auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lang:hover { color: var(--text); border-color: rgba(255,255,255,.3); }
+.lang option { color: var(--text); background: #14171f; }
 html[lang="ko"] body { word-break: keep-all; }
-html[lang="ko"] h1 { font-size: clamp(36px, 4.6vw, 54px); letter-spacing: -.03em; line-height: 1.15; }
-html[lang="ko"] h2 { letter-spacing: -.02em; line-height: 1.25; }
-html[lang="ko"] .term-bar em { font-family: var(--sans); }
+html[lang="ko"] h1, html:lang(ja) h1, html:lang(zh) h1 { font-size: clamp(36px, 4.6vw, 54px); letter-spacing: -.03em; line-height: 1.15; }
+html[lang="ko"] h2, html:lang(ja) h2, html:lang(zh) h2 { letter-spacing: -.02em; line-height: 1.25; }
+html[lang="ko"] .term-bar em, html:lang(ja) .term-bar em, html:lang(zh) .term-bar em { font-family: var(--sans); }
 .nav-gh {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 7px 14px; border: 1px solid var(--edge); border-radius: 999px; color: var(--text);

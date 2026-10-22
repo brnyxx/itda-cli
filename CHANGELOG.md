@@ -7,6 +7,20 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- Twelve languages. What `itda setup`, `itda login`, `itda refresh` and the
+  first bare `itda` print now comes in English, Korean, Japanese, Simplified
+  and Traditional Chinese, Spanish, French, German, Brazilian Portuguese,
+  Vietnamese, Indonesian and Russian, chosen from `ITDA_LANG` or the system
+  `LANG` (`ja_JP.UTF-8`, `zh-TW`, `pt` all resolve). The landing page picks the
+  browser's language, has a picker in the header and remembers the choice;
+  the README has one translation per language, linked from a language line at
+  the top of each. What agents read (tool descriptions, error codes and
+  remedies, site definitions) stays English. The strings live in
+  `apps/cli/text/<tag>.json`, `site/i18n/<tag>.js` and `README.<tag>.md`;
+  `docs/i18n.md` has the glossary and the rules.
+
 ### Changed
 
 - The gate reads the request it is about to send, not only the declared

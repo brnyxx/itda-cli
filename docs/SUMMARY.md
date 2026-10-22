@@ -8,6 +8,7 @@
 - [Use it from an agent](agents.md)
 - [Approvals and the audit log](approvals.md)
 - [Writing a site definition](SPEC.md)
+- [Languages](i18n.md)
 
 # Design
 
