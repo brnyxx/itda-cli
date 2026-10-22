@@ -16,9 +16,10 @@ use itda_runtime::{
     audit::{AuditLog, Event},
 };
 use itda_setup::{check, sites};
+use itda_spec::{Operation, Spec};
 use itda_store::Store;
 use itda_types::error::{AppError, AppResult, usage};
-use itda_vault::{EnvStore, KeyringStore, Secret, SecretStore, Vault};
+use itda_vault::{EnvStore, KeyringStore, SealedStore, Secret, SecretStore, Vault};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -45,6 +46,15 @@ enum Command {
     Ls {
         /// Only this site
         site: Option<String>,
+        /// Print JSON for scripts and agents
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show a site's actions with their inputs and an example command each:
+    /// itda describe <site> or itda describe <site>.<action>
+    Describe {
+        /// <site> or <site>.<action>
+        target: String,
         /// Print JSON for scripts and agents
         #[arg(long)]
         json: bool,
@@ -233,6 +243,10 @@ enum Command {
         /// that show elicitation requests to you (also ITDA_APPROVE_IN_CLIENT=1)
         #[arg(long)]
         approve_in_client: bool,
+        /// Serve this one site only: its actions are the only tools, and
+        /// itda_setup, itda_login, itda_check and itda_manage stay inside it
+        #[arg(long)]
+        site: Option<String>,
     },
 }
 
@@ -338,6 +352,7 @@ fn main() -> ExitCode {
         }
     };
     let as_json = matches!(&command, Command::Ls { json: true, .. })
+        || matches!(&command, Command::Describe { json: true, .. })
         || matches!(&command, Command::Approvals { json: true })
         || matches!(&command, Command::Accounts { json: true, .. })
         || matches!(&command, Command::Audit { json: true, .. })
@@ -345,6 +360,7 @@ fn main() -> ExitCode {
         || matches!(&command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
+        Command::Describe { target, json } => describe(&home, &target, json),
         Command::Add { source, force } => block_on(add(&home, &source, force)),
         Command::Remove { site } => remove(&home, &site),
         Command::Call { target, rest } => block_on(call(&home, &target, rest)),
@@ -513,10 +529,12 @@ fn main() -> ExitCode {
             command: None,
             mode,
             approve_in_client,
+            site,
         } => block_on(mcp(
             &home,
             mode.as_deref(),
             approve_in_client || std::env::var("ITDA_APPROVE_IN_CLIENT").is_ok_and(|v| v == "1"),
+            site.as_deref(),
         )),
     });
     match result {
@@ -641,12 +659,15 @@ fn allow_local() -> bool {
     std::env::var("ITDA_ALLOW_LOCAL").is_ok_and(|v| v == "1")
 }
 
-/// `ITDA_SECRET_STORE=env` reads `ITDA_SECRET__` variables instead of the keyring.
-fn secret_store() -> Arc<dyn SecretStore> {
+/// `ITDA_SECRET_STORE=env` reads `ITDA_SECRET__` variables instead of the
+/// keyring. Otherwise short secrets go to the keyring and long ones (browser
+/// sessions) into `vault.sealed` under the data directory, sealed with a key
+/// that lives in the keyring.
+fn secret_store(home: &Path) -> Arc<dyn SecretStore> {
     if std::env::var("ITDA_SECRET_STORE").is_ok_and(|v| v == "env") {
         Arc::new(EnvStore::from_env())
     } else {
-        Arc::new(KeyringStore::new())
+        Arc::new(SealedStore::new(home, Arc::new(KeyringStore::new())))
     }
 }
 
@@ -701,7 +722,7 @@ fn open(home: &Path) -> AppResult<Parts> {
         approvals: Arc::new(Approvals::open(store.clone())?),
         cursors: Arc::new(Cursors::open(store.clone())?),
         audit: Arc::new(audit_log(home)),
-        vault: Arc::new(Vault::open(store, secret_store())?),
+        vault: Arc::new(Vault::open(store, secret_store(home))?),
     })
 }
 
@@ -727,6 +748,7 @@ fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
                         "name": op.name,
                         "effect": operation_effect(op, &BTreeMap::new()).as_str(),
                         "desc": op.desc,
+                        "example": example_command(&spec.site.name, op),
                     })).collect::<Vec<_>>(),
                 }),
                 Err(error) => json!({"site": site.name, "path": site.path, "error": error.msg}),
@@ -759,6 +781,117 @@ fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Every action of a site, or one of them, with its inputs and a command
+/// to copy. The example names the inputs the action cannot run without.
+fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
+    let (site, action) = match target.split_once('.') {
+        Some((site, action)) => (site, Some(action)),
+        None => (target, None),
+    };
+    let spec = sites::load(home, site)?;
+    let ops: Vec<&Operation> = match action {
+        Some(action) => vec![spec.op(action)?],
+        None => spec.operations.iter().collect(),
+    };
+    if as_json {
+        let rows: Vec<Value> = ops.iter().map(|op| describe_json(&spec, op)).collect();
+        println!("{}", Value::Array(rows));
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!("{}  {}", spec.site.name, spec.site.base_url);
+    for op in ops {
+        let effect = operation_effect(op, &BTreeMap::new());
+        let word = text::t(if effect == itda_policy::Effect::Read {
+            "read"
+        } else {
+            "change"
+        });
+        println!("  {word} {:<28} {}", op.name, op.desc);
+        let inputs: Vec<String> = declared_inputs(op)
+            .iter()
+            .map(|(name, kind, required, default)| {
+                let mut notes = vec![kind.clone()];
+                if *required {
+                    notes.push(text::t("required").to_owned());
+                }
+                if let Some(default) = default {
+                    notes.push(text::tf(
+                        "default",
+                        &[("value", &itda_types::util::plain(default))],
+                    ));
+                }
+                format!("{name} ({})", notes.join(", "))
+            })
+            .collect();
+        if !inputs.is_empty() {
+            println!(
+                "         {}",
+                text::tf("inputs", &[("list", &inputs.join(", "))])
+            );
+        }
+        println!(
+            "         {}",
+            text::tf(
+                "example",
+                &[("command", &example_command(&spec.site.name, op))]
+            )
+        );
+        if effect != itda_policy::Effect::Read {
+            println!("         {}", text::t("approve_note"));
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn describe_json(spec: &Spec, op: &Operation) -> Value {
+    json!({
+        "site": spec.site.name,
+        "action": op.name,
+        "effect": operation_effect(op, &BTreeMap::new()).as_str(),
+        "desc": op.desc,
+        "inputs": declared_inputs(op).iter().map(|(name, kind, required, default)| json!({
+            "name": name,
+            "type": kind,
+            "required": required,
+            "default": default,
+        })).collect::<Vec<_>>(),
+        "example": example_command(&spec.site.name, op),
+    })
+}
+
+/// The inputs an agent may give: name, type, whether the action cannot run
+/// without it, and its default. Values a preflight step fills are left out.
+fn declared_inputs(op: &Operation) -> Vec<(String, String, bool, Option<Value>)> {
+    let needed = check::needed_inputs(op);
+    op.params
+        .iter()
+        .chain(op.query.iter())
+        .chain(op.body.iter().flat_map(|body| body.inputs()))
+        .filter(|(_, param)| !param.from_step())
+        .map(|(name, param)| {
+            (
+                name.clone(),
+                param.kind.clone(),
+                needed.contains(name),
+                param.default.clone(),
+            )
+        })
+        .collect()
+}
+
+/// A command to copy: the action with a placeholder for each input it
+/// cannot run without.
+fn example_command(site: &str, op: &Operation) -> String {
+    let mut command = format!("itda call {site}.{}", op.name);
+    for (name, kind, required, _) in declared_inputs(op) {
+        if required {
+            command.push_str(&format!(" --{name} <{kind}>"));
+        }
+    }
+    command.push_str(" --json");
+    command
 }
 
 struct CallFlags {
@@ -960,10 +1093,17 @@ async fn login(
             "Pipe the secret on stdin, for example from your password manager.",
         ));
     }
-    let vault = open(home)?.vault;
-    vault.add_account(site, account, label).await?;
-    vault
+    let parts = open(home)?;
+    parts.vault.add_account(site, account, label).await?;
+    parts
+        .vault
         .set_secret(site, account, secret, Secret::new(value))
+        .await?;
+    // Approvals were bound to the credential the user saw; a new one needs
+    // a new look.
+    parts
+        .approvals
+        .invalidate(Some(site), Some(account))
         .await?;
     eprintln!("Saved {secret} for {site}/{account}.");
     Ok(ExitCode::SUCCESS)
@@ -989,7 +1129,7 @@ async fn login_browser(
     let count = session.count;
     itda_setup::login::keep(&ctx, site, account, label, session).await?;
     eprintln!(
-        "Saved the session for {site}/{account} ({count} cookies) in the system keyring. Agents only see the account id."
+        "Saved the session for {site}/{account} ({count} cookies); it is sealed under the data directory with a key in the system keyring. Agents only see the account id."
     );
     Ok(ExitCode::SUCCESS)
 }
@@ -1049,6 +1189,11 @@ async fn add(home: &Path, source: &str, force: bool) -> AppResult<ExitCode> {
         itda_types::util::read_bounded(Path::new(source), LIMIT)?
     };
     let (spec, path) = sites::install(home, &bytes, force)?;
+    if force {
+        approvals_store(home)?
+            .invalidate(Some(&spec.site.name), None)
+            .await?;
+    }
     eprintln!("Installed {} at {}.", spec.site.name, path.display());
     for line in sites::review(&spec) {
         eprintln!("  {line}");
@@ -1059,6 +1204,10 @@ async fn add(home: &Path, source: &str, force: bool) -> AppResult<ExitCode> {
 
 fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
     sites::remove(home, site)?;
+    block_on(async {
+        approvals_store(home)?.invalidate(Some(site), None).await?;
+        Ok(ExitCode::SUCCESS)
+    })?;
     eprintln!("Removed {site}. Accounts signed in to it stay until `itda logout {site}`.");
     Ok(ExitCode::SUCCESS)
 }
@@ -1404,6 +1553,7 @@ fn publish(
             "Pass --force to replace it, or --name to install under another name.",
         ));
     }
+    let replaced = path.exists();
     itda_types::util::atomic_file(&path, draft.yaml.as_bytes())?;
     let Origin {
         mut sources,
@@ -1417,6 +1567,13 @@ fn publish(
         )?);
     }
     itda_setup::refresh::remember(home, &draft.site, sources)?;
+    if replaced {
+        let site = draft.site.clone();
+        block_on(async {
+            approvals_store(home)?.invalidate(Some(&site), None).await?;
+            Ok(ExitCode::SUCCESS)
+        })?;
+    }
     eprintln!(
         "Installed at {}. Review it, then try `itda ls {}`.",
         path.display(),
@@ -1468,6 +1625,9 @@ async fn logout(home: &Path, site: &str, account: &str) -> AppResult<ExitCode> {
         ));
     }
     vault.remove_account(site, account).await?;
+    approvals_store(home)?
+        .invalidate(Some(site), Some(account))
+        .await?;
     eprintln!("Removed {site}/{account} and its saved secrets.");
     Ok(ExitCode::SUCCESS)
 }
@@ -1598,14 +1758,50 @@ fn audit(home: &Path, limit: usize, verify: bool, as_json: bool) -> AppResult<Ex
             }
         );
     }
+    let unfinished = log.unfinished_changes()?;
+    if !unfinished.is_empty() {
+        println!("\n{}", unfinished_words(&unfinished));
+    }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Changes that were about to be sent when the process stopped: nobody
+/// knows whether the site applied them.
+fn unfinished_words(unfinished: &[itda_runtime::audit::Record]) -> String {
+    let list: Vec<String> = unfinished
+        .iter()
+        .map(|r| {
+            format!(
+                "{}.{} (record {}, approval {})",
+                r.site, r.action, r.seq, r.approval
+            )
+        })
+        .collect();
+    format!(
+        "{} change{} with an unknown outcome: the process stopped after the change was sent. Check the site before asking for {} again: {}",
+        unfinished.len(),
+        if unfinished.len() == 1 { "" } else { "s" },
+        if unfinished.len() == 1 { "it" } else { "them" },
+        list.join(", ")
+    )
 }
 
 /// Serve MCP on stdin and stdout. Stdout belongs to the protocol, so nothing
 /// else is printed there; invalid sites are reported on stderr and skipped.
-async fn mcp(home: &Path, mode: Option<&str>, approve_in_client: bool) -> AppResult<ExitCode> {
+async fn mcp(
+    home: &Path,
+    mode: Option<&str>,
+    approve_in_client: bool,
+    only: Option<&str>,
+) -> AppResult<ExitCode> {
+    if let Some(site) = only {
+        sites::load(home, site)?;
+    }
     let mut specs = Vec::new();
     for site in sites::list(home) {
+        if only.is_some_and(|only| only != site.name) {
+            continue;
+        }
         match site.spec {
             Ok(spec) => specs.push(spec),
             Err(error) => eprintln!("itda: skipping {}: {}", site.name, error.msg),
@@ -1624,6 +1820,9 @@ async fn mcp(home: &Path, mode: Option<&str>, approve_in_client: bool) -> AppRes
             .with_setup(ctx);
     if approve_in_client {
         server = server.with_client_approval(approvals, audit);
+    }
+    if let Some(site) = only {
+        server = server.with_site(site);
     }
     server
         .serve_stdio()
@@ -1802,6 +2001,12 @@ fn feedback(home: &Path, no_open: bool) -> ExitCode {
 
 /// Each doctor check: whether it passed, what it checked, and the detail
 /// people read. The detail can hold a path.
+fn user_home_dir() -> PathBuf {
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from)
+        .unwrap_or_default()
+}
+
 fn doctor_checks(home: &Path) -> Vec<(bool, &'static str, String)> {
     let mut checks = Vec::new();
     let mut report = |ok: bool, what: &'static str, detail: String| {
@@ -1818,7 +2023,14 @@ fn doctor_checks(home: &Path) -> Vec<(bool, &'static str, String)> {
             "secrets",
             "ITDA_SECRET__ environment variables".into(),
         ),
-        (Ok(()), _) => report(true, "secrets", "system keyring".into()),
+        (Ok(()), _) => report(
+            true,
+            "secrets",
+            format!(
+                "system keyring; long secrets sealed in {} with a key from the keyring",
+                tilde(&home.join(itda_vault::SEALED_FILE), &user_home_dir())
+            ),
+        ),
         (Err(msg), _) => report(
             false,
             "secrets",
@@ -1829,6 +2041,13 @@ fn doctor_checks(home: &Path) -> Vec<(bool, &'static str, String)> {
         Ok(count) => report(true, "audit log", format!("{count} records, chain intact")),
         Err(error) => report(false, "audit log", error.msg),
     }
+    match audit_log(home).unfinished_changes() {
+        Ok(unfinished) if unfinished.is_empty() => {
+            report(true, "changes", "none with an unknown outcome".into());
+        }
+        Ok(unfinished) => report(true, "changes", unfinished_words(&unfinished)),
+        Err(error) => report(false, "changes", error.msg),
+    }
     let installed = sites::list(home);
     let invalid = installed.iter().filter(|s| s.spec.is_err()).count();
     report(
@@ -1836,9 +2055,7 @@ fn doctor_checks(home: &Path) -> Vec<(bool, &'static str, String)> {
         "sites",
         format!("{} installed, {invalid} invalid", installed.len()),
     );
-    let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .map(PathBuf::from)
-        .unwrap_or_default();
+    let user_home = user_home_dir();
     let cwd = std::env::current_dir().unwrap_or_default();
     let agents = install::connected(&user_home, &cwd);
     report(

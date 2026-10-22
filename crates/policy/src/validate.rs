@@ -1,8 +1,9 @@
 //! Safety validation of a SiteSpec before it is installed or executed.
 //!
-//! Derived from Hycli `src/policy.rs` (`validate_spec`) and `src/session_recipe.rs`
-//! (`allowed_header`), Apache-2.0. Changes: URL checks come from `itda_types::url`
-//! and selector checks from `itda_html`.
+//! Derived from Hycli `src/policy.rs` (`validate_spec`), Apache-2.0. Changes:
+//! URL checks come from `itda_types::url` and selector checks from `itda_html`;
+//! the browser transports and derived credentials were removed with the
+//! browser session machinery, and headers that override the method are refused.
 use crate::classify::operation_effect;
 use itda_spec::{Effect, Spec};
 use itda_types::{
@@ -11,24 +12,20 @@ use itda_types::{
     util,
 };
 
-/// Headers a derived credential may set. Transport and identity headers are refused.
-pub fn allowed_header(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 80
-        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-        && ![
-            "cookie",
-            "host",
-            "origin",
-            "referer",
-            "content-length",
-            "transfer-encoding",
-            "connection",
-            "proxy-authorization",
-            "proxy-connection",
-        ]
-        .contains(&name.to_ascii_lowercase().as_str())
-        && !name.to_ascii_lowercase().starts_with("sec-")
+/// A header or input that asks the site to treat the request as another
+/// method or effect than the one itda classified, such as
+/// `X-HTTP-Method-Override: DELETE` on a POST. Refused everywhere: the method
+/// that was reviewed is the method that is sent.
+pub fn overrides_method(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "x-http-method-override" | "x-method-override" | "x-http-method" | "_method"
+    )
+}
+
+/// A header that imitates a browser: `sec-fetch-*`, `sec-ch-ua` and the rest.
+fn imitates_browser(name: &str) -> bool {
+    name.trim().to_ascii_lowercase().starts_with("sec-")
 }
 
 /// One reason a SiteSpec is refused: a stable public code, the field it is about
@@ -147,28 +144,11 @@ fn check_operation(
     out: &mut Problems,
 ) {
     let id = format!("operations.{}", op.name);
-    if !["", "http", "browser-fetch", "browser"].contains(&op.transport.as_str()) {
+    if !["", "http"].contains(&op.transport.as_str()) {
         out.add(
             "data_invalid",
             format!("{id}.transport"),
-            "unknown transport",
-        );
-    } else if op.transport == "browser"
-        && (op.method != "GET"
-            || op.body.is_some()
-            || operation_effect(op, &Default::default()) != Effect::Read
-            || op
-                .response
-                .as_ref()
-                .is_none_or(|response| response.format != "html")
-            || sp
-                .find_auth(&op.auth)
-                .is_some_and(|auth| auth.kind == "header"))
-    {
-        out.add(
-            "data_invalid",
-            format!("{id}.transport"),
-            "a rendered browser read must be a GET read that returns html without header auth",
+            "itda sends plain HTTP requests only; leave transport out",
         );
     }
     if let Some(destination) = out.url(&format!("{id}.base_url"), sp.operation_base(op)) {
@@ -306,6 +286,25 @@ fn check_operation(
                 "credential, transport or multi-line headers are not allowed",
             );
         }
+        if overrides_method(key) || imitates_browser(key) {
+            out.add(
+                "data_invalid",
+                format!("{id}.headers.{key}"),
+                "headers that override the method or imitate a browser are not allowed",
+            );
+        }
+    }
+    let inputs = op.params.keys().chain(op.query.keys()).chain(
+        op.body
+            .iter()
+            .flat_map(|body| body.inputs().map(|(name, _)| name)),
+    );
+    for name in inputs.filter(|name| overrides_method(name)) {
+        out.add(
+            "data_invalid",
+            format!("{id}.{name}"),
+            "an input that overrides the method is not allowed",
+        );
     }
 }
 
@@ -335,7 +334,7 @@ fn check_operation_auth(
                 "header credentials may only go to their own origin",
             );
         }
-    } else if matches!(auth.kind.as_str(), "browser" | "derived") {
+    } else if auth.kind == "browser" {
         let scope = if auth.origin.is_empty() {
             sp.site.source_url()
         } else {
@@ -464,18 +463,6 @@ fn check_auth(sp: &Spec, out: &mut Problems) {
                 "data_invalid",
                 format!("{field}.value_from"),
                 "header credentials must come from this site's own store",
-            );
-        }
-        if auth.kind == "derived"
-            && (!allowed_header(&auth.header)
-                || !(auth.value_from.starts_with("cookie:")
-                    || auth.value_from.starts_with("storage:")
-                    || auth.value_from.starts_with("header:")))
-        {
-            out.add(
-                "data_invalid",
-                field,
-                "derived credentials need an allowed header and a cookie, storage or header source",
             );
         }
     }

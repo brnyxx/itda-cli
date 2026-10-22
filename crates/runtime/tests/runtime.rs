@@ -284,28 +284,45 @@ async fn a_change_runs_once_with_the_users_approval_for_exactly_those_inputs() {
     assert_eq!(error.public_code, "approval_required");
     let id = error.extra["approval"].as_str().unwrap().to_owned();
     let review = approvals.review(&id).await.unwrap();
+    assert_eq!(review.action_title, "create-item");
     assert_eq!(review.inputs[0].value, format!("POST {}/items", site.base));
     assert_eq!(review.inputs[1].label, "title");
 
-    // The agent cannot use it before the user grants it.
+    // Before the user answers, the agent is told to wait; the approval stays.
     let error = runtime
         .call(&spec, with("hello", Some(&id)))
         .await
         .unwrap_err();
-    assert_eq!(error.public_code, "approval_expired");
-    let error = runtime.call(&spec, with("hello", None)).await.unwrap_err();
-    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    assert_eq!(error.public_code, "approval_pending");
+    assert_eq!(error.extra["approval"], id.as_str());
+    assert_eq!(error.extra["command"], format!("itda approve {id}"));
+    assert!(
+        error.remedy.contains("do not request a new one"),
+        "{}",
+        error.remedy
+    );
+    assert_eq!(approvals.review(&id).await.unwrap().status, "pending");
     approvals.claim(&id).await.unwrap();
 
-    // Other inputs do not match what the user saw.
+    // Other inputs are not what the user saw: the approval is withdrawn.
     let error = runtime
         .call(&spec, with("other", Some(&id)))
         .await
         .unwrap_err();
     assert_eq!(error.public_code, "approval_expired");
+    assert_eq!(error.extra["reason"], "inputs_changed");
     assert_eq!(site.hits.load(Ordering::SeqCst), 0);
+    let error = runtime
+        .call(&spec, with("hello", Some(&id)))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "approval_expired");
+    assert!(error.extra.get("reason").is_none());
 
-    // A mismatch does not use the approval up; the exact call works once.
+    // A fresh approval for the exact call works once.
+    let error = runtime.call(&spec, with("hello", None)).await.unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
     let envelope = runtime.call(&spec, with("hello", Some(&id))).await.unwrap();
     assert_eq!(envelope.effect, "write");
     assert_eq!(envelope.meta.http_status, 201);
@@ -807,4 +824,247 @@ async fn a_preflight_step_reads_a_value_from_the_pages_embedded_data() {
     // An object is not a value.
     let error = runtime.call(&spec, call("broken", &[])).await.unwrap_err();
     assert_eq!(error.public_code, "response_mismatch");
+}
+
+/// A site that refuses in the ways real APIs do: a permission problem, an
+/// expired token behind a 403, and an address that is gone.
+async fn refusing_site() -> String {
+    let router = Router::new()
+        .route(
+            "/denied",
+            get(|| async {
+                (
+                    StatusCode::FORBIDDEN,
+                    axum::Json(json!({"error": {"code": "insufficient_scope", "message": "private details"}})),
+                )
+            }),
+        )
+        .route(
+            "/expired",
+            get(|| async {
+                (
+                    StatusCode::FORBIDDEN,
+                    axum::Json(json!({"code": "token-expired"})),
+                )
+            }),
+        )
+        .route("/gone", get(|| async { StatusCode::GONE }))
+        .route(
+            "/graphql",
+            axum::routing::post(|body: String| async move {
+                if body.contains("mutation") {
+                    axum::Json(json!({"data": null, "errors": [{"message": "not allowed"}]}))
+                } else {
+                    axum::Json(json!({"data": {"items": []}, "errors": [{"message": "bad field"}]}))
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+fn refusing_spec(base: &str) -> Spec {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "fixture", "base_url": base},
+        "auth": [{"name": "session", "kind": "browser", "value_from": "cookie:sid"}],
+        "operations": [
+            {"name": "denied", "method": "GET", "path": "/denied", "effect": "read", "evidence": "doc"},
+            {"name": "denied-signed-in", "method": "GET", "path": "/denied", "auth": "session", "effect": "read", "evidence": "doc"},
+            {"name": "expired", "method": "GET", "path": "/expired", "auth": "session", "effect": "read", "evidence": "doc"},
+            {"name": "gone", "method": "GET", "path": "/gone", "effect": "read", "evidence": "doc"},
+            {"name": "query-items", "method": "POST", "path": "/graphql", "effect": "read", "evidence": "doc",
+             "body": {"json": {"query": {"type": "string", "default": "{ items { id } }"}}},
+             "response": {"format": "json", "required_pointers": ["/data"]}},
+            {"name": "create-via-graphql", "method": "POST", "path": "/graphql", "effect": "write", "evidence": "doc",
+             "body": {"json": {"query": {"type": "string", "default": "mutation { createItem { id } }"}}}}
+        ]
+    });
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn a_refusal_says_what_the_site_answered_without_its_words() {
+    let base = refusing_site().await;
+    let spec = refusing_spec(&base);
+    let (runtime, vault) = runtime().await;
+    vault.add_account("fixture", "default", "").await.unwrap();
+    vault
+        .set_secret(
+            "fixture",
+            "default",
+            "session",
+            Secret::new(format!("sid={SID}")),
+        )
+        .await
+        .unwrap();
+
+    // A 403 is a permission problem, signed in or not, never a sign-in one.
+    for action in ["denied", "denied-signed-in"] {
+        let error = runtime.call(&spec, call(action, &[])).await.unwrap_err();
+        assert_eq!(error.public_code, "api_denied", "{action}");
+        assert_eq!(error.extra["upstream_status"], 403);
+        assert_eq!(error.extra["provider_reason"], "insufficient_scope");
+        assert_eq!(
+            error.msg,
+            "the site refused this request (insufficient_scope)"
+        );
+        assert!(!format!("{error:?}").contains("private details"));
+        assert!(
+            error.remedy.contains("signing in again will not help"),
+            "{}",
+            error.remedy
+        );
+    }
+    // Unless the site says the session itself is the problem.
+    let error = runtime.call(&spec, call("expired", &[])).await.unwrap_err();
+    assert_eq!(error.public_code, "auth_required");
+    assert_eq!(error.extra["upstream_status"], 403);
+    // A gone address keeps its status for `itda check` to read.
+    let error = runtime.call(&spec, call("gone", &[])).await.unwrap_err();
+    assert_eq!(error.public_code, "request_failed");
+    assert_eq!(error.extra["upstream_status"], 410);
+}
+
+#[tokio::test]
+async fn graphql_errors_behind_a_2xx_are_never_a_success() {
+    let base = refusing_site().await;
+    let spec = refusing_spec(&base);
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let runtime =
+        Runtime::new(Arc::new(Network::new(gate, true)), vault).with_approvals(approvals.clone());
+
+    let error = runtime
+        .call(&spec, call("query-items", &[]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "query_failed");
+    assert_eq!(error.extra["upstream_status"], 200);
+
+    let error = runtime
+        .call(&spec, call("create-via-graphql", &[]))
+        .await
+        .unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
+    let mut approved = call("create-via-graphql", &[]);
+    approved.approval = Some(id);
+    let error = runtime.call(&spec, approved).await.unwrap_err();
+    assert_eq!(error.public_code, "action_outcome_unknown");
+    assert!(
+        error.msg.contains("answered the change with errors"),
+        "{}",
+        error.msg
+    );
+}
+
+#[tokio::test]
+async fn a_change_that_never_left_the_machine_is_reported_as_not_sent() {
+    use itda_runtime::audit::AuditLog;
+    // A port nobody listens on: the connection is refused before any byte goes out.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let dir = std::env::temp_dir().join(format!("itda-runtime-unsent-{}", itda_types::util::id()));
+    let log = Arc::new(AuditLog::new(dir.join("audit.jsonl")));
+    let runtime = Runtime::new(Arc::new(Network::new(gate, true)), vault)
+        .with_approvals(approvals.clone())
+        .with_audit(log.clone());
+    let spec = spec(&base);
+
+    let error = runtime
+        .call(&spec, call("create-item", &[("title", "hello")]))
+        .await
+        .unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
+    let mut approved = call("create-item", &[("title", "hello")]);
+    approved.approval = Some(id);
+    let error = runtime.call(&spec, approved).await.unwrap_err();
+    assert_eq!(error.public_code, "request_failed", "{error:?}");
+    assert_eq!(error.extra["sent"], false);
+
+    let records = log.records().unwrap();
+    let last = records.last().unwrap();
+    assert_eq!(
+        (last.kind.as_str(), last.outcome.as_str()),
+        ("call", "request_failed")
+    );
+    assert!(log.unfinished_changes().unwrap().is_empty());
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test]
+async fn a_read_that_preflight_would_turn_into_a_change_is_not_sent() {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let counted = hits.clone();
+    let router = Router::new()
+        .route(
+            "/form",
+            get(|| async { axum::Json(json!({"mode": "delete"})) }),
+        )
+        .route(
+            "/items",
+            get(move || async move {
+                counted.fetch_add(1, Ordering::SeqCst);
+                axum::Json(json!({"items": []}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "fixture", "base_url": base},
+        "operations": [
+            {"name": "list-items", "method": "GET", "path": "/items", "effect": "read", "evidence": "doc",
+             "preflight": [{"name": "form", "path": "/form", "extract": {"mode": "json:/mode"}}],
+             "query": {"mode": {"type": "string", "default": "{{step.form.mode}}"}},
+             "response": {"format": "json", "required_pointers": ["/items"]}}
+        ]
+    });
+    let spec = itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let (runtime, _) = runtime().await;
+    let error = runtime
+        .call(&spec, call("list-items", &[]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "effect_changed");
+    assert!(error.msg.contains("would change the site"), "{}", error.msg);
+    assert_eq!(hits.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn an_unknown_input_names_the_nearest_declared_one() {
+    let site = site().await;
+    let (runtime, _) = runtime().await;
+    let error = runtime
+        .call(&spec(&site.base), call("list-items", &[("qu", "x")]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.msg, "Unknown input: qu");
+    assert!(
+        error.remedy.starts_with("Did you mean q?"),
+        "{}",
+        error.remedy
+    );
+    let error = runtime
+        .call(&spec(&site.base), call("list-item", &[]))
+        .await
+        .unwrap_err();
+    assert!(
+        error.remedy.starts_with("Did you mean list-items?"),
+        "{}",
+        error.remedy
+    );
+    assert_eq!(site.hits.load(Ordering::SeqCst), 0);
 }

@@ -93,6 +93,15 @@ fn remedy(public_code: &str) -> &'static str {
         "query_failed" => {
             "The website reported query errors. Check the inputs and the action definition before retrying."
         }
+        "api_denied" => {
+            "The website refused this request as not allowed. Check the account's permissions, the action's inputs and the site's rules; signing in again will not help."
+        }
+        "approval_pending" => {
+            "The user has not answered yet. Wait, then call again with the same inputs and the same approval id; do not request a new one."
+        }
+        "effect_changed" => {
+            "The values a preflight step found would turn this read into a change, so nothing was sent. Review the site definition."
+        }
         "response_mismatch" => {
             "The website returned a different response than this action expects. Reconnect if signed out, or review the site definition."
         }

@@ -7,12 +7,13 @@ use std::process::ExitCode;
 pub fn exit_code(public_code: &str) -> u8 {
     match public_code {
         "ok" => 0,
-        "bad_request" | "data_invalid" | "bad_url" | "not_found" => 2,
+        "bad_request" | "data_invalid" | "bad_url" | "not_found" | "effect_changed" => 2,
         "auth_required" | "identity_unavailable" => 10,
-        "response_mismatch" => 11,
+        "response_mismatch" | "query_failed" => 11,
         "blocked_by_site" | "unsafe_target" | "local_target" => 12,
         "rate_limited" | "site_rate_limited" => 13,
-        "approval_required" | "writes_disabled" => 20,
+        "api_denied" => 14,
+        "approval_required" | "approval_pending" | "writes_disabled" => 20,
         "approval_expired" => 21,
         "pagination_expired" | "pagination_invalid" => 23,
         "action_outcome_unknown" => 22,
@@ -52,6 +53,10 @@ mod tests {
         assert_eq!(exit_code("response_mismatch"), 11);
         assert_eq!(exit_code("blocked_by_site"), 12);
         assert_eq!(exit_code("site_rate_limited"), 13);
+        assert_eq!(exit_code("api_denied"), 14);
+        assert_eq!(exit_code("approval_pending"), 20);
+        assert_eq!(exit_code("query_failed"), 11);
+        assert_eq!(exit_code("effect_changed"), 2);
         assert_eq!(exit_code("writes_disabled"), 20);
         assert_eq!(exit_code("pagination_expired"), 23);
         assert_eq!(exit_code("timeout"), 30);

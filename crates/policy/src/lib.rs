@@ -11,4 +11,4 @@ pub use approvals::{Approval, Approvals, ExecutionRequest, ReviewInput};
 pub use classify::{dangerous_intent, operation_effect, safe_read_url};
 pub use cursors::Cursors;
 pub use itda_spec::Effect;
-pub use validate::{Problem, allowed_header, spec_problems, validate_spec};
+pub use validate::{Problem, overrides_method, spec_problems, validate_spec};

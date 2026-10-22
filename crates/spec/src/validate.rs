@@ -87,32 +87,11 @@ impl Spec {
                             );
                         }
                     }
-                    "derived" => {
-                        if a.header.is_empty() {
-                            add(
-                                &mut out,
-                                &format!("auth.{}.header", a.name),
-                                "missing header name for kind=derived".into(),
-                                "",
-                            );
-                        }
-                        if !["cookie:", "storage:", "header:"]
-                            .iter()
-                            .any(|p| a.value_from.starts_with(p))
-                        {
-                            add(
-                                &mut out,
-                                &format!("auth.{}.value_from", a.name),
-                                "must reference cookie:<name>, storage:<key>[#<pointer>], or header:<name>".into(),
-                                "Example: cookie:ct0",
-                            );
-                        }
-                    }
                     other => add(
                         &mut out,
                         &format!("auth.{}.kind", a.name),
                         format!("unsupported auth kind: {other}"),
-                        "none|header|browser|derived",
+                        "none|header|browser",
                     ),
                 }
             }
@@ -138,12 +117,12 @@ impl Spec {
                         "",
                     );
                 }
-                if !["", "http", "browser-fetch", "browser"].contains(&op.transport.as_str()) {
+                if !["", "http"].contains(&op.transport.as_str()) {
                     add(
                         &mut out,
                         &format!("{id}.transport"),
                         format!("unsupported transport: {}", op.transport),
-                        "http|browser-fetch|browser",
+                        "itda sends plain HTTP requests only; leave transport out",
                     );
                 }
                 if !op.auth.is_empty() && !auths.contains(&op.auth) {

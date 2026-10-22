@@ -210,6 +210,15 @@ async fn refusals_come_back_as_tool_errors_with_a_fix() {
 
     let unknown = client.call("fixture.nothing", json!({})).await;
     assert_eq!(unknown["isError"], true);
+    let slip = client.call("fixture.list-item", json!({})).await;
+    assert_eq!(slip["isError"], true);
+    assert!(
+        slip["structuredContent"]["remedy"]
+            .as_str()
+            .unwrap()
+            .starts_with("Did you mean fixture.list-items?"),
+        "{slip}"
+    );
 }
 
 #[tokio::test]
@@ -633,6 +642,8 @@ async fn removing_a_site_asks_the_person_and_drops_its_tools() {
     assert_eq!(failed.result["structuredContent"]["status"], "unanswered");
     assert!(home.join("specs/fixture/spec.json").exists());
 
+    let waiting = client.call("fixture.delete-item", json!({"id": 3})).await;
+    assert_eq!(waiting["structuredContent"]["status"], "approval_required");
     let removed = client
         .exchange(
             "itda_manage",
@@ -641,6 +652,10 @@ async fn removing_a_site_asks_the_person_and_drops_its_tools() {
         )
         .await;
     assert_eq!(removed.result["isError"], false, "{}", removed.result);
+    let approvals = client
+        .call("itda_manage", json!({"action": "approvals"}))
+        .await;
+    assert_eq!(approvals["structuredContent"]["approvals"], json!([]));
     assert!(
         removed
             .notifications
@@ -877,4 +892,57 @@ async fn a_read_that_turns_pages_takes_next_and_hides_the_cursor() {
             .unwrap()
             .contains("meta.next")
     );
+}
+
+#[tokio::test]
+async fn a_server_pinned_to_one_site_stays_inside_it() {
+    let base = site_with_board().await;
+    let Managed { server, home } = managed(&base);
+    let mut client = Client::start(server.with_site("fixture")).await;
+    let names = client.tool_names().await;
+    assert!(
+        names.contains(&"fixture.list-items".to_owned()),
+        "{names:?}"
+    );
+
+    let refused = client
+        .call("itda_setup", json!({"url": format!("{base}/board")}))
+        .await;
+    assert_eq!(refused["isError"], true);
+    assert!(
+        refused["structuredContent"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("serves only fixture"),
+        "{refused}"
+    );
+    assert!(!home.join("specs/board").exists());
+
+    let other = client
+        .call("itda_manage", json!({"action": "remove", "site": "other"}))
+        .await;
+    assert_eq!(other["isError"], true);
+    assert!(
+        other["structuredContent"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("never reaches other")
+    );
+    let checked = client.call("itda_check", json!({"site": "other"})).await;
+    assert_eq!(checked["isError"], true);
+
+    // Without a site named, the pinned one is meant.
+    let checked = client.call("itda_check", json!({})).await;
+    assert_eq!(checked["structuredContent"]["sites"][0]["site"], "fixture");
+    let sites = client.call("itda_sites", json!({})).await;
+    assert_eq!(
+        sites["structuredContent"]["sites"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let audit = client.call("itda_manage", json!({"action": "audit"})).await;
+    assert_eq!(audit["structuredContent"]["unknown_outcome"], json!([]));
+    std::fs::remove_dir_all(home).ok();
 }

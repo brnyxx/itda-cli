@@ -9,26 +9,44 @@
 
    ```console
    $ itda approve 9e96f90486f74733926ffaeb738825e2
-   Post a notice wants to change Sandbox intranet (sandbox) as account default:
+   create-notice wants to change Sandbox intranet (sandbox) as account default:
+     does         Post a notice
      request      POST http://127.0.0.1:8787/api/notices
      title        점검 공지
    Approve this change? [y/N] y
    Approved. The agent can now run it once, with exactly these inputs.
    ```
 
-   `itda reject <id>`, or any answer but `y`, refuses it.
+   `does` is the action's description from the site definition, and every
+   input follows; a value longer than 500 characters is cut, with its length.
+   `itda reject <id>`, or any answer but `y`, refuses it. `itda reject` also
+   withdraws an approval you already granted and the agent has not used.
 3. The agent calls again with `approval` set to the id. itda checks that the
    request is the one you saw, marks the approval used, and sends it once.
+
+While you have not answered, a call with the id gets `approval_pending`
+(exit 20) with the command to run, and the approval stays as it is: the agent
+waits instead of asking for a new one. A call with other inputs than the ones
+you saw withdraws the approval (`approval_expired` with `reason:
+inputs_changed`); an agent that wants the other inputs asks again and you see
+them.
 
 An approval covers one request: the site, action, account, every input, the
 definition (by hash) and the credential (by fingerprint). Changing any of them
 needs a new approval. It expires five minutes after it was requested, or
 five minutes after you approve it. It works once, and it is used up before
-anything is sent, so a failed change is not replayed.
+anything is sent, so a failed change is not replayed. `itda logout`, `itda
+remove`, a new `itda login` and replacing a definition (`itda setup`, `itda
+refresh`, `itda add --force`, `itda draft ... --install --force`) withdraw every pending or
+granted approval for that site or account: what you reviewed is no longer
+what would be sent.
 
 Changes are never retried and never follow redirects. When the answer is lost
-after sending, the call fails with `action_outcome_unknown` (exit 22): check
-the site before trying again.
+after sending, or a GraphQL answer carries `errors` behind a 2xx, the call
+fails with `action_outcome_unknown` (exit 22): check the site before trying
+again. A change that never left the machine (the gate gave no turn, the name
+did not resolve, the connection was refused) keeps its network code and is
+reported as not sent.
 
 ### Approving in your MCP client
 
@@ -84,5 +102,12 @@ The audit log is intact: 4 records in /home/you/.local/share/itda/audit.jsonl.
   first broken record, and `itda doctor` reports it.
 - **Safe to share.** Records keep input names and a digest of their values,
   never the values or any credential.
+
+- **A stopped process shows.** A `change_started` record with no `call`
+  record after it means the process stopped after the change was sent and
+  nobody knows whether the site applied it. `itda audit` lists those changes
+  at the end as "unknown outcome", `itda doctor` counts them under `changes`,
+  and `itda_manage audit` returns them under `unknown_outcome`. Check the site
+  before asking for the change again.
 
 `itda audit --json` prints the records for scripts.

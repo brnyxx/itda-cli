@@ -137,6 +137,26 @@ impl AuditLog {
             .collect()
     }
 
+    /// Changes that were about to be sent and never got an outcome: a
+    /// `change_started` record with no later `call` record for the same site,
+    /// action and approval. The process stopped after the record was written,
+    /// so the site may or may not have applied the change.
+    pub fn unfinished_changes(&self) -> AppResult<Vec<Record>> {
+        let mut open: Vec<Record> = Vec::new();
+        for record in self.records()? {
+            match record.kind.as_str() {
+                "change_started" => open.push(record),
+                "call" => open.retain(|started| {
+                    !(started.site == record.site
+                        && started.action == record.action
+                        && started.approval == record.approval)
+                }),
+                _ => {}
+            }
+        }
+        Ok(open)
+    }
+
     /// The number of records when the chain is intact, or the first record
     /// that was changed, removed or reordered.
     pub fn verify(&self) -> AppResult<u64> {
@@ -221,6 +241,33 @@ mod tests {
         let text = std::fs::read_to_string(log.path()).unwrap();
         assert!(!text.contains("secret plans"));
         assert!(text.contains("\"inputs\":[\"title\"]"));
+        std::fs::remove_dir_all(log.path().parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn a_change_without_an_outcome_is_found() {
+        let log = log();
+        let started = |approval: &str| Event {
+            kind: "change_started",
+            approval: approval.into(),
+            outcome: "sending".into(),
+            http_status: 0,
+            ..event("x")
+        };
+        let ended = |approval: &str, outcome: &str| Event {
+            approval: approval.into(),
+            outcome: outcome.into(),
+            ..event("x")
+        };
+        log.append(started("one")).unwrap();
+        log.append(ended("one", "ok")).unwrap();
+        log.append(started("two")).unwrap();
+        log.append(started("three")).unwrap();
+        log.append(ended("three", "action_outcome_unknown"))
+            .unwrap();
+        let open = log.unfinished_changes().unwrap();
+        assert_eq!(open.len(), 1);
+        assert_eq!((open[0].seq, open[0].approval.as_str()), (3, "two"));
         std::fs::remove_dir_all(log.path().parent().unwrap()).ok();
     }
 

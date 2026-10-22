@@ -63,10 +63,14 @@ pub fn load(home: &Path, site: &str) -> AppResult<Spec> {
         .then(|| spec_file(&specs_dir(home).join(site)))
         .flatten()
         .ok_or_else(|| {
-            usage(
-                format!("No installed site named {site}"),
-                "Run `itda ls` to see installed sites.",
-            )
+            let installed = list(home);
+            let remedy = match util::nearest(site, installed.iter().map(|s| s.name.as_str())) {
+                Some(close) => {
+                    format!("Did you mean {close}? Run `itda ls` to see installed sites.")
+                }
+                None => "Run `itda ls` to see installed sites.".into(),
+            };
+            usage(format!("No installed site named {site}"), remedy)
         })?;
     read(site, &path)
 }

@@ -58,7 +58,7 @@ impl SecretKey {
         })
     }
 
-    fn path(&self) -> String {
+    pub(crate) fn path(&self) -> String {
         format!("{}/{}/{}", self.site, self.account, self.name)
     }
 
@@ -152,11 +152,16 @@ fn keyring_error(error: &keyring::Error) -> AppError {
         keyring::Error::TooLong(..) => "The secret is too long for the system keyring",
         _ => "The system keyring refused the operation",
     };
-    AppError::new(
+    let mut app_error = AppError::new(
         Code::Runtime,
         msg,
         "Unlock the system keyring, or set the secret in an ITDA_SECRET__ environment variable for headless runs.",
-    )
+    );
+    // `SealedStore` catches this one and seals the secret into its file.
+    if matches!(error, keyring::Error::TooLong(..)) {
+        app_error.public_code = "secret_too_long".into();
+    }
+    app_error
 }
 
 /// Read-only secrets from environment variables named by [`SecretKey::env_var`].

@@ -51,6 +51,24 @@ operations:
     auth: key
     effect: read
     evidence: doc
+  - name: get-item
+    desc: Show one item
+    method: GET
+    path: /items/{{id}}
+    params:
+      id: {{type: int}}
+    effect: read
+    evidence: doc
+  - name: denied
+    method: GET
+    path: /denied
+    effect: read
+    evidence: doc
+  - name: gone
+    method: GET
+    path: /gone
+    effect: read
+    evidence: doc
 "
     );
     std::fs::write(dir.join("spec.yaml"), spec).unwrap();
@@ -110,7 +128,17 @@ async fn serve() -> String {
                     axum::Json(json!({"items": items, "next_cursor": next}))
                 },
             ),
-        );
+        )
+        .route(
+            "/denied",
+            get(|| async {
+                (
+                    axum::http::StatusCode::FORBIDDEN,
+                    axum::Json(json!({"error": {"code": "permission_denied"}})),
+                )
+            }),
+        )
+        .route("/gone", get(|| async { axum::http::StatusCode::GONE }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
@@ -150,7 +178,143 @@ async fn lists_installed_sites() {
         .iter()
         .map(|a| a["effect"].as_str().unwrap())
         .collect();
-    assert_eq!(effects, ["read", "write", "read"]);
+    assert_eq!(effects, ["read", "write", "read", "read", "read", "read"]);
+    assert_eq!(
+        listed[0]["actions"][3]["example"],
+        "itda call fixture.get-item --id <int> --json"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+#[tokio::test(flavor = "multi_thread")]
+async fn describe_shows_inputs_and_a_command_to_copy() {
+    let home = home();
+    install(&home, "http://127.0.0.1:9");
+    let english = [("ITDA_LANG", "en")];
+    let text =
+        String::from_utf8_lossy(&itda(&home, &["describe", "fixture"], &english).await.stdout)
+            .into_owned();
+    assert!(text.contains("read   get-item"), "{text}");
+    assert!(text.contains("inputs: id (int, required)"), "{text}");
+    assert!(
+        text.contains("example: itda call fixture.get-item --id <int> --json"),
+        "{text}"
+    );
+    assert!(
+        text.contains("example: itda call fixture.create-item --json"),
+        "{text}"
+    );
+    assert!(text.contains("itda approve <id>"), "{text}");
+    let korean = String::from_utf8_lossy(
+        &itda(&home, &["describe", "fixture"], &[("ITDA_LANG", "ko")])
+            .await
+            .stdout,
+    )
+    .into_owned();
+    assert!(korean.contains("입력: id (int, 필수)"), "{korean}");
+    assert!(!korean.contains("example:"), "{korean}");
+
+    let one = stdout_json(&itda(&home, &["describe", "fixture.get-item", "--json"], &[]).await);
+    assert_eq!(one[0]["action"], "get-item");
+    assert_eq!(one[0]["inputs"][0]["name"], "id");
+    assert_eq!(one[0]["inputs"][0]["required"], true);
+    assert_eq!(
+        one[0]["example"],
+        "itda call fixture.get-item --id <int> --json"
+    );
+
+    // A slip of the fingers gets the nearest name.
+    let slip = itda(&home, &["call", "fixture.get-items", "--json"], &[]).await;
+    assert_eq!(slip.status.code(), Some(2));
+    assert!(
+        stdout_json(&slip)["remedy"]
+            .as_str()
+            .unwrap()
+            .starts_with("Did you mean get-item?")
+    );
+    let site = itda(&home, &["describe", "fixtures"], &[]).await;
+    assert_eq!(site.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&site.stderr).contains("Did you mean fixture?"));
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_refusal_names_what_the_site_answered() {
+    let home = home();
+    install(&home, &serve().await);
+    let denied = itda(&home, &["call", "fixture.denied", "--json"], &[]).await;
+    assert_eq!(denied.status.code(), Some(14));
+    let envelope = stdout_json(&denied);
+    assert_eq!(envelope["status"], "api_denied");
+    assert_eq!(envelope["upstream_status"], 403);
+    assert_eq!(envelope["provider_reason"], "permission_denied");
+    let human = itda(&home, &["call", "fixture.denied"], &[]).await;
+    assert!(
+        String::from_utf8_lossy(&human.stderr)
+            .contains("error[api_denied]: the site refused this request (permission_denied)")
+    );
+
+    // A gone address means the definition is out of date, not that the site is down.
+    let checked = itda(
+        &home,
+        &["check", "fixture", "--json"],
+        &[("ITDA_SECRET__FIXTURE__DEFAULT__API_KEY", "k")],
+    )
+    .await;
+    assert_eq!(checked.status.code(), Some(11));
+    let report = stdout_json(&checked);
+    assert_eq!(report["verdict"], "site_changed");
+    let result = |action: &str| {
+        report["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["action"] == action)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(result("gone")["status"], "request_failed");
+    assert_eq!(result("gone")["upstream_status"], 410);
+    assert_eq!(result("gone")["detail"], "the site answered HTTP 410");
+    assert_eq!(result("denied")["status"], "api_denied");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn audit_and_doctor_show_a_change_without_an_outcome() {
+    use itda_runtime::audit::{AuditLog, Event};
+    let home = home();
+    install(&home, "http://127.0.0.1:9");
+    let log = AuditLog::new(home.join("audit.jsonl"));
+    log.append(Event {
+        kind: "change_started",
+        site: "fixture".into(),
+        action: "create-item".into(),
+        effect: "write".into(),
+        approval: "abc123".into(),
+        outcome: "sending".into(),
+        ..Event::default()
+    })
+    .unwrap();
+
+    let audit = itda(&home, &["audit"], &[]).await;
+    let text = String::from_utf8_lossy(&audit.stdout);
+    assert!(
+        text.contains(
+            "1 change with an unknown outcome: the process stopped after the change was sent."
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("fixture.create-item (record 1, approval abc123)"),
+        "{text}"
+    );
+    let doctor = itda(&home, &["doctor"], &[]).await;
+    let text = String::from_utf8_lossy(&doctor.stdout);
+    assert!(
+        text.contains("changes          1 change with an unknown outcome"),
+        "{text}"
+    );
+    assert!(text.contains("chain intact"), "{text}");
     std::fs::remove_dir_all(home).ok();
 }
 
@@ -321,6 +485,8 @@ fn the_agent_guide_and_skill_are_short_and_cover_the_rules() {
         for phrase in [
             "itda ls",
             "itda approve <id>",
+            "approval_pending",
+            "api_denied",
             "action_outcome_unknown",
             "itda check <site>",
             "signed_out",
@@ -417,6 +583,9 @@ async fn mcp_serves_installed_actions_over_stdio() {
         names,
         [
             "fixture.create-item",
+            "fixture.denied",
+            "fixture.get-item",
+            "fixture.gone",
             "fixture.list-items",
             "fixture.me",
             "itda_setup",
@@ -467,18 +636,39 @@ async fn changes_wait_for_a_person_to_approve_them() {
     // Without a terminal nobody can answer the question, so nothing is approved.
     let piped = itda(&home, &["approve", &id], &[]).await;
     assert_eq!(piped.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&piped.stdout).contains("POST"));
+    let shown = String::from_utf8_lossy(&piped.stdout);
+    assert!(shown.contains("create-item wants to change"), "{shown}");
+    assert!(shown.contains("POST"), "{shown}");
+    // Before the person answers, the agent is told to wait, not to ask again.
     let early = itda(
         &home,
         &["call", "fixture.create-item", "--approval", &id, "--json"],
         &[],
     )
     .await;
-    assert_eq!(early.status.code(), Some(21));
+    assert_eq!(early.status.code(), Some(20));
+    let waiting = stdout_json(&early);
+    assert_eq!(waiting["status"], "approval_pending");
+    assert_eq!(waiting["approval"], id.as_str());
+    assert_eq!(waiting["command"], format!("itda approve {id}"));
+    let still = stdout_json(&itda(&home, &["approvals", "--json"], &[]).await);
+    assert_eq!(still[0]["id"], id.as_str());
 
     assert!(itda(&home, &["reject", &id], &[]).await.status.success());
     let none = itda(&home, &["approvals"], &[]).await;
     assert!(String::from_utf8_lossy(&none.stdout).contains("No changes"));
+
+    // Removing the site withdraws what was waiting for it.
+    let again = itda(&home, &["call", "fixture.create-item", "--json"], &[]).await;
+    assert_eq!(again.status.code(), Some(20));
+    assert!(
+        itda(&home, &["remove", "fixture"], &[])
+            .await
+            .status
+            .success()
+    );
+    let gone = stdout_json(&itda(&home, &["approvals", "--json"], &[]).await);
+    assert_eq!(gone, json!([]));
 
     // Every step is in the audit log, and the chain is intact.
     let records = stdout_json(&itda(&home, &["audit", "--json"], &[]).await);
@@ -492,12 +682,13 @@ async fn changes_wait_for_a_person_to_approve_them() {
         kinds,
         [
             ("call", "approval_required"),
-            ("call", "approval_expired"),
-            ("rejected", "ok")
+            ("call", "approval_pending"),
+            ("rejected", "ok"),
+            ("call", "approval_required"),
         ]
     );
     let verified = stdout_json(&itda(&home, &["audit", "--verify", "--json"], &[]).await);
-    assert_eq!(verified["records"], 3);
+    assert_eq!(verified["records"], 4);
     std::fs::remove_dir_all(home).ok();
 }
 
@@ -705,13 +896,11 @@ async fn check_runs_reads_that_need_no_input_and_reports_each() {
         &[("ITDA_SECRET__FIXTURE__DEFAULT__API_KEY", "k")],
     )
     .await;
-    assert_eq!(signed_in.status.code(), Some(0));
+    // The gone address outranks the refused one; neither is a sign-in problem.
+    assert_eq!(signed_in.status.code(), Some(11));
     let text = String::from_utf8_lossy(&signed_in.stdout);
-    assert!(
-        text.contains("verdict  ok: every read still matches"),
-        "{text}"
-    );
-    assert!(text.contains("2 ok, 0 failed, 1 skipped."), "{text}");
+    assert!(text.contains("verdict  site_changed: "), "{text}");
+    assert!(text.contains("2 ok, 2 failed, 2 skipped."), "{text}");
     std::fs::remove_dir_all(home).ok();
 }
 

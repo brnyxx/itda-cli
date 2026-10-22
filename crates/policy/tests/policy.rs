@@ -184,16 +184,18 @@ async fn approvals_are_single_use_and_bound_to_the_exact_request() {
         req.inputs
     );
 
-    // A different input does not match the approved digest.
-    assert!(
-        store
-            .consume(&review.id, &request(&[("title", "Other")]))
-            .await
-            .is_err()
+    // An approval the user has not answered cannot be used, and stays.
+    let waiting = store.consume(&review.id, &req).await.unwrap_err();
+    assert_eq!(waiting.public_code, "approval_pending");
+    assert_eq!(waiting.extra["approval"], review.id.as_str());
+    assert_eq!(
+        waiting.extra["command"],
+        format!("itda approve {}", review.id)
     );
-    // An approval the user has not granted cannot be used.
-    assert!(store.consume(&review.id, &req).await.is_err());
+    assert!(waiting.extra["expires_at"].as_str().unwrap().contains('T'));
+    assert_eq!(store.pending().await.unwrap().len(), 1);
     store.claim(&review.id).await.unwrap();
+    assert_eq!(store.review(&review.id).await.unwrap().status, "approved");
     store.consume(&review.id, &req).await.unwrap();
     // Second use is refused.
     assert_eq!(
@@ -205,6 +207,71 @@ async fn approvals_are_single_use_and_bound_to_the_exact_request() {
         "approval_expired"
     );
     assert!(store.pending().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn changed_inputs_withdraw_a_granted_approval() {
+    let store = approvals();
+    let req = request(&[("title", "Fixture")]);
+    let review = store
+        .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .await
+        .unwrap();
+    store.claim(&review.id).await.unwrap();
+    let withdrawn = store
+        .consume(&review.id, &request(&[("title", "Other")]))
+        .await
+        .unwrap_err();
+    assert_eq!(withdrawn.public_code, "approval_expired");
+    assert_eq!(withdrawn.extra["reason"], "inputs_changed");
+    // Not even the exact request works now.
+    let gone = store.consume(&review.id, &req).await.unwrap_err();
+    assert_eq!(gone.public_code, "approval_expired");
+    assert!(gone.extra.get("reason").is_none());
+    assert!(store.review(&review.id).await.is_err());
+}
+
+#[tokio::test]
+async fn a_granted_approval_can_still_be_rejected_and_invalidation_is_exact() {
+    let store = approvals();
+    let req = request(&[]);
+    let granted = store
+        .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .await
+        .unwrap();
+    store.claim(&granted.id).await.unwrap();
+    store.reject(&granted.id).await.unwrap();
+    assert_eq!(
+        store
+            .consume(&granted.id, &req)
+            .await
+            .unwrap_err()
+            .public_code,
+        "approval_expired"
+    );
+
+    // The same site, another account: only the named account's approvals go.
+    let mut other = req.clone();
+    other.account_id = "other".into();
+    let mine = store
+        .request_approval(req.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .await
+        .unwrap();
+    let theirs = store
+        .request_approval(other.clone(), "S".into(), "A".into(), "U".into(), vec![])
+        .await
+        .unwrap();
+    store
+        .invalidate(Some("fixture"), Some("acct"))
+        .await
+        .unwrap();
+    assert!(store.review(&mine.id).await.is_err());
+    assert!(store.review(&theirs.id).await.is_ok());
+    // With nothing named, nothing changes.
+    store.invalidate(None, None).await.unwrap();
+    assert!(store.review(&theirs.id).await.is_ok());
+    store.invalidate(None, Some("other")).await.unwrap();
+    assert!(store.review(&theirs.id).await.is_err());
 }
 
 #[tokio::test]
@@ -276,15 +343,31 @@ fn unsafe_specs_are_refused() {
             }),
         ),
         (
-            "derived auth sets a forbidden header",
+            "derived credentials have no interpreter",
             mutate(&|v| {
-                v["auth"] = json!([{"name":"d","kind":"derived","header":"Cookie","value_from":"cookie:sid"}]);
+                v["auth"] = json!([{"name":"d","kind":"derived","header":"X-CSRF-Token","value_from":"cookie:ct0"}]);
                 v["operations"][0]["auth"] = json!("d");
             }),
         ),
         (
-            "rendered browser read that is not html",
+            "browser transport",
             mutate(&|v| v["operations"][0]["transport"] = json!("browser")),
+        ),
+        (
+            "browser-fetch transport",
+            mutate(&|v| v["operations"][0]["transport"] = json!("browser-fetch")),
+        ),
+        (
+            "method override header",
+            mutate(&|v| v["operations"][0]["headers"] = json!({"X-HTTP-Method-Override":"DELETE"})),
+        ),
+        (
+            "method override input",
+            mutate(&|v| v["operations"][0]["query"] = json!({"_method":{"type":"string"}})),
+        ),
+        (
+            "browser imitation header",
+            mutate(&|v| v["defaults"] = json!({"headers":{"Sec-Fetch-Mode":"navigate"}})),
         ),
         (
             "invalid html selector",

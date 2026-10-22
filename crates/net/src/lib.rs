@@ -14,7 +14,7 @@
 pub mod defend;
 pub mod gate;
 
-pub use gate::{Gate, Lease, Outcome};
+pub use gate::{Gate, Lease, Outcome, not_sent, sent};
 
 use futures_util::StreamExt;
 use itda_types::{
@@ -232,14 +232,20 @@ impl Network {
                         tokio::time::sleep(Duration::from_secs(2)).await;
                         continue;
                     }
-                    return Err(AppError::api(
+                    let failed = AppError::api(
                         if is_timeout {
                             "timeout"
                         } else {
                             "request_failed"
                         },
                         502,
-                    ));
+                    );
+                    // A connection that never opened carried nothing.
+                    return Err(if error.is_connect() {
+                        not_sent(failed)
+                    } else {
+                        failed
+                    });
                 }
             };
             let status = response.status().as_u16();
@@ -417,8 +423,8 @@ pub async fn resolve(url: &url::Url, allow_local: bool) -> AppResult<Vec<SocketA
         tokio::net::lookup_host((host.trim_matches(['[', ']']), port)),
     )
     .await
-    .map_err(|_| AppError::api("timeout", 502))?
-    .map_err(|_| AppError::api("request_failed", 502))?
+    .map_err(|_| not_sent(AppError::api("timeout", 502)))?
+    .map_err(|_| not_sent(AppError::api("request_failed", 502)))?
     .collect();
     if addresses.is_empty() || (!allow_local && addresses.iter().any(|a| !public_ip(a.ip()))) {
         return Err(AppError::api("unsafe_target", 400));

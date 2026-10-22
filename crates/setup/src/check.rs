@@ -24,6 +24,9 @@ pub struct Outcome {
     /// How long the site asked to wait, when it rate limited the read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_after_s: Option<u64>,
+    /// The HTTP status the site answered, when the read ended with one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_status: Option<u16>,
 }
 
 impl Outcome {
@@ -45,6 +48,7 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                 duration_ms,
                 records: None,
                 retry_after_s: None,
+                upstream_status: None,
             };
             if operation_effect(op, &BTreeMap::new()) != Effect::Read {
                 out.push(outcome("skipped", "changes the site".into(), None));
@@ -74,9 +78,20 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                     )
                 },
                 Err(error) => {
-                    let detail = match error.public_code.as_str() {
-                        "response_mismatch" => "the answer no longer matches the definition".into(),
-                        "auth_required" => format!("sign in: itda login {}", spec.site.name),
+                    let upstream = error
+                        .extra
+                        .get("upstream_status")
+                        .and_then(serde_json::Value::as_u64)
+                        .map(|status| status as u16);
+                    let detail = match (error.public_code.as_str(), upstream) {
+                        ("response_mismatch", _) => {
+                            "the answer no longer matches the definition".into()
+                        }
+                        ("query_failed", _) => "the site answered the query with errors".into(),
+                        ("auth_required", _) => format!("sign in: itda login {}", spec.site.name),
+                        ("request_failed", Some(status)) => {
+                            format!("the site answered HTTP {status}")
+                        }
                         _ => error.msg.clone(),
                     };
                     Outcome {
@@ -84,6 +99,7 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                             .extra
                             .get("retry_after")
                             .and_then(serde_json::Value::as_u64),
+                        upstream_status: upstream,
                         ..outcome(&error.public_code, detail, None)
                     }
                 }
@@ -129,12 +145,19 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    fn of_status(status: &str) -> Option<Self> {
-        Some(match status {
-            "auth_required" => Self::SignedOut,
-            "response_mismatch" | "not_found" => Self::SiteChanged,
-            "blocked_by_site" | "site_rate_limited" | "rate_limited" => Self::Blocked,
-            "timeout" | "request_failed" => Self::Unreachable,
+    /// What one outcome says about the site. A gone address (404, 405, 410)
+    /// and a query the site no longer accepts mean the definition is out of
+    /// date, not that the site is down. `api_denied` says nothing about the
+    /// site as a whole and is left to the per-action line.
+    fn of_outcome(outcome: &Outcome) -> Option<Self> {
+        Some(match (outcome.status.as_str(), outcome.upstream_status) {
+            ("auth_required", _) => Self::SignedOut,
+            ("response_mismatch" | "not_found" | "query_failed" | "data_invalid", _) => {
+                Self::SiteChanged
+            }
+            ("request_failed", Some(404 | 405 | 410)) => Self::SiteChanged,
+            ("blocked_by_site" | "site_rate_limited" | "rate_limited", _) => Self::Blocked,
+            ("timeout" | "request_failed", _) => Self::Unreachable,
             _ => return None,
         })
     }
@@ -143,7 +166,7 @@ impl Verdict {
     pub fn of(outcomes: &[Outcome]) -> Self {
         outcomes
             .iter()
-            .filter_map(|o| Self::of_status(&o.status))
+            .filter_map(Self::of_outcome)
             .max()
             .unwrap_or(Self::Ok)
     }
@@ -247,7 +270,7 @@ pub fn verdicts(outcomes: &[Outcome]) -> Vec<SiteVerdict> {
             let own: Vec<&Outcome> = outcomes.iter().filter(|o| o.site == site).collect();
             let verdict = own
                 .iter()
-                .filter_map(|o| Verdict::of_status(&o.status))
+                .filter_map(|o| Verdict::of_outcome(o))
                 .max()
                 .unwrap_or(Verdict::Ok);
             // A failure the verdicts do not cover is not the site's doing,
@@ -293,7 +316,31 @@ mod tests {
             duration_ms: None,
             records: None,
             retry_after_s: None,
+            upstream_status: None,
         }
+    }
+
+    #[test]
+    fn a_gone_address_and_a_failed_query_mean_the_site_changed() {
+        let gone = Outcome {
+            upstream_status: Some(410),
+            ..outcome("a", "request_failed")
+        };
+        assert_eq!(Verdict::of(&[gone]), Verdict::SiteChanged);
+        let down = Outcome {
+            upstream_status: Some(502),
+            ..outcome("a", "request_failed")
+        };
+        assert_eq!(Verdict::of(&[down]), Verdict::Unreachable);
+        assert_eq!(
+            Verdict::of(&[outcome("a", "query_failed")]),
+            Verdict::SiteChanged
+        );
+        // A refused request says nothing about the site as a whole.
+        let denied = [outcome("a", "api_denied"), outcome("a", "ok")];
+        assert_eq!(Verdict::of(&denied), Verdict::Ok);
+        assert_eq!(exit_status(&denied), "api_denied");
+        assert!(verdicts(&denied)[0].hint.contains("api_denied"));
     }
 
     #[test]

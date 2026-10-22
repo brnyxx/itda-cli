@@ -530,10 +530,15 @@ pub async fn run(
 
     // 3. Save, replacing only with a yes.
     let path = sites::specs_dir(&ctx.home).join(&site).join("spec.yaml");
-    if path.exists() && !answers.replace(&site)? {
+    let replaced = path.exists();
+    if replaced && !answers.replace(&site)? {
         return Ok(Finished::Stopped(Stopped::Exists(site)));
     }
     itda_types::util::atomic_file(&path, draft.yaml.as_bytes())?;
+    if replaced {
+        // What the user may have reviewed is no longer what would be sent.
+        ctx.approvals.invalidate(Some(&site), None).await?;
+    }
     let mut kept_credentials = false;
     if let Some(rec) = &recording {
         let spec = sites::load(&ctx.home, &site)?;

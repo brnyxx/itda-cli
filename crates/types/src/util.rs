@@ -225,6 +225,48 @@ pub fn redact_generated_text(text: &str) -> String {
     }
 }
 
+/// The candidate closest to `wanted` by edit distance, when it is close
+/// enough to be a slip: within half the length of the longer name, or one
+/// a prefix of the other. Names are compared without case.
+pub fn nearest<'a>(wanted: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    let wanted = wanted.to_ascii_lowercase();
+    if wanted.is_empty() {
+        return None;
+    }
+    let mut best: Option<(usize, &'a str)> = None;
+    for candidate in candidates {
+        let lower = candidate.to_ascii_lowercase();
+        if lower == wanted {
+            return Some(candidate);
+        }
+        let prefix = lower.starts_with(&wanted) || wanted.starts_with(&lower);
+        let distance = edit_distance(&wanted, &lower);
+        let allowed = wanted.len().max(lower.len()) / 2;
+        if (prefix || distance <= allowed.max(1)) && best.is_none_or(|(d, _)| distance < d) {
+            best = Some((distance, candidate));
+        }
+    }
+    best.map(|(_, candidate)| candidate)
+}
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut previous: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut current = vec![i + 1];
+        for (j, cb) in b.iter().enumerate() {
+            let cost = usize::from(ca != cb);
+            current.push(
+                (previous[j] + cost)
+                    .min(previous[j + 1] + 1)
+                    .min(current[j] + 1),
+            );
+        }
+        previous = current;
+    }
+    previous[b.len()]
+}
+
 pub fn file_lock(path: &Path, nonblocking: bool) -> AppResult<fs::File> {
     if let Some(parent) = path.parent() {
         private_dir(parent)?;
@@ -278,6 +320,17 @@ mod tests {
             redact_text("Authorization: Bearer abc.def"),
             "Authorization: [private]"
         );
+    }
+
+    #[test]
+    fn the_nearest_name_is_a_slip_away() {
+        let names = ["list-notices", "create-notice", "search"];
+        assert_eq!(nearest("list-notice", names), Some("list-notices"));
+        assert_eq!(nearest("List_Notices", names), Some("list-notices"));
+        assert_eq!(nearest("serach", names), Some("search"));
+        assert_eq!(nearest("creat", names), Some("create-notice"));
+        assert_eq!(nearest("delete-everything", names), None);
+        assert_eq!(nearest("", names), None);
     }
 
     #[test]

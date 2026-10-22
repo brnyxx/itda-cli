@@ -24,8 +24,9 @@ Check the setup:
 $ itda doctor
 itda 0.4.0
 ok    data directory   /home/you/.local/share/itda
-ok    secrets          system keyring
+ok    secrets          system keyring; long secrets sealed in ~/.local/share/itda/vault.sealed with a key from the keyring
 ok    audit log        0 records, chain intact
+ok    changes          none with an unknown outcome
 ok    sites            0 installed, 0 invalid
 ok    agents           none connected (itda setup <url>, or itda mcp install <client>)
 ok    local addresses  refused (ITDA_ALLOW_LOCAL=1 allows them)
@@ -104,9 +105,10 @@ Make a change:
 
 ```sh
 itda call sandbox.create-notice --title hi  # exit 20: waits for approval <id>
-itda approve <id>                           # shows the exact request, asks y/N
+itda approve <id>                           # shows what it does and the exact request, asks y/N
 itda call sandbox.create-notice --title hi --approval <id>
 itda audit                                  # everything above, hash-chained
+itda describe sandbox                       # every action with its inputs and a command to copy
 ```
 
 Without a keyring (CI, containers), skip `itda login` and set
@@ -127,15 +129,16 @@ moment. A site definition can ask for more room with `defaults.interval`.
 | `itda add <file\|url\|name\|-> [--force]` | Install a site definition (a file, an https URL, stdin, or a ready-made site such as `github`) after showing where it sends requests and which actions change the site |
 | `itda remove <site>` | Remove an installed site definition; its accounts stay until `itda logout` |
 | `itda ls [site] [--json]` | Installed sites and their actions |
+| `itda describe <site>[.<action>] [--json]` | Each action with its inputs and an example command to copy |
 | `itda call <site>.<action> [--input value]… [--account id] [--approval id] [--json]` | Run one action |
 | `itda login <site> [--account id] [--secret name]` | Store a secret read from stdin |
 | `itda login <site> --browser [--url page]` | Sign in in your own browser and keep that site's session |
 | `itda accounts [<site>] [--json]` | Signed-in accounts and their secret names, never the values |
 | `itda logout <site> [--account id]` | Remove an account and its saved secrets |
 | `itda resume <site>` | Resume after a block or an expired sign-in |
-| `itda approvals` · `approve <id>` · `reject <id>` | Review changes agents asked for |
-| `itda audit [--limit n] [--verify] [--json]` | What agents did |
-| `itda mcp [--mode direct\|catalog] [--approve-in-client]` | Serve installed sites over MCP, with tools to set up, sign in, check and manage sites from the agent |
+| `itda approvals` · `approve <id>` · `reject <id>` | Review changes agents asked for; `reject` also withdraws one you granted |
+| `itda audit [--limit n] [--verify] [--json]` | What agents did, and the changes a stopped process left without an outcome |
+| `itda mcp [--mode direct\|catalog] [--approve-in-client] [--site name]` | Serve installed sites over MCP, with tools to set up, sign in, check and manage sites from the agent; `--site` serves one site only |
 | `itda mcp install <client> [--dry-run]` | Add itda to an MCP client |
 | `itda doctor` | Check the setup |
 | `itda feedback [--no-open]` | Print and open a link to a new GitHub issue with the version, the platform and the doctor checks filled in; sends nothing itself |

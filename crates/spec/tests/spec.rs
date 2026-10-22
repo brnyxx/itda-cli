@@ -171,8 +171,7 @@ site:
   base_url: https://app.example.com
 auth:
   - name: xsrf
-    kind: derived
-    header: X-CSRF-Token
+    kind: browser
     value_from: cookie:ct0
 operations:
   - name: next-feed
@@ -460,4 +459,40 @@ operations:
 "#,
     );
     assert_eq!(bad.validate().len(), 3, "{:?}", bad.validate());
+}
+
+#[test]
+fn browser_transports_and_derived_credentials_are_refused() {
+    let sp = parse(
+        r##"
+site: {name: leftover, base_url: https://example.com}
+auth:
+  - name: xsrf
+    kind: derived
+    header: X-CSRF-Token
+    value_from: cookie:ct0
+operations:
+  - name: feed
+    method: GET
+    path: /feed
+    transport: browser-fetch
+  - name: page
+    method: GET
+    path: /page
+    transport: browser
+"##,
+    );
+    let issues = sp.validate();
+    let fields: Vec<&str> = issues.iter().map(|i| i.field.as_str()).collect();
+    assert_eq!(
+        fields,
+        [
+            "auth.xsrf.kind",
+            "operations.feed.transport",
+            "operations.page.transport"
+        ],
+        "{issues:?}"
+    );
+    assert!(issues[0].detail.contains("unsupported auth kind: derived"));
+    assert!(issues[1].remedy.contains("plain HTTP"));
 }

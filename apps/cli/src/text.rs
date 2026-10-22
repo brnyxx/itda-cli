@@ -168,6 +168,9 @@ pub fn t(key: &str) -> &'static str {
         ("read", "read  ", "읽기  "),
         ("change", "change", "변경  "),
         ("inputs", "inputs: {list}", "입력: {list}"),
+        ("required", "required", "필수"),
+        ("default", "default {value}", "기본값 {value}"),
+        ("example", "example: {command}", "예: {command}"),
         (
             "change_note",
             "(waits for your approval each time)",

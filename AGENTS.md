@@ -6,9 +6,10 @@ loaders is [skills/itda/SKILL.md](skills/itda/SKILL.md).
 
 ## Discover sites and actions
 
-- `itda ls` prints every installed site and its actions. Each action has a
-  description in plain words (`List what Notices shows`), its effect (`read`
-  or `write`) and its inputs. `itda ls <site> --json` gives the same as data.
+- `itda ls` prints every installed site and its actions: a description in
+  plain words (`List what Notices shows`), its effect (`read` or `write`) and
+  its inputs. `itda describe <site>` adds a command to copy per action;
+  `--json` gives both as data. A name a slip away from a real one gets "Did you mean".
 - Over MCP, with up to 30 actions each one is its own tool, named
   `<site>.<action>`, with a JSON Schema for its inputs. With more, three
   tools stay fixed: `itda_search` (find by keywords), `itda_describe` (one
@@ -27,10 +28,11 @@ loaders is [skills/itda/SKILL.md](skills/itda/SKILL.md).
 itda call <site>.<action> [--input value]... --json
 ```
 
-Reads run right away and return a JSON envelope: `site`, `action`,
-`effect`, `data` and `meta`. The exit code is 0 on success; the codes for
-failures are in [docs/agents.md](docs/agents.md). Reads may be retried after
-`timeout` or `request_failed`.
+Reads run right away and return a JSON envelope: `site`, `action`, `effect`,
+`data` and `meta`. Exit 0 on success; the failure codes are in
+[docs/agents.md](docs/agents.md). Reads may be retried after `timeout` or
+`request_failed`. `api_denied` (exit 14) means the site refused that one request
+as not allowed (`provider_reason` says why); do not sign in again.
 
 A read that lists things carries `meta.next` when the site has another page: call it again with `--next <handle>` (over MCP, `next`) and the same inputs, only as far as the user's question needs, never a whole site.
 The handle lasts fifteen minutes, for that call only; on `pagination_expired` or `pagination_invalid` (exit 23) start again without `next`.
@@ -51,8 +53,10 @@ MCP every result is marked `untrusted` for that reason.
   request and answer y or n. No agent tool can approve a change; only the
   user can.
 - After they confirm, call again with the same inputs and `--approval <id>`
-  (or `approval` in the MCP arguments). The change is sent once. Different
-  inputs need a new approval.
+  (or `approval` in the MCP arguments). The change is sent once.
+- `approval_pending` (exit 20) means the user has not answered yet: wait, then
+  call again with the same inputs and id; do not ask for a new one. Other
+  inputs withdraw the approval (`approval_expired`, `reason: inputs_changed`).
 - `approval_rejected` means the user said no. Do not ask again unless they
   change their mind.
 - `action_outcome_unknown` (exit 22) means the change was sent and no answer
@@ -81,40 +85,36 @@ to do:
 | `unreachable` | the site did not answer | wait, then check again |
 
 `itda check --json` carries the verdict as `verdict` and per site under
-`sites`; the exit code follows the worst verdict. `itda_check` returns the
-same data.
+`sites`; the exit code follows the worst verdict. `itda_check` returns the same data.
 
 ## Set up a new site
 
-Over MCP, call `itda_setup` with the address of a page on the site. itda
-looks at the page as itself, names the actions in plain words, tries every
-read once, keeps the ones that work, and the site's actions appear as tools
-in the same conversation. A page drawn by scripts opens briefly in a browser
-window on the user's screen, so itda can watch what it loads by itself;
-nothing in it is clicked or typed. A page that needs a sign-in, or still
-shows nothing, cannot be set up this way: the result says what the user
-should run in a terminal instead. If a read then says to sign in (`auth_required`),
-call `itda_login` with the site: the user signs in in their own browser and
-you only ever see the account id.
+Over MCP, call `itda_setup` with the address of a page on the site. itda looks
+at the page as itself, names the actions in plain words, tries every read once,
+keeps the ones that work, and the site's actions appear as tools in the same
+conversation. A page drawn by scripts opens briefly in a browser window on the
+user's screen, so itda can watch what it loads by itself; nothing in it is
+clicked or typed. A page that needs a sign-in, or still shows nothing, cannot
+be set up this way: the result says what the user should run in a terminal
+instead. If a read then says to sign in (`auth_required`), call `itda_login`
+with the site: the user signs in in their own browser and you only ever see the account id.
 
 In a terminal, run `itda setup <url>`, or tell the user to type `itda` and
 paste the address. itda looks at the page (or opens the user's browser and
-watches when the page needs a sign-in), names the actions in plain words,
-tries every read and asks the user before saving and before connecting an
-agent. Let the user answer those questions. Public APIs with a ready-made
-definition install with `itda add github` (also `npm`, `crates-io`, `pypi`).
+watches when the page needs a sign-in), names the actions, tries every read
+and asks the user before saving and before connecting an agent. Let the user
+answer. Public APIs with a ready-made definition install with `itda add github`
+(also `npm`, `crates-io`, `pypi`).
 
 `itda_manage` covers the rest without a terminal: `refresh`, `remove` and
-`resume` ask the user to confirm in a form the client shows them (a client
-that cannot show forms gets the command for the user to run; a form nobody
-answers counts as no), `approvals` lists the changes waiting for the user,
-and `audit` shows the last entries of the audit log. None of them approves
-a change.
+`resume` ask the user to confirm in a form the client shows them (a client that
+cannot show forms gets the command for the user to run; a form nobody answers
+counts as no), `approvals` lists the changes waiting for the user, and `audit`
+shows the last entries of the audit log. None of them approves a change.
 
 ## Report a problem
 
-`itda feedback` prints a link to a new GitHub issue with the itda version,
-the platform and the doctor checks filled in, and opens it in the browser
-(`--no-open` only prints). It sends nothing itself, and it leaves the data
-directory path out. Tell the user to remove credentials and private site
-data before posting.
+`itda feedback` prints a link to a new GitHub issue with the itda version, the
+platform and the doctor checks filled in, and opens it in the browser
+(`--no-open` only prints). It sends nothing itself and leaves the data directory
+path out. Tell the user to remove credentials and private site data before posting.
