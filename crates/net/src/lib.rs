@@ -4,7 +4,8 @@
 //!
 //! Derived from Hycli `src/net.rs` (Apache-2.0). Changes:
 //! - The client identifies itself (`itda/<version>`) instead of presenting a
-//!   Chrome user agent and `sec-ch-ua`/`sec-fetch-*` headers.
+//!   Chrome user agent and `sec-ch-ua`/`sec-fetch-*` headers, and states no
+//!   language preference (`Accept-Language: *`) instead of a Korean list.
 //! - The in-page browser fetch and rendered-page fallbacks used after a block
 //!   (`fetch_browser_in_page`, `fetch_rendered`) were removed, together with the
 //!   strategy records that chose them.
@@ -54,6 +55,11 @@ pub struct Request {
     /// The least time the site's definition wants between its requests. The
     /// gate's own pace is the floor; see [`gate::DEFAULT_INTERVAL`].
     pub interval: Option<Duration>,
+    /// Whether a block or challenge pauses the site until the user resumes
+    /// it. Only the reads `itda setup` tries once, with the person watching,
+    /// turn this off: the answer is still classified and reported, and the
+    /// caller sends nothing more to the site in that run.
+    pub pause_on_block: bool,
 }
 impl Request {
     /// A bounded anonymous GET that follows same-origin redirects.
@@ -69,6 +75,7 @@ impl Request {
             read_only: true,
             follow_redirects: true,
             interval: None,
+            pause_on_block: true,
         }
     }
 }
@@ -293,8 +300,11 @@ impl Network {
                     .into_owned(),
             });
             let blocked = defense != defend::Class::None && defense != defend::Class::RateLimit;
-            let outcome = if blocked {
+            let pause = blocked && input.pause_on_block;
+            let outcome = if pause {
                 Outcome::Pause(gate::BLOCKED)
+            } else if blocked {
+                host_outcome
             } else if status == 401 && !input.account_id.is_empty() {
                 // A signed-in request that is no longer accepted: stop using the
                 // session until the user reconnects, instead of retrying it.
@@ -304,7 +314,7 @@ impl Network {
             };
             lease.release(outcome).await?;
             // A site that refuses automated access refuses it for every account.
-            let host_outcome = if blocked { outcome } else { host_outcome };
+            let host_outcome = if pause { outcome } else { host_outcome };
             host_lease.release(host_outcome).await?;
             if input.follow_redirects
                 && input.read_only
@@ -385,9 +395,11 @@ fn default_headers(target: &url::Url, input: &Request, origin: &str) -> AppResul
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }),
     );
+    // itda has no language preference of its own: an agent reads any language,
+    // and a stated language changes which page some sites serve.
     headers.insert(
         HeaderName::from_static("accept-language"),
-        HeaderValue::from_static("ko-KR,ko;q=0.9,en;q=0.8"),
+        HeaderValue::from_static("*"),
     );
     // Same-origin Referer/Origin let first-party CSRF checks pass for the user's own session.
     if (has_json_hint || is_mutation || !input.account_id.is_empty())
@@ -492,5 +504,30 @@ mod tests {
         assert_eq!(retry_after(&header("Wed, 21 Oct 2015 07:28:00 GMT")), None);
         assert_eq!(retry_after(&header("soon")), None);
         assert_eq!(retry_after(&[]), None);
+    }
+
+    #[test]
+    fn a_read_asks_for_any_language_and_sends_no_browser_headers() {
+        let names = |input: &Request| {
+            let target = url::Url::parse(&input.url).unwrap();
+            let origin = target.origin().ascii_serialization();
+            let headers = default_headers(&target, input, &origin).unwrap();
+            let mut names: Vec<String> = headers.keys().map(|k| k.as_str().to_owned()).collect();
+            names.sort();
+            (names, headers)
+        };
+        let (page, headers) = names(&Request::read("https://example.org/project/requests/"));
+        assert_eq!(page, ["accept", "accept-language"]);
+        assert!(headers["accept"].to_str().unwrap().starts_with("text/html"));
+        assert_eq!(headers["accept-language"], "*");
+        let (api, headers) = names(&Request::read("https://example.org/api/items"));
+        assert_eq!(api, ["accept", "accept-language", "referer"]);
+        assert_eq!(headers["accept"], "application/json, text/plain, */*");
+        assert_eq!(headers["accept-language"], "*");
+        let mut asked = Request::read("https://example.org/page");
+        asked.headers = vec![("Accept-Language".into(), "ko".into())];
+        let (with_language, headers) = names(&asked);
+        assert_eq!(with_language, ["accept", "accept-language"]);
+        assert_eq!(headers["accept-language"], "ko");
     }
 }

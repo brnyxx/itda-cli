@@ -52,6 +52,28 @@ async fn reads_json_and_identifies_itself() {
 }
 
 #[tokio::test]
+async fn a_page_read_sends_its_name_a_plain_accept_and_any_language() {
+    let base = host(Router::new().route(
+        "/project/requests/",
+        get(|headers: HeaderMap| async move {
+            let mut names: Vec<String> = headers.keys().map(|k| k.as_str().to_owned()).collect();
+            names.sort();
+            let language = headers[header::ACCEPT_LANGUAGE].to_str().unwrap();
+            format!("{} {language}", names.join(","))
+        }),
+    ))
+    .await;
+    let response = network(true)
+        .fetch(Request::read(format!("{base}/project/requests/")))
+        .await
+        .unwrap();
+    assert_eq!(
+        String::from_utf8(response.bytes).unwrap(),
+        "accept,accept-language,host,user-agent *"
+    );
+}
+
+#[tokio::test]
 async fn private_addresses_need_explicit_permission() {
     let base = host(Router::new().route("/", get(|| async { "ok" }))).await;
     let error = network(false).fetch(Request::read(base)).await.unwrap_err();
@@ -175,6 +197,66 @@ async fn a_challenge_pauses_the_site_until_the_user_resumes() {
         .await
         .unwrap();
     assert!(again.successful());
+}
+
+#[tokio::test]
+async fn a_challenge_page_served_with_200_pauses_the_site() {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let counted = hits.clone();
+    let base = host(Router::new().route(
+        "/project/requests/",
+        get(move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+            async {
+                (
+                    [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                    include_str!("fixtures/client-challenge.html"),
+                )
+            }
+        }),
+    ))
+    .await;
+    let net = network(true);
+    let first = net
+        .fetch(Request::read(format!("{base}/project/requests/")))
+        .await
+        .unwrap();
+    assert_eq!(first.status, 200);
+    assert_eq!(first.defense, "bot-manager");
+    assert!(!first.successful());
+    let paused = net
+        .fetch(Request::read(format!("{base}/project/requests/")))
+        .await
+        .unwrap_err();
+    assert_eq!(paused.public_code, gate::BLOCKED);
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_challenge_during_setup_is_reported_without_pausing_the_site() {
+    let base = host(Router::new().route(
+        "/search/",
+        get(|| async {
+            (
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                include_str!("fixtures/client-challenge.html"),
+            )
+        }),
+    ))
+    .await;
+    let net = network(true);
+    let tried = Request {
+        pause_on_block: false,
+        ..Request::read(format!("{base}/search/"))
+    };
+    let first = net.fetch(tried).await.unwrap();
+    assert_eq!(first.defense, "bot-manager");
+    // Nothing was paused: the site answers the next request as before.
+    let again = net
+        .fetch(Request::read(format!("{base}/search/")))
+        .await
+        .unwrap();
+    assert_eq!(again.defense, "bot-manager");
 }
 
 #[tokio::test]

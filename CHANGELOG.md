@@ -225,6 +225,12 @@ change the definition format or the CLI.
   when it is open, or says that opening it is enough; for Claude Code it runs
   `claude mcp add` itself when `claude` is on the PATH.
 - `itda doctor` lists the agent apps whose settings already start itda.
+- `itda setup` on a page of `pypi.org`, `github.com`, `npmjs.com` (with or
+  without `www.`) or `crates.io` uses the ready-made definition `itda add`
+  installs for it, says "This is PyPI. Using its JSON API." (or the site's
+  name and API), does not fetch the page and tries the definition's reads;
+  `--no-template` reads the page instead. `itda_setup` over MCP does the
+  same and puts the line in its notes.
 
 ### Removed
 
@@ -373,6 +379,41 @@ change the definition format or the CLI.
   and one that does not parse leaves the page draft as it is. The
   header comment and each merged action's `evidence` name where it came from,
   and `itda setup` says what it read in one line.
+- Requests send `Accept-Language: *` (no preference) instead of
+  `ko-KR,ko;q=0.9,en;q=0.8`, a value left over from the browser header block
+  itda was derived from. pypi.org answered a project page asked for with any
+  Korean `Accept-Language` (`ko`, `ko-KR` or that list) with a 3 KB "Client
+  Challenge" page and kept challenging every request from the same address
+  for a few minutes after, so `itda draft page
+  https://pypi.org/project/requests/` drafted the challenge instead of the
+  322 KB page. Leaving the header out is not enough: amazon.com then sends a
+  gzip body itda does not decode. A definition that needs a language can
+  still set one in `defaults.headers`.
+- A challenge page served with HTTP 200 (small, titled as a challenge, only
+  a script and no link to follow, as bugzilla.mozilla.org's bug list and
+  pypi.org answer when they challenge) now counts as a block: the site is
+  paused, `itda draft page` and `itda setup` say the site's bot protection
+  refused itda (`blocked_by_site`, exit 12), and `itda check` says
+  `blocked`. Before, it was drafted as a read named after the challenge and
+  checked as `ok`.
+- Drafts leave ad slots out of a page's records (an element whose class, id
+  or label marks it as an ad: `AdHolder`, `ad-*`, `sponsored`,
+  `aria-label="Sponsored"`): when ads share their classes with the records
+  beside them, the records' selector excludes the ad class. On amazon.com
+  the draft had picked the sponsored results, which are not there when the
+  first page is asked for by number.
+- The page input a draft adds when a page links to its next page (`page`,
+  `offset`, `start` and the like) has no default any more, so the read and
+  `itda check` ask for the address the draft saw until an agent or a page
+  handle asks for another page; the next page is still counted from 1, or
+  from 0 for an offset. Sending `page=1` made some sites answer with
+  different markup and the check fail.
+- A read the site blocks or challenges while `itda setup` tries it is left
+  out with "<path>: the site does not give itda this page", nothing more is
+  sent to the site in that run (the reads after it are kept and shown as not
+  tried, for the next `itda check`), and the site is not left paused, so a
+  challenge on pypi.org's search page no longer takes the three feeds after
+  it down too. `itda check` and calls on an installed site still pause it.
 
 ## [0.4.0] - 2026-10-22
 

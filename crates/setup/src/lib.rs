@@ -302,6 +302,9 @@ pub enum Progress<'a> {
     },
     /// The site runs software itda knows; its template is used.
     Recognised(&'a software::Recognised),
+    /// The page is on a site itda has a ready-made definition for; that
+    /// definition is used and the page is not fetched.
+    Bundled(&'a sites::Known),
     /// The page opened without a sign-in and this is what it offers.
     PageFetched(&'a PageSummary),
     /// A GraphQL endpoint was asked what it offers.
@@ -428,7 +431,16 @@ pub async fn run(
     // The recording a watched load or the person left: its pages are the
     // site's pages for a refresh.
     let mut har = Vec::new();
-    if !record {
+    // A site with a ready-made definition gets it, the way `itda add` would
+    // install it, unless a template was asked for or turned off.
+    let bundled = (!record && request.template == Template::Auto)
+        .then(|| sites::known_host(&host))
+        .flatten();
+    if let Some(known) = &bundled {
+        report(Progress::Bundled(known));
+        draft = Some(bundled_draft(known)?);
+    }
+    if !record && bundled.is_none() {
         let probed = probe(ctx, url.as_str(), None).await?;
         // The software the site runs decides first, from the page's HTML,
         // confirmed by one request to its own API.
@@ -599,10 +611,11 @@ pub async fn run(
         kept_credentials = true;
     }
 
-    // 4. Try every read; keep what works.
+    // 4. Try every read once; keep what works. A read the site refuses is
+    // left out and nothing more is sent to it in this run.
     let spec = sites::load(&ctx.home, &site)?;
     report(Progress::Trying(&spec));
-    let outcomes = check::run(&ctx.runtime, std::slice::from_ref(&spec), None).await;
+    let outcomes = check::try_once(&ctx.runtime, &spec).await;
     let mut removed = Vec::new();
     let mut worked = 0;
     for outcome in &outcomes {
@@ -628,7 +641,17 @@ pub async fn run(
         let yaml = without(&draft.yaml, &removed)?;
         itda_types::util::atomic_file(&path, yaml.as_bytes())?;
     }
-    refresh::remember(&ctx.home, &site, sources)?;
+    // A ready-made definition comes from itda itself, not from the site's
+    // pages, so there is nothing to draft again from, nor sources left from
+    // a site of the same name set up from its pages before.
+    if bundled.is_none() {
+        refresh::remember(&ctx.home, &site, sources)?;
+    } else {
+        let left = path.with_file_name(refresh::SOURCES_FILE);
+        if left.exists() {
+            std::fs::remove_file(left)?;
+        }
+    }
     report(Progress::Saved { site: &site });
     let spec = sites::load(&ctx.home, &site)?;
     Ok(Finished::Done(Box::new(Done {
@@ -642,6 +665,29 @@ pub async fn run(
         kept_credentials,
         recognised,
     })))
+}
+
+/// A ready-made definition as a draft, so the same steps save and try it.
+fn bundled_draft(known: &sites::Known) -> AppResult<itda_prep::Draft> {
+    let yaml = sites::bundled(known.site).ok_or_else(|| AppError::api("internal", 500))?;
+    let spec = itda_spec::parse(yaml.as_bytes())?;
+    let reads = spec
+        .operations
+        .iter()
+        .filter(|op| {
+            itda_policy::operation_effect(op, &Default::default()) == itda_policy::Effect::Read
+        })
+        .count();
+    Ok(itda_prep::Draft {
+        site: spec.site.name.clone(),
+        yaml: yaml.to_owned(),
+        operations: spec.operations.len(),
+        reads,
+        thin_reads: 0,
+        notes: Vec::new(),
+        problems: Vec::new(),
+        described: None,
+    })
 }
 
 /// What fills a software's template for one site.

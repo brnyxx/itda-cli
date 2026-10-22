@@ -188,6 +188,9 @@ impl Server {
                     found.title, found.base
                 )
             }),
+            itda_setup::Progress::Bundled(known) => {
+                notes.push(format!("This is {}. Using its {}.", known.title, known.api));
+            }
             itda_setup::Progress::SchemaAsked { url } => {
                 notes.push(format!("Asked the GraphQL API at {url} what it offers."));
             }

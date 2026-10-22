@@ -182,6 +182,12 @@ fn say(progress: Progress<'_>, width: &mut usize) {
                 tf(key, &[("software", &found.title), ("base", &found.base)])
             );
         }
+        Progress::Bundled(known) => {
+            eprintln!(
+                "    {}",
+                tf("bundled", &[("title", known.title), ("api", known.api)])
+            );
+        }
         Progress::PageFetched(summary) => {
             eprintln!(
                 "    {}",
@@ -251,6 +257,9 @@ fn tried(spec: &Spec, outcome: &check::Outcome, width: usize) -> String {
             None => format!("✓ {name:<width$} {}", t("ok")),
         },
         "skipped" if !read => format!("· {name:<width$} {}", t("skipped_change")),
+        "skipped" if outcome.detail == check::NOT_TRIED => {
+            format!("· {name:<width$} {}", t("skipped_refused"))
+        }
         "skipped" => format!(
             "· {name:<width$} {}",
             tf(
@@ -266,6 +275,10 @@ fn tried(spec: &Spec, outcome: &check::Outcome, width: usize) -> String {
                 ("response_mismatch", _) => t("why_mismatch").to_owned(),
                 ("auth_required", _) => t("why_auth").to_owned(),
                 ("not_found", _) => t("why_not_found").to_owned(),
+                ("blocked_by_site", _) if outcome.upstream_status.is_some() => {
+                    let path = op.map(|op| op.path.as_str()).unwrap_or_default();
+                    return format!("✗ {name:<width$} {}", tf("withheld", &[("path", path)]));
+                }
                 ("blocked_by_site", _) => t("why_blocked").to_owned(),
                 ("site_rate_limited", Some(seconds)) => {
                     tf("why_wait", &[("n", &seconds.to_string())])

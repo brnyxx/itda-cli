@@ -36,6 +36,11 @@ pub fn t(key: &str) -> &'static str {
             "{software}로 보입니다. {base}의 API를 씁니다.",
         ),
         (
+            "bundled",
+            "This is {title}. Using its {api}.",
+            "{title}입니다. {api}를 씁니다.",
+        ),
+        (
             "template_unconfirmed",
             "Using the {software} template at {base} as asked; its API did not answer there yet.",
             "요청대로 {software} 템플릿을 {base}에 씁니다. 그 주소의 API는 아직 응답하지 않았습니다.",
@@ -209,6 +214,16 @@ pub fn t(key: &str) -> &'static str {
             "변경이라 건너뜀",
         ),
         ("removed", "removed: {why}", "뺐음: {why}"),
+        (
+            "withheld",
+            "removed: {path}: the site does not give itda this page",
+            "뺐음: {path}: 사이트가 itda에게 이 페이지를 주지 않습니다",
+        ),
+        (
+            "skipped_refused",
+            "not tried: the site refused an earlier read; itda check tries it",
+            "앞선 읽기를 사이트가 거부해 건너뜀, itda check 때 시도합니다",
+        ),
         (
             "why_mismatch",
             "the answer was not what the page showed",

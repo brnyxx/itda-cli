@@ -35,10 +35,32 @@ impl Outcome {
     }
 }
 
+/// The detail of a read `try_once` did not send because the site refused
+/// an earlier one.
+pub const NOT_TRIED: &str = "not tried: the site refused an earlier read; itda check tries it";
+
 /// Check every action of `specs`, one at a time. Changes are never sent.
 pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Vec<Outcome> {
+    reads(runtime, specs, account, false).await
+}
+
+/// Try every read of a site being set up, once, while the person watches. A
+/// read the site blocks or challenges is reported without pausing the site,
+/// and nothing more goes to the site in this run: the reads after it are
+/// `skipped`, so the next `itda check` tries them.
+pub async fn try_once(runtime: &Runtime, spec: &Spec) -> Vec<Outcome> {
+    reads(runtime, std::slice::from_ref(spec), None, true).await
+}
+
+async fn reads(
+    runtime: &Runtime,
+    specs: &[Spec],
+    account: Option<&str>,
+    discovery: bool,
+) -> Vec<Outcome> {
     let mut out = Vec::new();
     for spec in specs {
+        let mut refused = false;
         for op in &spec.operations {
             let outcome = |status: &str, detail: String, duration_ms| Outcome {
                 site: spec.site.name.clone(),
@@ -63,9 +85,14 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                 ));
                 continue;
             }
+            if refused {
+                out.push(outcome("skipped", NOT_TRIED.into(), None));
+                continue;
+            }
             let call = Call {
                 action: op.name.clone(),
                 account: account.map(str::to_owned),
+                discovery,
                 ..Call::default()
             };
             out.push(match runtime.call(spec, call).await {
@@ -91,6 +118,17 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                         ("auth_required", _) => format!("sign in: itda login {}", spec.site.name),
                         ("request_failed", Some(status)) => {
                             format!("the site answered HTTP {status}")
+                        }
+                        // Answered with a block: the site does not give this
+                        // page. Refused before sending: the site was paused
+                        // already, and nothing more would go out either.
+                        ("blocked_by_site", Some(_)) if discovery => {
+                            refused = true;
+                            format!("{}: the site does not give itda this page", op.path)
+                        }
+                        ("blocked_by_site", None) if discovery => {
+                            refused = true;
+                            error.msg.clone()
                         }
                         _ => error.msg.clone(),
                     };

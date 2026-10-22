@@ -55,13 +55,13 @@ notices when the page changes:
 |---|---|
 | A table with a header row | `html.items` per row, one field per column named after its header, plus `link` |
 | A list of similar elements with a title and a link (cards, posts, `tr.athing`) | `html.items` with `title`, `link` and, when present, `id`, `summary`, `meta`, `published_at`, plus whatever most records hold at one place under a class the site named (`score`, `author`, `release__version` becomes `version`); build names such as `heading__fzQskI` are left out |
-| Any run of three or more siblings of one shape, outside navigation, sidebars, headers and footers, each holding a title at the same place: a link (`ol.stories > li.story`, `#articles > dt`, a `dl` per section), a heading, a text named as a title (`span.result__title`), or the record itself when it is a link with something inside (`a.release`) | The same, with the title and link read from that title's own path in the page and a text that reads as a date as `published_at`; a heading or a link that is the whole record needs one more field, so bare links, menus and paragraphs never qualify. The read is described by what the records are when the page names them (`List the projects on Projects`) |
+| Any run of three or more siblings of one shape, outside navigation, sidebars, headers and footers and leaving out ad slots (an element whose class, id or label marks it as an ad: `AdHolder`, `ad-*`, `sponsored`, `aria-label="Sponsored"`), each holding a title at the same place: a link (`ol.stories > li.story`, `#articles > dt`, a `dl` per section), a heading, a text named as a title (`span.result__title`), or the record itself when it is a link with something inside (`a.release`) | The same, with the title and link read from that title's own path in the page and a text that reads as a date as `published_at`; a heading or a link that is the whole record needs one more field, so bare links, menus and paragraphs never qualify. The read is described by what the records are when the page names them (`List the projects on Projects`) |
 | A list whose records' links share one shape: one path with one segment that differs per record (`/item/{id}`), or one path with one query key that does (`view.php?id=`) | A read of one record (`get-project`, `get-post`) with a required `id` input (`int` when the ids are numbers), the query keys every link sends as inputs with defaults, and no response check yet: run it once, then declare what the page shows |
 | One thing (an article, a package, a product, a bug): an `h1` outside the site's header and menus, with a body of text, a date, or two or more labelled values beside it, outside any list of records (or the list takes less than a quarter of the main block) | `html.page` fields on the whole page, each matching once: `headline` (required), `body` (the longest block named as one, `div.project-description`, `#readme`, `[itemprop=articleBody]`, else the block that holds most of the text), what sits beside the headline under a class the site named (`project-header__summary` becomes `summary`), `description` from the page's meta, `published_at`, `author`, and one field per `dt`/`dd` pair or `th`/`td` row, named after its label. A page that is one thing with a named list of five or more records on it (a package with its releases) gets both reads |
 | A list inside data embedded for its scripts: an `ItemList` or a list of one typed thing (`NewsArticle`, `Product`...) in `ld+json`; in `__NEXT_DATA__`, `__NEXT_F__`, `__APOLLO_STATE__` (grouped by typename), `__PRELOADED_STATE__` and the like, the list of objects with the most to read (a title, a link, a date) and, among those, the longest | One read per list, named after what it holds (`list-news-articles`), with `ssr_json`, `extract_pointer` to the list, `required_pointers` on its first record and a `model` that keeps up to eight plain fields of each record, ids and titles first; credentials are left out |
 | Data embedded for its scripts with no list in it | `ssr_json` with `required_pointers` on the whole payload, and a note saying what to add |
 | Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
-| Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | A query input named after that key (`int`); `page` and the like default to 1, `offset` and `start` to 0, and a key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
+| Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | An optional query input named after that key (`int`, no default, so the read asks for the address it was drafted from until an agent or a page handle asks for another; counting starts at 1 for `page` and the like, at 0 for `offset` and `start`), and a key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
 | A `GET` form | A read with the form's fields as `query` inputs |
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
 | A sign-in form | Left out; `itda setup --user` and `itda login <site>` sign in through it, see `auth` below |
@@ -134,6 +134,33 @@ result as on any site: a refresh fills the same template at the same API
 base and merges the page's reads again. Over MCP, `itda_setup` does the same, takes `template` (a name, or
 `none`) and names the template it used in its result. The templates are not
 installed by `itda add`: their `base_url` is a placeholder the setup fills.
+
+## Sites with a ready-made definition
+
+A page on `pypi.org`, `github.com`, `www.npmjs.com` (or `npmjs.com`) or
+`crates.io` gets the definition `itda add` installs for that site
+(`pypi`, `github`, `npm`, `crates-io`), which reads the site's own API
+instead of its pages. `itda setup` says so in one line, "This is PyPI. Using
+its JSON API.", does not fetch the page, saves the definition under its own
+name and tries its reads once as on any site. `--no-template` reads the page
+like any other and `--as <software>` uses that template instead; over MCP,
+`itda_setup` takes the same path, with `template: none` to skip it, and puts
+the line in its notes. A site set up this way has no sources to draft again
+from, so `itda refresh` does not apply; `itda add <site> --force` installs
+the current definition.
+
+## When setup tries the reads
+
+`itda setup` tries every read once while you watch, and a read the site
+blocks or challenges (a 403 from a bot manager, a captcha, a 200 page titled
+as a challenge) is handled as a finding of the setup rather than a refusal
+to remember: that read is left out with one line, "<path>: the site does not
+give itda this page", nothing more is sent to the site in that run (the
+reads after it are kept and shown as not tried, so the next `itda check`
+tries them), and the site is not paused, since nothing was retried. The
+reads that already answered are installed. `itda check`, `itda call` and the
+MCP tools on an installed site keep the rule that a block or challenge
+pauses the site until you resume it.
 
 ## Start from a browser recording
 
