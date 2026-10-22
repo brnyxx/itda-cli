@@ -62,32 +62,31 @@ or closing the form rejects it, and the agent gets `approval_rejected`. Both
 decisions go into the audit log. If the client cannot show forms, nothing
 changes. The agent gets the approval id; you can still use `itda approve`.
 
-How the form reaches you depends on the protocol revision the client speaks.
-Up to 2025-11-25 itda sends the client a request and waits 290 seconds for
-the answer; when nobody answers, the form closes and the agent gets the
-approval id, which by then has seconds left of its five minutes. From
-2026-07-28 the form is the result of the call: the client keeps it open as
-long as it likes and calls itda again with your answer. An answer that
-arrives after the approval expired is not used; you are asked again, for a
-new approval.
+How the form reaches you depends on the protocol revision the client speaks. Up
+to 2025-11-25 itda sends the client a request and waits 290 seconds for an
+answer. If nobody answers, the form closes; the agent gets the approval id with
+seconds left of its five minutes. From 2026-07-28 the form is the call's result.
+The client keeps it open as long as it likes and calls itda again with your
+answer. itda ignores answers that arrive after the approval expires and asks you
+again for a new approval.
 
 What each client showed, measured on 2026-10-22:
 
 - **Claude Code 2.1.289** shows the form in the terminal, under "MCP server
   "itda" requests your input": the review lines, the box ("Approve this
-  change"), and Accept and Decline buttons. Space ticks the box, Enter on
-  Accept sends it, Esc closes the form. The agent waits ("Calling itda") and
-  sees nothing until you answer; Accept runs the change, Decline and Esc both
-  end in `approval_rejected`. A review of four lines showed whole; a longer
-  one was cut to its first three lines with "(+2 more lines)" and no key to
-  show the rest, so a change with several inputs may not show them all. Claude
-  Code speaks protocol 2026-07-28 with itda. Its `Elicitation` hook can
-  answer a form from a script without showing it, so a hook that answers
-  itda's form would approve changes on its own: do not add one.
-- **Claude Desktop 3.1623.1** declares no elicitation capability, so itda
-  never sends it a form. Desktop shows its own "Allow once" card for the
-  tool call, the agent gets `approval_required` with the id, and you approve
-  in a terminal. `--approve-in-client` changes nothing there.
+  change"), and Accept and Decline buttons. Space ticks the box, Enter on Accept
+  sends it, Esc closes the form. The agent waits ("Calling itda") and sees
+  nothing until you answer. Accept runs the change; Decline and Esc both end in
+  `approval_rejected`. A four-line review showed whole. A longer one showed only
+  its first three lines with "(+2 more lines)" and no key to show the rest; a
+  change with several inputs may not show them all. Claude Code speaks protocol
+  2026-07-28 with itda. Its `Elicitation` hook can answer a form from a script
+  without showing it. A hook answering itda's form would approve changes on its
+  own: do not add one.
+- **Claude Desktop 3.1623.1** declares no elicitation capability, so itda never
+  sends it a form. Desktop shows its own "Allow once" card for the tool call.
+  The agent gets `approval_required` with the id; you approve in a terminal.
+  `--approve-in-client` changes nothing there.
 
 Turn this on only for clients that put elicitation forms in front of you. The
 form goes to the client application, never the model. A client that answers

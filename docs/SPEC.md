@@ -86,18 +86,17 @@ nothing else from the page. A script-drawn page shows little to a plain fetch.
 `itda draft page` reports this and points to recording the site; `itda setup`
 first watches the page load in your browser (below).
 
-When a fetched page is a shell whose main content is one or more
-`<iframe src>` (or an older `<frameset>`'s `<frame src>`) on the same origin,
-and the page itself has no records, data, form or feed of its own, itda
-fetches each frame's page as itself, on the same pacing and with the same
-session, and drafts from the frame pages as pages of the site. Each frame
-read keeps the frame's own address as its operation path, since that is what
-a request to the server looks like; a form inside a frame posts to the
-frame's action like any other. At most four frames are followed, at most two
-deep. A frame whose page is on another origin is listed in the notes and
-never fetched, and so is a same-origin frame that answered with nothing.
-`itda draft page` and `itda setup` say what they followed ("Followed 1 frame:
-/frame/board.").
+A fetched page is a shell when its main content is one or more same-origin
+`<iframe src>` (or an older `<frameset>`'s `<frame src>`) and it has no records,
+data, form or feed of its own. itda then fetches each frame's page as itself, on
+the same pacing and with the same session, and drafts from the frame pages as
+pages of the site. Each frame read keeps the frame's own address as its
+operation path, since that is what a request to the server looks like. A form
+inside a frame posts to the frame's action like any other. itda follows at most
+four frames, at most two deep. itda lists a frame on another origin in the notes
+and never fetches it. The same goes for a same-origin frame that answered with
+nothing. `itda draft page` and `itda setup` say what they followed ("Followed 1
+frame: /frame/board.").
 
 ## Start from the software a site runs
 
@@ -256,17 +255,16 @@ you add with `itda login`. Calls with a sign-in cookie (by name, such as
 becomes a `preflight` step. It reads the token from the form page recorded
 before the post, so each change sends a fresh one. A header such as
 `X-CSRF-Token` gets the same treatment using a `<meta name="csrf-token">` tag on
-an earlier page, as Rails, Laravel and many single-page apps do. A session the site carries in
-the URL rather than a cookie gets a `kind: browser` entry too, with
-`value_from: query:<key>`: when a sign-in's answer hands out a query key
-whose value looks like a session (in the redirect `Location`, or on the links
-of the first page after the sign-in) and every signed-in call then carries
-it, that key is drafted as the session, every operation that sent it gets
-`auth: <name>`, and the key is taken off each operation's inputs. The value
-is kept in the keyring, never in the definition; at run time it is appended
-to the query of each request the way a `cookie:` session is sent as a cookie.
-The sign-in call itself is left out, as a person signs in, never an agent.
-itda omits and
+an earlier page, as Rails, Laravel and many single-page apps do. A session the
+site carries in the URL rather than a cookie also gets a `kind: browser` entry,
+with `value_from: query:<key>`. itda drafts a query key as the session when the
+sign-in's answer hands it out (in the redirect `Location`, or on the links of
+the first page after the sign-in), its value looks like a session, and every
+signed-in call carries it. Every operation that sent the key gets
+`auth: <name>`, and itda drops the key from each operation's inputs. itda keeps
+the value in the keyring, never in the definition. At run time, itda adds it to
+each request's query, just as it sends a `cookie:` session as a cookie. itda
+leaves out the sign-in call: a person signs in, never an agent. itda omits and
 lists other token and session fields, since they come from sign-in, never the
 agent. itda skips calls to other addresses, file uploads and failed calls.
 Delete the HAR file when you are done with it.
@@ -504,13 +502,13 @@ auth:
       password: password
 ```
 
-itda signs in the same way; when the site answers with no session cookie but
-a redirect (or a first page) carrying `sid`, that value is the session. It is
-kept in the keyring like any other, and at run time it is appended to the
-query of every request to the site, the way a cookie session is sent as a
-cookie. Because it travels in URLs, it can reach a server's or a proxy's
-logs; see [THREAT_MODEL.md](THREAT_MODEL.md). A `browser` entry carries one or
-the other, a cookie or a query key, not both.
+itda signs in the same way; when the site answers with no session cookie but a
+redirect (or a first page) carrying `sid`, that value is the session. itda keeps
+it in the keyring like any other. At run time it adds it to the query of every
+request to the site, the way it sends a cookie session as a cookie. Because it
+travels in URLs, it can reach a server's or a proxy's logs; see
+[THREAT_MODEL.md](THREAT_MODEL.md). A `browser` entry carries one or the other,
+a cookie or a query key, not both.
 
 When the site redirects after a change (post, then redirect, then get, as older
 sites do), the change has landed. Its result carries the redirect address. A

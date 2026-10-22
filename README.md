@@ -250,10 +250,10 @@ itda record https://intranet.example/board --name board --install   # press Ente
 itda mcp install claude-desktop                     # or let your agent call them
 ```
 
-`examples/lab` runs Gitea, Redmine, WordPress, MediaWiki and a small legacy
-intranet behind their sign-ins, and three uglier ones (the board inside an
-iframe, a table a script draws from an XHR, a session carried in the URL), and
-a test suite walks each one from setup to an approved change.
+`examples/lab` runs Gitea, Redmine, WordPress, MediaWiki, a small legacy
+intranet and three uglier cases behind their sign-ins: a board inside an iframe,
+a table a script draws from an XHR, and a session carried in the URL. A test
+suite walks each from setup to an approved change.
 
 The recording stays in memory and only the shape of each call reaches the
 draft: no header, cookie or value you typed. A HAR file saved from the

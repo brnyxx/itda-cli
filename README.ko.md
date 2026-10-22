@@ -247,10 +247,10 @@ itda record https://intranet.example/board --name board --install   # 끝나면 
 itda mcp install claude-desktop                     # 에이전트가 호출하게 연결
 ```
 
-`examples/lab`은 Gitea, Redmine, WordPress, MediaWiki와 작은 레거시 인트라넷,
-그리고 더 까다로운 셋(iframe 안의 게시판, 스크립트가 XHR로 그리는 표, URL에
-담긴 세션)을 로그인해야 쓰도록 띄웁니다. 테스트로 각각 세팅부터 승인된
-변경까지 전 과정을 확인합니다.
+`examples/lab`은 Gitea, Redmine, WordPress, MediaWiki, 작은 레거시 인트라넷과
+더 까다로운 셋(iframe 안의 게시판, 스크립트가 XHR로 그리는 표, URL에 담긴
+세션)을 띄웁니다. 모두 로그인해야 씁니다. 테스트로 각각 세팅부터 승인된 변경까지
+전 과정을 확인합니다.
 
 녹화는 메모리에만 있고, 초안에는 호출의 모양만 들어갑니다. 헤더, 쿠키, 내가
 입력한 값은 들어가지 않습니다. 브라우저 개발자 도구에서 저장한 HAR 파일도

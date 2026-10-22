@@ -415,10 +415,10 @@ fn parts_at(
     if query_signed_in && let Some(key) = &query_session {
         notes.push(match &login {
             Some(_) => format!(
-                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in; it is kept in the keyring, never in the definition. Run `itda login {site}` once after installing."
+                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in. It is kept in the keyring, never in the definition. Run `itda login {site}` once after installing."
             ),
             None => format!(
-                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in; it is kept in the keyring, never in the definition. Add the sign-in form to the auth entry as `login`, then run `itda login {site}`."
+                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in. It is kept in the keyring, never in the definition. Add the sign-in form to the auth entry as `login`, then run `itda login {site}`."
             ),
         });
     } else if !signed_in.is_empty() {

@@ -428,17 +428,17 @@ pub fn t(key: &str) -> &'static str {
         (
             "query_missing",
             "{site} accepted the sign-in, but did not hand out the {name} query parameter its definition names",
-            "{site}가 로그인을 받아들였지만 정의가 말한 {name} 쿼리 매개변수를 주지 않았습니다",
+            "{site} 로그인은 됐지만 정의에 적힌 {name} 쿼리 매개변수가 오지 않았습니다",
         ),
         (
             "query_missing_fix",
             "Check value_from in the definition's auth entry; the key must appear in the sign-in's redirect or on the links of the first page after it.",
-            "정의의 auth 항목 value_from을 확인하세요. 그 키는 로그인 뒤 리다이렉트 주소나 첫 페이지의 링크에 있어야 합니다.",
+            "정의의 auth 항목 value_from을 확인하세요. 키는 로그인 뒤 리다이렉트 주소나 첫 페이지의 링크에 있어야 합니다.",
         ),
         (
             "session_saved_query",
-            "Signed in. The {name} session value for {site}/{account} is sealed under the data directory with a key in the system keyring; it goes on the address of each request to the site, and agents only see the account id.",
-            "로그인했습니다. {site}/{account}의 {name} 세션 값은 데이터 폴더에 봉인돼 있고(키는 시스템 키링에), 사이트로 가는 요청 주소마다 붙습니다. 에이전트는 계정 id만 봅니다.",
+            "Signed in. itda sealed the {name} session value for {site}/{account} under the data directory with a key in the system keyring. It goes on the address of each request to the site; agents only see the account id.",
+            "로그인했습니다. {site}/{account}의 {name} 세션 값을 시스템 키링의 키로 데이터 폴더에 봉인했습니다. 사이트 요청 주소마다 붙입니다. 에이전트는 계정 id만 봅니다.",
         ),
         (
             "nothing_works",
