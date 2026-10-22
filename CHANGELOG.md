@@ -30,6 +30,28 @@ change the definition format or the CLI.
   form (a form nobody answers counts as no), and the site's tools are
   reloaded and checked. `itda_check` without a site already checks every
   site; the docs now say so.
+- `itda draft page` and `itda setup` read a page that is one thing (an
+  article, a package, a product, a bug) as its own content: the headline,
+  the body text, what sits beside the headline, a date, an author and the
+  values the page labels in definition lists and label-value rows, as
+  `html.page` fields that each match once. Such a page used to be one read
+  that checked the title. A page that is one thing with a named list of
+  records on it (a package with its releases) gets both reads, and `itda
+  setup` says "the page's own content" when it finds one.
+- Repeated siblings of one shape become records when they share a title at
+  one place: a link as before, or a heading, a text named as a title, or
+  the record itself when it is a link with something inside. The fields come
+  from what the records share: a summary, a byline, a date, and whatever
+  sits under a class the site named (`score`, `author`, `release__version`
+  becomes `version`), with build names left out and a text that reads as a
+  date as `published_at`. Bare paragraphs, bare links and menus never
+  qualify. A list read is described by what its records are (`List the
+  projects on Projects`) when the page names them.
+- A list whose links share one shape (`/item/{id}`, `view.php?id=`) gets a
+  read of one record by its `id`, with the query keys every link sends as
+  inputs with defaults and no response check yet.
+- The `page` input follows the link marked `rel="next"` and starts at 0 for
+  `offset` and `start`.
 - Five MCP tools so an agent never needs a terminal to set a site up or
   look after it: `itda_setup` (look at a page as itda, draft, try every
   read once, keep what works; the site's actions become tools in the same

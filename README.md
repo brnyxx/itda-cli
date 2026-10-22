@@ -114,7 +114,10 @@ Install itda and set up the-site-you-use.example for me.
 ```
 
 The pieces are commands of their own. For pages you can open without
-signing in, give itda their addresses: tables and lists become records,
+signing in, give itda their addresses: tables, lists and repeated cards
+become records, a page that is one thing (a package, an article, a product)
+becomes a read of its headline, body and labelled values, a list whose links
+share one shape gets a read of one record by its id,
 search forms become reads, post forms become changes, feeds come along, a
 GraphQL endpoint the page names is asked once what it offers, one read per
 query field, and when the site publishes an API description, its reads join
