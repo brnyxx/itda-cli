@@ -337,3 +337,127 @@ operations:
         serde_json::json!({"first": 3, "page": "p-"})
     );
 }
+
+#[test]
+fn pagination_is_parsed_and_checked() {
+    let good = parse(
+        r#"
+spec_version: 1
+site: {name: paged, base_url: https://paged.example}
+operations:
+  - name: list
+    method: GET
+    path: /items
+    effect: read
+    evidence: doc
+    query:
+      cursor: {type: string}
+    pagination:
+      style: cursor
+      next: /meta/next_cursor
+      send: {query: cursor}
+  - name: pages
+    method: GET
+    path: /pages
+    effect: read
+    evidence: doc
+    query:
+      page: {type: int, default: 1}
+    pagination: {style: page, next: "header:link", send: {query: page}}
+"#,
+    );
+    assert!(good.validate().is_empty(), "{:?}", good.validate());
+    let list = good.op("list").unwrap();
+    let pagination = list.pagination.as_ref().unwrap();
+    assert_eq!(pagination.input(), ("cursor", false));
+    assert!(pagination.hides_input());
+    assert!(list.hidden_input("cursor"));
+    assert!(!good.op("pages").unwrap().hidden_input("page"));
+    // The marker input is written back as given.
+    let text = serde_norway::to_string(&good).unwrap();
+    assert!(text.contains("next: /meta/next_cursor"), "{text}");
+    assert!(!text.contains("more:"), "{text}");
+
+    let bad = parse(
+        r#"
+spec_version: 1
+site: {name: paged, base_url: https://paged.example}
+operations:
+  - name: a
+    method: GET
+    path: /a
+    effect: read
+    evidence: doc
+    pagination: {style: scroll, next: meta.next, send: {query: cursor}}
+  - name: b
+    method: GET
+    path: /b
+    effect: read
+    evidence: doc
+    query: {cursor: {type: string, default: x}}
+    pagination: {style: cursor, send: {query: cursor, body: cursor}}
+  - name: c
+    method: GET
+    path: /c
+    effect: read
+    evidence: doc
+    query: {page: {type: string}}
+    pagination: {style: page, next: "header:link", send: {body: page}}
+"#,
+    );
+    let details: Vec<String> = bad
+        .validate()
+        .into_iter()
+        .map(|issue| format!("{}: {}", issue.field, issue.detail))
+        .collect();
+    let text = details.join("\n");
+    for expected in [
+        "operations.a.pagination: unsupported style: scroll",
+        "operations.a.pagination: next must be a JSON pointer",
+        "operations.a.pagination: send names cursor, which is not declared under query",
+        "operations.b.pagination: a cursor read must say where the next cursor is",
+        "operations.b.pagination: send must name one input",
+        "operations.c.pagination: header:link carries a query value",
+        "operations.c.pagination: send names page, which is not declared under body.json",
+    ] {
+        assert!(text.contains(expected), "{expected}\n{text}");
+    }
+}
+
+#[test]
+fn preflight_extracts_from_embedded_data_with_a_key_and_a_pointer() {
+    let good = parse(
+        r#"
+spec_version: 1
+site: {name: s, base_url: https://s.example}
+operations:
+  - name: items
+    method: GET
+    path: /_next/data/{{step.page.build_id}}/items.json
+    effect: read
+    evidence: doc
+    preflight:
+      - name: page
+        path: /
+        extract: {build_id: "ssr:__NEXT_DATA__#/buildId", other: "ssr:auto#/props/x"}
+"#,
+    );
+    assert!(good.validate().is_empty(), "{:?}", good.validate());
+    let bad = parse(
+        r#"
+spec_version: 1
+site: {name: s, base_url: https://s.example}
+operations:
+  - name: items
+    method: GET
+    path: /items
+    effect: read
+    evidence: doc
+    preflight:
+      - name: page
+        path: /
+        extract: {a: "ssr:__NEXT_DATA__", b: "ssr:#/x", c: "ssr:auto#buildId"}
+"#,
+    );
+    assert_eq!(bad.validate().len(), 3, "{:?}", bad.validate());
+}

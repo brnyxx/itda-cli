@@ -29,6 +29,10 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/Pet'}}
         total: {type: integer}
+        meta:
+          type: object
+          properties:
+            next_cursor: {type: string, nullable: true}
   requestBodies:
     NewPet:
       content:
@@ -43,6 +47,7 @@ paths:
       security: []
       parameters:
         - {name: limit, in: query, schema: {type: integer, default: 20}}
+        - {name: cursor, in: query, schema: {type: string}, description: The next_cursor of the previous page}
         - {name: X-Trace, in: header, schema: {type: string}}
       responses:
         '200':
@@ -92,6 +97,21 @@ paths:
             schema: {type: object}
       responses:
         '200': {description: ok}
+  /owners:
+    get:
+      operationId: listOwners
+      summary: List owners
+      parameters:
+        - {name: page, in: query, schema: {type: integer, default: 1}}
+        - {name: per_page, in: query, schema: {type: integer, default: 30}}
+      responses:
+        '200':
+          description: ok
+          headers:
+            Link: {schema: {type: string}, description: Pagination links as in RFC 8288}
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
   /legacy:
     get:
       operationId: legacy

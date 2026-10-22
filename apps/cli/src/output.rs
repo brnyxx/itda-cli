@@ -14,6 +14,7 @@ pub fn exit_code(public_code: &str) -> u8 {
         "rate_limited" | "site_rate_limited" => 13,
         "approval_required" | "writes_disabled" => 20,
         "approval_expired" => 21,
+        "pagination_expired" | "pagination_invalid" => 23,
         "action_outcome_unknown" => 22,
         "request_failed" | "timeout" | "too_large" => 30,
         _ => 1,
@@ -52,6 +53,7 @@ mod tests {
         assert_eq!(exit_code("blocked_by_site"), 12);
         assert_eq!(exit_code("site_rate_limited"), 13);
         assert_eq!(exit_code("writes_disabled"), 20);
+        assert_eq!(exit_code("pagination_expired"), 23);
         assert_eq!(exit_code("timeout"), 30);
         assert_eq!(exit_code("internal"), 1);
     }

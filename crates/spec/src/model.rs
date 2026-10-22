@@ -146,6 +146,87 @@ pub struct Operation {
     pub evidence: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<ResponseExpectation>,
+    /// How a read that lists things goes on to its next page; see
+    /// [`Pagination`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<Pagination>,
+}
+
+/// How a read turns pages. The marker for the next page is found in the
+/// answer (`next`) and sent back in one input (`send`); an agent only ever
+/// sees the opaque handle the runtime issues for it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Pagination {
+    /// `page` (a page number), `offset` (how many records to skip) or
+    /// `cursor` (a marker the site hands out).
+    pub style: String,
+    /// Where the next marker is in the answer: a JSON pointer such as
+    /// `/meta/next_cursor`, or `header:link` for the `rel="next"` address in
+    /// the `Link` header. A page or offset read may leave it out: the next
+    /// page is then the one after the current when the answer had records.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub next: String,
+    /// A JSON pointer that must hold `true` for another page to exist, such
+    /// as `/pageInfo/hasNextPage`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub more: String,
+    /// The input the marker is sent back in.
+    pub send: Send,
+}
+
+/// The input a pagination marker goes back in: a `query` input or a
+/// `body.json` field, named.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Send {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub query: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub body: String,
+}
+
+impl Pagination {
+    /// The input the marker goes back in, and whether it is a body field.
+    pub fn input(&self) -> (&str, bool) {
+        if self.send.body.is_empty() {
+            (&self.send.query, false)
+        } else {
+            (&self.send.body, true)
+        }
+    }
+
+    /// A cursor comes from the site's previous answer, never from an agent.
+    pub fn hides_input(&self) -> bool {
+        self.style == "cursor"
+    }
+}
+
+/// Input names that carry a page marker and may look like a token: a site's
+/// `page_token` is its place in a list, not a credential.
+pub const MARKER_NAMES: &[&str] = &[
+    "cursor",
+    "after",
+    "before",
+    "page",
+    "offset",
+    "from",
+    "start",
+    "skip",
+    "pagetoken",
+    "nextpagetoken",
+    "nexttoken",
+    "nextcursor",
+    "endcursor",
+    "continuation",
+    "continuationtoken",
+    "startingafter",
+];
+
+/// `next_page_token` and `nextPageToken` are the same marker name.
+pub fn marker_name(name: &str) -> bool {
+    let plain = name.to_ascii_lowercase().replace(['-', '_'], "");
+    MARKER_NAMES.contains(&plain.as_str())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -166,6 +247,19 @@ pub struct ResponseExpectation {
 }
 
 impl Operation {
+    /// The input a pagination marker goes back in, when the read turns pages.
+    pub fn pagination_input(&self) -> Option<&str> {
+        self.pagination.as_ref().map(|p| p.input().0)
+    }
+
+    /// Inputs an agent may not set: filled by a preflight step, or the cursor
+    /// a read's previous answer handed out.
+    pub fn hidden_input(&self, name: &str) -> bool {
+        self.pagination
+            .as_ref()
+            .is_some_and(|p| p.hides_input() && p.input().0 == name)
+    }
+
     pub fn graphql_query(&self, args: &std::collections::BTreeMap<String, String>) -> bool {
         let query = args.get("query").map(String::as_str).or_else(|| {
             self.query
@@ -179,7 +273,9 @@ impl Operation {
                 .as_ref()?
                 .as_str()
         });
-        query.is_some_and(|query| graphql_parser::parse_query::<&str>(query).is_ok())
+        query.is_some_and(|query| {
+            !crate::graphql_too_deep(query) && graphql_parser::parse_query::<&str>(query).is_ok()
+        })
     }
 }
 

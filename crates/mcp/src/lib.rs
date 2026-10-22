@@ -57,6 +57,10 @@ use std::{
 /// Above this many actions the server switches to catalog mode.
 pub const DIRECT_LIMIT: usize = 30;
 
+/// Added to the description of a read that turns pages.
+const PAGES_NOTE: &str =
+    ". Returns meta.next when there is another page; pass it back as next to read it.";
+
 /// Results longer than this are cut, with `truncated: true`, so one large page
 /// cannot flood the agent's context.
 pub const RESULT_LIMIT: usize = 24 * 1024;
@@ -80,6 +84,10 @@ site_rate_limited means the site asked for a wait longer than itda gives on its 
 retry_after seconds it carries before calling that site again. \
 action_outcome_unknown means a change was sent but no answer came back: never call it again; \
 ask the user to check the site first. \
+A read that lists things returns meta.next when the site has another page: call it again \
+with next set to that handle and the same inputs to read the following page, only as far as \
+the user's question needs; never page through a whole site on your own. pagination_expired or \
+pagination_invalid means to start again without next. \
 When an action that used to work fails, call itda_check with the site before you retry \
 or ask for a new definition: its verdict says whether they are signed out, the site changed, \
 it is blocked, or it is unreachable (itda check <site> does the same in a terminal). \
@@ -106,6 +114,8 @@ mod tests {
             "Never run a change the user did not ask for",
             "action_outcome_unknown",
             "never call it again",
+            "meta.next",
+            "never page through a whole site",
             "itda_check",
             "itda check <site>",
             "action refresh",
@@ -237,7 +247,7 @@ impl Server {
                         "status": "ok",
                         "action": e.name,
                         "effect": e.effect.as_str(),
-                        "description": e.description,
+                        "description": if e.paginated { format!("{}{PAGES_NOTE}", e.description) } else { e.description.clone() },
                         "input_schema": e.input_schema,
                     })),
                     None => unknown(action),
@@ -253,8 +263,10 @@ impl Server {
                     None | Some(Value::Null) => Map::new(),
                     Some(_) => return failure(&bad_args("args must be an object")),
                 };
-                if let Some(approval) = arguments.get("approval") {
-                    args.insert("approval".into(), approval.clone());
+                for key in ["approval", "next"] {
+                    if let Some(value) = arguments.get(key) {
+                        args.insert(key.into(), value.clone());
+                    }
                 }
                 self.run(action, args, caller).await
             }
@@ -283,6 +295,11 @@ impl Server {
             None | Some(Value::Null) => None,
             Some(_) => return failure(&bad_args("approval must be a string")),
         };
+        let next = match arguments.remove("next") {
+            Some(Value::String(next)) => Some(next),
+            None | Some(Value::Null) => None,
+            Some(_) => return failure(&bad_args("next must be a string")),
+        };
         let mut args = BTreeMap::new();
         for (key, value) in arguments {
             let text = match value {
@@ -298,6 +315,7 @@ impl Server {
             args,
             account,
             approval,
+            next,
         };
         let mut outcome = self.runtime.call(&entry.site, call.clone()).await;
         if let (Err(error), Some(caller), Some(client)) = (&outcome, caller, &self.client_approval)
@@ -335,6 +353,8 @@ fn action_tool(entry: &Entry) -> Tool {
         description.push_str(
             ". Changes something on the site: the first call returns an approval id for the user.",
         );
+    } else if entry.paginated {
+        description.push_str(PAGES_NOTE);
     }
     let annotations = ToolAnnotations::new()
         .read_only(read)
@@ -374,7 +394,7 @@ fn catalog_tools() -> Vec<Tool> {
         Tool::new(
             "itda_call",
             "Run an action by name with its inputs. Reads run directly; changes need the user's approval.",
-            schema(json!({"type": "object", "properties": {"action": {"type": "string"}, "args": {"type": "object"}, "approval": {"type": "string", "description": "Approval id the user granted for this exact change."}}, "required": ["action"], "additionalProperties": false})),
+            schema(json!({"type": "object", "properties": {"action": {"type": "string"}, "args": {"type": "object"}, "approval": {"type": "string", "description": "Approval id the user granted for this exact change."}, "next": {"type": "string", "description": "The meta.next handle of the previous answer, to read the page after it with the same args."}}, "required": ["action"], "additionalProperties": false})),
         )
         .with_annotations(ToolAnnotations::new().open_world(true)),
     ]

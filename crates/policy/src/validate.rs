@@ -215,13 +215,16 @@ fn check_operation(
             );
         }
     }
+    let marker = op.pagination_input();
     for (name, param) in op
         .params
         .iter()
         .chain(op.query.iter())
         .chain(op.body.iter().flat_map(|b| b.inputs()))
     {
-        if util::secret_field(name) && !param.from_step() {
+        // A site's `page_token` is its place in a list, not a credential.
+        let page_marker = marker == Some(name.as_str()) && itda_spec::marker_name(name);
+        if util::secret_field(name) && !param.from_step() && !page_marker {
             out.add(
                 "data_invalid",
                 format!("{id}.inputs.{name}"),
@@ -236,6 +239,44 @@ fn check_operation(
                 "data_invalid",
                 format!("{id}.inputs.{name}.default"),
                 "looks like a secret",
+            );
+        }
+    }
+    if op.pagination.is_some() && operation_effect(op, &Default::default()) != Effect::Read {
+        out.add(
+            "data_invalid",
+            format!("{id}.pagination"),
+            "only a read turns pages; a change is sent once",
+        );
+    }
+    if let Some(pagination) = &op.pagination
+        && pagination.next != "header:link"
+        && !pagination.next.is_empty()
+        && util::secret_field(pagination.next.rsplit('/').next().unwrap_or_default())
+        && !itda_spec::marker_name(pagination.next.rsplit('/').next().unwrap_or_default())
+    {
+        out.add(
+            "data_invalid",
+            format!("{id}.pagination.next"),
+            "points at a credential-named field",
+        );
+    }
+    for (name, param) in op
+        .query
+        .iter()
+        .chain(op.body.iter().flat_map(|b| b.inputs()))
+    {
+        if name == "query"
+            && let Some(document) = param.default.as_ref().and_then(serde_json::Value::as_str)
+            && itda_spec::graphql_too_deep(document)
+        {
+            out.add(
+                "data_invalid",
+                format!("{id}.inputs.query.default"),
+                format!(
+                    "the GraphQL document nests deeper than {} levels",
+                    itda_spec::GRAPHQL_MAX_DEPTH
+                ),
             );
         }
     }

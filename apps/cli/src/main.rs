@@ -10,7 +10,7 @@ mod text;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use itda_net::{Gate, Network};
-use itda_policy::{Approvals, operation_effect};
+use itda_policy::{Approvals, Cursors, operation_effect};
 use itda_runtime::{
     Call, Runtime,
     audit::{AuditLog, Event},
@@ -654,15 +654,18 @@ struct Parts {
     net: Arc<Network>,
     vault: Arc<Vault>,
     approvals: Arc<Approvals>,
+    cursors: Arc<Cursors>,
     audit: Arc<AuditLog>,
 }
 
 impl Parts {
     /// Reads run directly; changes wait for the user's approval. Everything
-    /// is recorded in the audit log.
+    /// is recorded in the audit log, and reads that turn pages keep their
+    /// markers in the local database.
     fn runtime(self) -> Runtime {
         Runtime::new(self.net, self.vault)
             .with_approvals(self.approvals)
+            .with_pagination(self.cursors)
             .with_audit(self.audit)
     }
 
@@ -696,6 +699,7 @@ fn open(home: &Path) -> AppResult<Parts> {
     Ok(Parts {
         net: Arc::new(Network::new(gate, allow_local())),
         approvals: Arc::new(Approvals::open(store.clone())?),
+        cursors: Arc::new(Cursors::open(store.clone())?),
         audit: Arc::new(audit_log(home)),
         vault: Arc::new(Vault::open(store, secret_store())?),
     })
@@ -761,14 +765,15 @@ struct CallFlags {
     args: BTreeMap<String, String>,
     account: Option<String>,
     approval: Option<String>,
+    next: Option<String>,
     as_json: bool,
 }
 
-/// `--name value` or `--name=value` inputs, plus `--account`, `--approval`
-/// and `--json`.
+/// `--name value` or `--name=value` inputs, plus `--account`, `--approval`,
+/// `--next` and `--json`.
 fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
     let mut args = BTreeMap::new();
-    let (mut account, mut approval, mut as_json) = (None, None, false);
+    let (mut account, mut approval, mut next, mut as_json) = (None, None, None, false);
     let mut words = rest.into_iter();
     while let Some(word) = words.next() {
         let Some(flag) = word.strip_prefix("--") else {
@@ -796,6 +801,7 @@ fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
         match name.as_str() {
             "account" => account = Some(value),
             "approval" => approval = Some(value),
+            "next" => next = Some(value),
             _ => {
                 args.insert(name, value);
             }
@@ -805,6 +811,7 @@ fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
         args,
         account,
         approval,
+        next,
         as_json,
     })
 }
@@ -820,6 +827,7 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
         args,
         account,
         approval,
+        next,
         as_json,
     } = parse_call(rest)?;
     let spec = sites::load(home, site)?;
@@ -832,6 +840,7 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
                 args,
                 account,
                 approval,
+                next,
             },
         )
         .await?;
@@ -845,6 +854,9 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
         println!("{value}");
     } else {
         println!("{}", serde_json::to_string_pretty(&envelope.data)?);
+        if let Some(handle) = &envelope.meta.next {
+            eprintln!("{}", text::t("more_pages").replace("{handle}", handle));
+        }
     }
     Ok(ExitCode::SUCCESS)
 }

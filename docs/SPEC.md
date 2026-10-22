@@ -61,7 +61,7 @@ notices when the page changes:
 | A list inside data embedded for its scripts: an `ItemList` or a list of one typed thing (`NewsArticle`, `Product`...) in `ld+json`; in `__NEXT_DATA__`, `__NEXT_F__`, `__APOLLO_STATE__` (grouped by typename), `__PRELOADED_STATE__` and the like, the list of objects with the most to read (a title, a link, a date) and, among those, the longest | One read per list, named after what it holds (`list-news-articles`), with `ssr_json`, `extract_pointer` to the list, `required_pointers` on its first record and a `model` that keeps up to eight plain fields of each record, ids and titles first; credentials are left out |
 | Data embedded for its scripts with no list in it | `ssr_json` with `required_pointers` on the whole payload, and a note saying what to add |
 | Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
-| Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | A query input named after that key (`int`); `page` and the like default to 1, `offset` and `start` to 0, and a key the page's own address carries keeps its value |
+| Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | A query input named after that key (`int`); `page` and the like default to 1, `offset` and `start` to 0, and a key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
 | A `GET` form | A read with the form's fields as `query` inputs |
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
 | A sign-in form | Left out; `itda login <site> --browser` signs in |
@@ -318,6 +318,7 @@ Each operation is one action, called as `itda call <site>.<name>`.
 | `headers` | Extra headers for this action only. |
 | `response` | What a correct answer looks like. Strongly recommended for reads. |
 | `model` | Name of an entry in `models` that picks and renames fields from the JSON. |
+| `pagination` | How a read that lists things goes on to its next page. See below. |
 
 ### Inputs
 
@@ -472,6 +473,7 @@ operations:
 | `json:/pointer` | a value from a JSON answer |
 | `header:name` | a response header |
 | `cookie:name` | a cookie the answer sets |
+| `ssr:key#/pointer` | a value in the JSON a page embeds for its scripts: `ssr:__NEXT_DATA__#/buildId`, or `ssr:auto#/pointer` for the first payload found. Only a string, number or boolean counts; an object or a list stops the call |
 
 A step is a `GET` to the action's own origin, with the same account, either
 to `path` or to a read action named in `op` (with `args`). Steps run in order,
@@ -498,6 +500,54 @@ operations:
     model: notice
     ...
 ```
+
+## `pagination`
+
+A read that lists things can say how the site turns pages, so an agent can
+read on without ever seeing the site's own marker:
+
+```yaml
+operations:
+  - name: search
+    method: GET
+    path: /api/v1/crates
+    effect: read
+    evidence: https://crates.io/data-access#api
+    query:
+      q: {type: string, required: true}
+      page: {type: int, default: 1}
+    pagination: {style: page, next: /meta/next_page, send: {query: page}}
+```
+
+| Field | Meaning |
+|---|---|
+| `style` | `page` (a page number), `offset` (how many records to skip) or `cursor` (a marker the site hands out). |
+| `next` | Where the next marker is in the answer: a JSON pointer such as `/meta/next_cursor` or `/data/notices/pageInfo/endCursor`, or `header:link` for the `rel="next"` address in the `Link` header. A page or offset read may leave it out: the next page is then the one after the current page, or the offset past the records returned, when the answer had records. |
+| `more` | A JSON pointer that must hold `true` for another page to exist, such as `/data/notices/pageInfo/hasNextPage`. Optional. |
+| `send` | The input the marker goes back in: `{query: page}` or, for a JSON body, `{body: after}`. The input must be declared: an `int` for `page` and `offset`, a `string` with no default for `cursor`. |
+
+When the answer says there is another page, the call returns `meta.next`,
+an opaque handle such as `ic_4f0a4207d04f4a0fb4e059d26bd54b6d`. The marker
+itself is kept on the user's computer for fifteen minutes, bound to the
+site, action, account, inputs and definition; `itda call ... --next
+<handle>` (over MCP, `next`) sends it back in the declared input. A
+`cursor` input is never shown to agents and cannot be set by them; `page`
+and `offset` inputs can still be given directly. A pointer that holds an
+address or a query string (`?page=2&per_page=10`) gives only the input's
+value from it, and only when that address is the same origin and path. A
+marker that would turn the read into something else, or an address
+elsewhere, is dropped. Only a read turns pages.
+
+`itda draft openapi` declares it when the document is plain about it: a
+`cursor`, `page_token` or `after` query parameter together with a
+`next_cursor`, `next_page_token` or `end_cursor` string in the answer; a
+`page` parameter, with `header:link` when the answer documents a `Link`
+header; an `offset` parameter. `itda draft har` does the same from the
+query a recorded read sent and the fields its answers had, and from a
+GraphQL `after` variable with `pageInfo.endCursor` in the answer. A GraphQL
+schema's connection (`after: String` in, `pageInfo { endCursor hasNextPage }`
+out) is drafted with `send: {body: after}`. A page whose links turn pages
+(`?page=2`) gets `style: page` on the reads that return its records.
 
 ## Keep it working
 

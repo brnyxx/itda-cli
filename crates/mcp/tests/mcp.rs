@@ -775,3 +775,106 @@ async fn refreshing_a_changed_site_asks_the_person_and_drafts_it_again() {
     );
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A site whose list hands out a cursor, served to an agent over MCP.
+async fn paged_site() -> String {
+    let router = Router::new().route(
+        "/items",
+        get(
+            |axum::extract::Query(q): axum::extract::Query<
+                std::collections::HashMap<String, String>,
+            >| async move {
+                let from: usize = q
+                    .get("cursor")
+                    .map(|c| c.trim_start_matches("cur-").parse().unwrap())
+                    .unwrap_or(0);
+                let items: Vec<Value> = (from..(from + 2).min(5))
+                    .map(|i| json!({"id": i}))
+                    .collect();
+                let next = (from + 2 < 5).then(|| format!("cur-{}", from + 2));
+                axum::Json(json!({"items": items, "next_cursor": next}))
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+fn paged_server(base: &str, mode: Option<Mode>) -> Server {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "paged", "base_url": base},
+        "operations": [
+            {"name": "list-items", "desc": "List the items", "method": "GET", "path": "/items", "effect": "read", "evidence": "doc",
+             "query": {"cursor": {"type": "string"}, "q": {"type": "string"}},
+             "pagination": {"style": "cursor", "next": "/next_cursor", "send": {"query": "cursor"}},
+             "response": {"format": "json", "extract_pointer": "/items"}}
+        ]
+    });
+    let spec = itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let store = Store::in_memory().unwrap();
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let cursors = Arc::new(itda_policy::Cursors::open(store.clone()).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let runtime =
+        Arc::new(Runtime::new(Arc::new(Network::new(gate, true)), vault).with_pagination(cursors));
+    Server::new(runtime, Catalog::new(vec![spec]), mode)
+}
+
+#[tokio::test]
+async fn a_read_that_turns_pages_takes_next_and_hides_the_cursor() {
+    let base = paged_site().await;
+    let mut client = Client::start(paged_server(&base, None)).await;
+    let tools = client.request("tools/list", json!({})).await;
+    let tool = &tools["tools"][0];
+    assert!(
+        tool["description"].as_str().unwrap().contains("meta.next"),
+        "{tool}"
+    );
+    let properties = tool["inputSchema"]["properties"].as_object().unwrap();
+    assert!(properties.contains_key("next") && properties.contains_key("q"));
+    assert!(!properties.contains_key("cursor"), "{properties:?}");
+
+    let first = client.call("paged.list-items", json!({})).await;
+    let handle = first["structuredContent"]["meta"]["next"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(handle.starts_with("ic_"));
+    assert!(!first.to_string().contains("cur-"), "{first}");
+    let second = client
+        .call("paged.list-items", json!({"next": handle}))
+        .await;
+    assert_eq!(second["structuredContent"]["data"][0]["id"], 2);
+
+    let refused = client
+        .call("paged.list-items", json!({"next": "cur-2"}))
+        .await;
+    assert_eq!(refused["isError"], true);
+    assert_eq!(refused["structuredContent"]["status"], "pagination_invalid");
+
+    // Catalog mode: the same through itda_call.
+    let mut client = Client::start(paged_server(&base, Some(Mode::Catalog))).await;
+    let first = client
+        .call("itda_call", json!({"action": "paged.list-items"}))
+        .await;
+    let handle = first["structuredContent"]["meta"]["next"].as_str().unwrap();
+    let second = client
+        .call(
+            "itda_call",
+            json!({"action": "paged.list-items", "next": handle}),
+        )
+        .await;
+    assert_eq!(second["structuredContent"]["data"][0]["id"], 2);
+    let described = client
+        .call("itda_describe", json!({"action": "paged.list-items"}))
+        .await;
+    assert!(
+        described["structuredContent"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("meta.next")
+    );
+}

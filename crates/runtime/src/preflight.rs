@@ -93,10 +93,21 @@ fn step_url(
 }
 
 /// One value from a step's answer: `json:/pointer`, `css:selector` or
-/// `css:selector@attribute`, `header:name` or `cookie:name`.
+/// `css:selector@attribute`, `header:name`, `cookie:name` or
+/// `ssr:key#/pointer` (a value in the JSON the page embeds for its
+/// scripts, such as a build id in `__NEXT_DATA__`). A value must be a
+/// string, number or boolean; an object or a list is not a value.
 pub(crate) fn extract(response: &Response, source: &str) -> Option<String> {
     let value = if let Some(pointer) = source.strip_prefix("json:") {
         resolve_pointer(&response.json()?, pointer).map(util::plain)
+    } else if let Some((key, pointer)) = source
+        .strip_prefix("ssr:")
+        .and_then(|rest| rest.split_once('#'))
+    {
+        let html = String::from_utf8_lossy(&response.bytes);
+        itda_html::extract_ssr_json(&html, key, pointer)
+            .filter(|value| value.is_string() || value.is_number() || value.is_boolean())
+            .map(|value| util::plain(&value))
     } else if let Some(selector) = source.strip_prefix("css:") {
         let field = html_field(selector);
         field.extract(&parse_document(&String::from_utf8_lossy(&response.bytes)))

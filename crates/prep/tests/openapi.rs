@@ -24,9 +24,15 @@ fn openapi3_becomes_a_valid_reviewed_draft() {
     let names: Vec<&str> = spec.operations.iter().map(|o| o.name.as_str()).collect();
     assert_eq!(
         names,
-        ["list-pets", "create-pet", "show-pet-by-id", "delete-pet"]
+        [
+            "list-owners",
+            "list-pets",
+            "create-pet",
+            "show-pet-by-id",
+            "delete-pet"
+        ]
     );
-    assert_eq!((draft.operations, draft.reads), (4, 2));
+    assert_eq!((draft.operations, draft.reads), (5, 3));
 
     let list = spec.op("list-pets").unwrap();
     assert_eq!(list.desc, "List pets, newest first");
@@ -116,4 +122,49 @@ fn other_documents_are_refused() {
     assert!(from_openapi(b"not: [valid", &Options::default()).is_err());
     let relative = br#"{"openapi":"3.1.0","info":{"title":"x","version":"1"},"servers":[{"url":"/v1"}],"paths":{}}"#;
     assert!(from_openapi(relative, &Options::default()).is_err());
+}
+
+#[test]
+fn documented_page_turning_is_declared_one_way_per_style() {
+    let pets = draft("petstore.yaml", Options::default());
+    assert!(pets.problems.is_empty(), "{:?}", pets.problems);
+    let spec = itda_spec::parse(pets.yaml.as_bytes()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+
+    // A cursor parameter and a next_cursor field in the answer.
+    let list = spec.op("list-pets").unwrap();
+    let pagination = list.pagination.as_ref().unwrap();
+    assert_eq!(pagination.style, "cursor");
+    assert_eq!(pagination.next, "/meta/next_cursor");
+    assert_eq!(pagination.input(), ("cursor", false));
+    assert_eq!(list.query["cursor"].kind, "string");
+
+    // A page parameter and a documented Link header.
+    let owners = spec.op("list-owners").unwrap();
+    let pagination = owners.pagination.as_ref().unwrap();
+    assert_eq!(
+        (pagination.style.as_str(), pagination.next.as_str()),
+        ("page", "header:link")
+    );
+    assert_eq!(pagination.input(), ("page", false));
+
+    // Nothing documented, nothing declared.
+    assert!(spec.op("show-pet-by-id").unwrap().pagination.is_none());
+    assert!(spec.op("create-pet").unwrap().pagination.is_none());
+
+    // An offset parameter.
+    let board = draft("swagger2.json", Options::default());
+    let spec = itda_spec::parse(board.yaml.as_bytes()).unwrap();
+    let search = spec.op("search-notices").unwrap();
+    let pagination = search.pagination.as_ref().unwrap();
+    assert_eq!(
+        (pagination.style.as_str(), pagination.next.as_str()),
+        ("offset", "")
+    );
+    assert_eq!(pagination.input(), ("offset", false));
+    assert!(
+        board.yaml.contains("style: offset") && board.yaml.contains("query: offset"),
+        "{}",
+        board.yaml
+    );
 }

@@ -225,6 +225,21 @@ fn selection(types: &BTreeMap<&str, &Value>, type_name: &str) -> Option<String> 
     (!parts.is_empty()).then(|| format!("{{ {} }}", parts.join(" ")))
 }
 
+/// True when `type_name` has a `pageInfo` field whose type has `endCursor`
+/// and `hasNextPage`.
+fn page_info(types: &BTreeMap<&str, &Value>, type_name: &str) -> bool {
+    let Some(type_def) = types.get(type_name) else {
+        return false;
+    };
+    fields(type_def)
+        .find(|f| f["name"].as_str() == Some("pageInfo"))
+        .and_then(|f| types.get(shape(&f["type"]).name))
+        .is_some_and(|info| {
+            let names: Vec<&str> = fields(info).filter_map(|f| f["name"].as_str()).collect();
+            names.contains(&"endCursor") && names.contains(&"hasNextPage")
+        })
+}
+
 fn kind_of(name: &str) -> Kind {
     match name {
         "Int" => Kind::Int,
@@ -326,13 +341,27 @@ pub(crate) fn operations(
             continue;
         }
         let returns = shape(&field["type"]);
-        let selected = if leaf(returns.kind) {
+        let mut selected = if leaf(returns.kind) {
             Some(String::new())
         } else if matches!(returns.kind, "OBJECT" | "INTERFACE") {
             selection(&types, returns.name)
         } else {
             None
         };
+        // A connection: an `after` cursor in, `pageInfo { endCursor
+        // hasNextPage }` out. The cursor is always selected so the read can
+        // turn pages.
+        let connection = variables
+            .iter()
+            .any(|v| v.argument == "after" && v.type_name == "String")
+            && matches!(returns.kind, "OBJECT" | "INTERFACE")
+            && page_info(&types, returns.name);
+        if connection
+            && let Some(chosen) = &mut selected
+            && !chosen.contains("pageInfo")
+        {
+            chosen.insert_str(chosen.len() - 1, "pageInfo { endCursor hasNextPage } ");
+        }
         let Some(selected) = selected else {
             nothing_to_read.push(name.to_owned());
             continue;
@@ -341,9 +370,26 @@ pub(crate) fn operations(
             left_out += 1;
             continue;
         }
-        out.push(read(
-            name, &variables, &selected, path, query_type, lang, names,
-        ));
+        let mut entry = read(name, &variables, &selected, path, query_type, lang, names);
+        if connection {
+            let after = variables
+                .iter()
+                .find(|v| v.argument == "after")
+                .map(|v| v.input.as_str())
+                .unwrap_or("after");
+            entry.insert(
+                "pagination".into(),
+                crate::pagination_yaml(
+                    "cursor",
+                    &format!("/data/{name}/pageInfo/endCursor"),
+                    &format!("/data/{name}/pageInfo/hasNextPage"),
+                    after,
+                    true,
+                ),
+            );
+            entry = reorder(entry);
+        }
+        out.push(entry);
     }
     let list = |items: &[String]| {
         let shown: Vec<&str> = items.iter().take(8).map(String::as_str).collect();

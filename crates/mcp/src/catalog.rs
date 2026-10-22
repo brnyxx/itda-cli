@@ -14,6 +14,8 @@ pub struct Entry {
     pub description: String,
     pub effect: Effect,
     pub method: String,
+    /// The read turns pages: it returns `meta.next` and takes `next`.
+    pub paginated: bool,
     pub input_schema: Map<String, Value>,
 }
 
@@ -33,6 +35,8 @@ impl Catalog {
                     description: describe(&spec, op),
                     effect: operation_effect(op, &BTreeMap::new()),
                     method: op.method.clone(),
+                    paginated: op.pagination.is_some()
+                        && operation_effect(op, &BTreeMap::new()) == Effect::Read,
                     input_schema: input_schema(op, operation_effect(op, &BTreeMap::new())),
                 });
             }
@@ -94,7 +98,9 @@ fn describe(spec: &Spec, op: &Operation) -> String {
 
 /// JSON Schema for the action's inputs. Signed-in actions also take an
 /// optional `account`; the agent only ever sees account ids. Changes take an
-/// optional `approval`, the id the user granted.
+/// optional `approval`, the id the user granted. Reads that turn pages take
+/// an optional `next`, the handle of the previous answer; the input the
+/// marker goes back in is not shown when it is a cursor.
 fn input_schema(op: &Operation, effect: Effect) -> Map<String, Value> {
     let mut properties = Map::new();
     let mut required = Vec::new();
@@ -109,7 +115,9 @@ fn input_schema(op: &Operation, effect: Effect) -> Map<String, Value> {
                 .flat_map(|b| b.inputs())
                 .map(|(n, p)| (n, p, p.required)),
         );
-    for (name, param, is_required) in inputs.filter(|(_, param, _)| !param.from_step()) {
+    for (name, param, is_required) in
+        inputs.filter(|(name, param, _)| !param.from_step() && !op.hidden_input(name))
+    {
         properties.insert(name.clone(), param_schema(param));
         if is_required && param.default.is_none() && !required.contains(name) {
             required.push(name.clone());
@@ -125,6 +133,11 @@ fn input_schema(op: &Operation, effect: Effect) -> Map<String, Value> {
         properties.insert(
             "approval".into(),
             json!({"type": "string", "description": "Approval id the user granted for exactly these inputs. Leave out on the first call."}),
+        );
+    } else if op.pagination.is_some() {
+        properties.insert(
+            "next".into(),
+            json!({"type": "string", "description": "The meta.next handle of the previous answer, to read the page after it with the same inputs. Leave out for the first page."}),
         );
     }
     let mut schema = Map::new();

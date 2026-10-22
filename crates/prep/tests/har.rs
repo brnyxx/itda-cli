@@ -327,3 +327,18 @@ fn a_sign_in_call_loses_its_answer_in_the_redacted_copy() {
     assert!(text.contains("SID=<redacted>"), "{text}");
     assert!(redacted_recording(b"not json").is_err());
 }
+
+#[test]
+fn a_recorded_page_number_declares_page_turning() {
+    let draft = from_har(&recording(), &Options::default()).unwrap();
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let list = spec.op("list-notices").unwrap();
+    let pagination = list.pagination.as_ref().unwrap();
+    assert_eq!(
+        (pagination.style.as_str(), pagination.next.as_str()),
+        ("page", "")
+    );
+    assert_eq!(pagination.input(), ("page", false));
+    assert!(spec.op("get-notice").unwrap().pagination.is_none());
+    assert!(spec.op("create-notice").unwrap().pagination.is_none());
+}

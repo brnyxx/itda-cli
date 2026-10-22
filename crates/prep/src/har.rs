@@ -140,6 +140,9 @@ struct Call {
     first: Option<usize>,
     /// The GraphQL operation these samples sent, when the body was one.
     graphql: Option<Graphql>,
+    /// The `data` field under which every GraphQL answer had a
+    /// `pageInfo.endCursor`, and whether `hasNextPage` came with it.
+    page_info: Option<(String, bool)>,
 }
 
 /// One GraphQL operation: a query is a read, a mutation a change, and its
@@ -525,6 +528,9 @@ fn parts_at(
         }
         if !call.query.0.is_empty() {
             entry.insert("query".into(), Yaml::Mapping(call.query.yaml(call.samples)));
+        }
+        if read && let Some(pagination) = pagination_of(call) {
+            entry.insert("pagination".into(), pagination);
         }
         if let Some(header) = &call.header_token {
             match meta_page(entries, call, &origin) {
@@ -1130,6 +1136,83 @@ fn record_response(call: &mut Call, content: &Value) {
         Some(seen) => seen.intersection(&keys).cloned().collect(),
         None => keys,
     });
+    if call.graphql.is_some() {
+        let found = content["text"]
+            .as_str()
+            .and_then(|text| serde_json::from_str::<Value>(text).ok())
+            .and_then(|answer| {
+                answer["data"].as_object().and_then(|data| {
+                    data.iter().find_map(|(key, value)| {
+                        let info = &value["pageInfo"];
+                        info["endCursor"]
+                            .as_str()
+                            .map(|_| (key.clone(), info["hasNextPage"].is_boolean()))
+                    })
+                })
+            });
+        call.page_info = match (call.page_info.take(), found, call.samples) {
+            (None, found, 1) => found,
+            (Some(seen), Some(found), _) if seen == found => Some(seen),
+            _ => None,
+        };
+    }
+}
+
+/// How a recorded read turned pages, when its query or variables and its
+/// answers say so plainly: a cursor the answer handed back, a page number
+/// or an offset.
+fn pagination_of(call: &Call) -> Option<Yaml> {
+    if let Some(graphql) = &call.graphql {
+        let (field, has_next) = call.page_info.as_ref()?;
+        let after = graphql
+            .variables
+            .0
+            .iter()
+            .find(|(name, (_, kind))| name.as_str() == "after" && *kind == Kind::Str)?;
+        let more = if *has_next {
+            format!("/data/{field}/pageInfo/hasNextPage")
+        } else {
+            String::new()
+        };
+        return Some(crate::pagination_yaml(
+            "cursor",
+            &format!("/data/{field}/pageInfo/endCursor"),
+            &more,
+            after.0,
+            true,
+        ));
+    }
+    let strings = call
+        .query
+        .0
+        .iter()
+        .filter(|(_, (_, kind))| *kind == Kind::Str)
+        .map(|(name, _)| name.as_str());
+    if let Some(input) = crate::cursor_input(strings)
+        && let Some(next) = crate::next_cursor_key(
+            call.response_keys
+                .iter()
+                .flatten()
+                .map(String::as_str)
+                .filter(|key| !key.starts_with('/')),
+        )
+    {
+        return Some(crate::pagination_yaml(
+            "cursor",
+            &format!("/{}", next.replace('~', "~0").replace('/', "~1")),
+            "",
+            input,
+            false,
+        ));
+    }
+    let ints = call
+        .query
+        .0
+        .iter()
+        .filter(|(_, (_, kind))| *kind == Kind::Int)
+        .map(|(name, _)| name.as_str());
+    let (input, style) = crate::counted_input(ints)?;
+    Some(crate::pagination_yaml(style, "", "", input, false))
 }
 
 /// Turns ids in a path into `{name}` placeholders named after the segment

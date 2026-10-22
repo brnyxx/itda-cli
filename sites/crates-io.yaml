@@ -57,6 +57,8 @@ operations:
     query:
       q: {type: string, required: true}
       per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+    pagination: {style: page, next: /meta/next_page, send: {query: page}}
     model: crate
     response:
       format: json

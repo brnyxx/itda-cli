@@ -118,11 +118,15 @@ impl Store {
         }));
     }
 
-    /// Apply the steps of `migration` that have not run yet, each in its own
-    /// transaction. Returns the component's schema version afterwards.
+    /// Apply the steps of `migration` that have not run yet, in one
+    /// transaction that takes the write lock before the version is read, so
+    /// two processes starting at once cannot both see version 0 and both
+    /// try to create the tables. Returns the component's schema version
+    /// afterwards.
     pub fn migrate(&self, migration: &'static Migration) -> AppResult<usize> {
         self.call_blocking(move |conn| {
-            let mut version: usize = conn
+            let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            let mut version: usize = tx
                 .query_row(
                     "SELECT version FROM store_migration WHERE component=?1",
                     [migration.component],
@@ -143,17 +147,19 @@ impl Store {
                     "Update itda, or move the data directory aside.",
                 ));
             }
+            let before = version;
             while version < migration.steps.len() {
-                let tx = conn.transaction()?;
                 tx.execute_batch(migration.steps[version])?;
                 version += 1;
+            }
+            if version != before {
                 tx.execute(
                     "INSERT INTO store_migration(component,version) VALUES(?1,?2)
                      ON CONFLICT(component) DO UPDATE SET version=excluded.version",
                     rusqlite::params![migration.component, version as i64],
                 )?;
-                tx.commit()?;
             }
+            tx.commit()?;
             Ok(version)
         })
     }

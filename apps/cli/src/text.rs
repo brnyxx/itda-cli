@@ -15,6 +15,11 @@ pub fn t(key: &str) -> &'static str {
     let table: &[(&str, &str, &str)] = &[
         ("looking", "Looking at {host}...", "{host} 살펴보는 중..."),
         (
+            "more_pages",
+            "There is another page: run the same command with --next {handle}",
+            "다음 페이지가 있습니다. 같은 명령에 --next {handle}을 붙여 실행하세요",
+        ),
+        (
             "fetched_page",
             "The page opens without signing in.",
             "이 페이지는 로그인 없이 열립니다.",

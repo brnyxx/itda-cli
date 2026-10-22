@@ -11,7 +11,7 @@ use itda_runtime::{Call, Runtime};
 use itda_spec::Spec;
 use itda_store::Store;
 use itda_vault::{MemoryStore, Secret, Vault};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
@@ -134,6 +134,7 @@ fn call(action: &str, args: &[(&str, &str)]) -> Call {
             .collect::<BTreeMap<_, _>>(),
         account: None,
         approval: None,
+        next: None,
     }
 }
 
@@ -559,4 +560,251 @@ async fn a_rate_limited_read_says_how_long_the_site_asked_to_wait() {
     assert_eq!(error.public_code, "site_rate_limited");
     assert_eq!(error.extra["retry_after"], 120);
     assert!(error.msg.contains("wait 120 s"), "{}", error.msg);
+}
+
+/// A site whose lists turn pages four ways: a cursor in the body, a page
+/// number with a `Link` header, an offset with no marker at all, and a
+/// GraphQL connection with `pageInfo`.
+async fn paged_site() -> String {
+    const PAGE: usize = 2;
+    let records = |from: usize, to: usize| -> Vec<Value> {
+        (from..to.min(5))
+            .map(|i| json!({"id": i, "title": format!("record {i}")}))
+            .collect()
+    };
+    let router = Router::new()
+        .route(
+            "/cursor",
+            get(move |Query(q): Query<HashMap<String, String>>| async move {
+                let from: usize = q
+                    .get("cursor")
+                    .map(|c| c.strip_prefix("cur-").unwrap_or("0").parse().unwrap())
+                    .unwrap_or(0);
+                let next = (from + PAGE < 5).then(|| format!("cur-{}", from + PAGE));
+                axum::Json(json!({"meta": {"next_cursor": next, "echo": q.get("cursor")}, "items": records(from, from + PAGE)}))
+            }),
+        )
+        .route(
+            "/paged",
+            get(move |request_headers: HeaderMap, Query(q): Query<HashMap<String, String>>| async move {
+                let page: usize = q.get("page").map(|p| p.parse().unwrap()).unwrap_or(1);
+                let from = (page - 1) * PAGE;
+                let host = request_headers["host"].to_str().unwrap().to_owned();
+                let mut headers = HeaderMap::new();
+                if from + PAGE < 5 {
+                    headers.insert(
+                        "link",
+                        format!("<http://{host}/paged?per_page={PAGE}&page={}>; rel=\"next\", <http://{host}/paged?page=1>; rel=\"first\"", page + 1)
+                            .parse()
+                            .unwrap(),
+                    );
+                }
+                (headers, axum::Json(json!({"items": records(from, from + PAGE)})))
+            }),
+        )
+        .route(
+            "/offset",
+            get(move |Query(q): Query<HashMap<String, String>>| async move {
+                let from: usize = q.get("from").map(|p| p.parse().unwrap()).unwrap_or(0);
+                axum::Json(Value::Array(records(from, from + PAGE)))
+            }),
+        )
+        .route(
+            "/graphql",
+            axum::routing::post(move |body: String| async move {
+                let body: Value = serde_json::from_str(&body).unwrap();
+                let after = body["variables"]["after"].as_str();
+                let from: usize = after.map(|c| c.strip_prefix("gql-").unwrap().parse().unwrap()).unwrap_or(0);
+                axum::Json(json!({"data": {"notices": {
+                    "nodes": records(from, from + PAGE),
+                    "pageInfo": {"endCursor": format!("gql-{}", from + PAGE), "hasNextPage": from + PAGE < 5}
+                }}}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+fn paged_spec(base: &str) -> Spec {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "paged", "base_url": base},
+        "operations": [
+            {"name": "by-cursor", "method": "GET", "path": "/cursor", "effect": "read", "evidence": "doc",
+             "query": {"cursor": {"type": "string"}},
+             "pagination": {"style": "cursor", "next": "/meta/next_cursor", "send": {"query": "cursor"}},
+             "response": {"format": "json", "extract_pointer": "/items"}},
+            {"name": "by-page", "method": "GET", "path": "/paged", "effect": "read", "evidence": "doc",
+             "query": {"page": {"type": "int", "default": 1}, "per_page": {"type": "int", "default": 2}},
+             "pagination": {"style": "page", "next": "header:link", "send": {"query": "page"}},
+             "response": {"format": "json", "required_pointers": ["/items"]}},
+            {"name": "by-offset", "method": "GET", "path": "/offset", "effect": "read", "evidence": "doc",
+             "query": {"from": {"type": "int", "default": 0}},
+             "pagination": {"style": "offset", "send": {"query": "from"}},
+             "response": {"format": "json"}},
+            {"name": "notices", "method": "POST", "path": "/graphql", "effect": "read", "evidence": "doc",
+             "body": {"json": {"query": {"type": "string", "default": "query Notices($after: String) { notices(after: $after) { nodes { id title } pageInfo { endCursor hasNextPage } } }"},
+                               "after": {"type": "string"}},
+                      "json_template": {"query": "{{query}}", "variables": {"after": "{{after}}"}}},
+             "pagination": {"style": "cursor", "next": "/data/notices/pageInfo/endCursor", "more": "/data/notices/pageInfo/hasNextPage", "send": {"body": "after"}},
+             "response": {"format": "json", "extract_pointer": "/data/notices/nodes"}}
+        ]
+    });
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+async fn paged_runtime() -> Runtime {
+    let store = Store::in_memory().unwrap();
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let cursors = Arc::new(itda_policy::Cursors::open(store.clone()).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    Runtime::new(Arc::new(Network::new(gate, true)), vault).with_pagination(cursors)
+}
+
+fn ids(data: &Value) -> Vec<i64> {
+    data.as_array()
+        .or_else(|| data["items"].as_array())
+        .unwrap()
+        .iter()
+        .map(|r| r["id"].as_i64().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_read_that_turns_pages_hands_out_a_handle_and_continues_from_it() {
+    let base = paged_site().await;
+    let runtime = paged_runtime().await;
+    let spec = paged_spec(&base);
+    itda_policy::validate_spec(&spec).unwrap();
+    for action in ["by-cursor", "by-page", "by-offset", "notices"] {
+        let mut seen = Vec::new();
+        let mut next = None;
+        for _ in 0..4 {
+            let mut call = call(action, &[]);
+            call.next = next.clone();
+            let envelope = runtime.call(&spec, call).await.unwrap();
+            seen.extend(ids(&envelope.data));
+            assert!(
+                !serde_json::to_string(&envelope).unwrap().contains("cur-"),
+                "{action}: the raw cursor stays out of the answer"
+            );
+            next = envelope.meta.next;
+            if next.is_none() {
+                break;
+            }
+            assert!(next.as_deref().unwrap().starts_with("ic_"), "{action}");
+        }
+        assert_eq!(seen, [0, 1, 2, 3, 4], "{action}: three pages, no repeats");
+    }
+}
+
+#[tokio::test]
+async fn a_handle_only_continues_the_call_it_was_issued_for() {
+    let base = paged_site().await;
+    let runtime = paged_runtime().await;
+    let spec = paged_spec(&base);
+    let first = runtime.call(&spec, call("by-cursor", &[])).await.unwrap();
+    let handle = first.meta.next.clone().unwrap();
+
+    // Another action, or other inputs, is another list.
+    let mut other = call("by-page", &[]);
+    other.next = Some(handle.clone());
+    let error = runtime.call(&spec, other).await.unwrap_err();
+    assert_eq!(error.public_code, "pagination_invalid");
+    let mut other = call("by-page", &[("per_page", "3")]);
+    other.next = Some(handle.clone());
+    assert_eq!(
+        runtime.call(&spec, other).await.unwrap_err().public_code,
+        "pagination_invalid"
+    );
+
+    // The agent cannot set a cursor itself, nor make one up as a handle.
+    let error = runtime
+        .call(&spec, call("by-cursor", &[("cursor", "cur-2")]))
+        .await
+        .unwrap_err();
+    assert!(error.msg.contains("previous answer"), "{}", error.msg);
+    let mut made_up = call("by-cursor", &[]);
+    made_up.next = Some("cur-2".into());
+    let error = runtime.call(&spec, made_up).await.unwrap_err();
+    assert_eq!(error.public_code, "pagination_invalid");
+    assert!(error.msg.contains("not a handle"), "{}", error.msg);
+
+    // A definition that changed is a different list too.
+    let mut changed = spec.clone();
+    changed.operations[0].desc = "List records".into();
+    let mut again = call("by-cursor", &[]);
+    again.next = Some(handle.clone());
+    assert_eq!(
+        runtime.call(&changed, again).await.unwrap_err().public_code,
+        "pagination_invalid"
+    );
+
+    // The same handle still works for the call it was issued for.
+    let mut same = call("by-cursor", &[]);
+    same.next = Some(handle);
+    assert_eq!(ids(&runtime.call(&spec, same).await.unwrap().data), [2, 3]);
+
+    // A read that does not turn pages takes no handle, and page and next
+    // together are refused.
+    let mut plain = call("by-page", &[("page", "2")]);
+    plain.next = Some(first.meta.next.unwrap());
+    assert_eq!(
+        runtime.call(&spec, plain).await.unwrap_err().code,
+        itda_types::Code::Usage
+    );
+}
+
+#[tokio::test]
+async fn without_a_handle_store_a_read_still_answers_and_hands_out_no_handle() {
+    let base = paged_site().await;
+    let (runtime, _) = runtime().await;
+    let envelope = runtime
+        .call(&paged_spec(&base), call("by-cursor", &[]))
+        .await
+        .unwrap();
+    assert_eq!(ids(&envelope.data), [0, 1]);
+    assert!(envelope.meta.next.is_none());
+}
+
+#[tokio::test]
+async fn a_preflight_step_reads_a_value_from_the_pages_embedded_data() {
+    let router = Router::new()
+        .route(
+            "/",
+            get(|| async {
+                axum::response::Html(
+                    r#"<html><script id="__NEXT_DATA__" type="application/json">{"buildId":"b1ld-7f3a9","props":{"pageProps":{"items":[1]}}}</script></html>"#,
+                )
+            }),
+        )
+        .route(
+            "/_next/data/b1ld-7f3a9/items.json",
+            get(|| async { axum::Json(json!({"pageProps": {"items": [{"id": 1}]}})) }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "next-site", "base_url": base},
+        "operations": [
+            {"name": "items", "method": "GET", "path": "/_next/data/{{step.page.build_id}}/items.json", "effect": "read", "evidence": "doc",
+             "preflight": [{"name": "page", "path": "/", "extract": {"build_id": "ssr:__NEXT_DATA__#/buildId"}}],
+             "response": {"format": "json", "required_pointers": ["/pageProps/items"]}},
+            {"name": "broken", "method": "GET", "path": "/_next/data/{{step.page.build_id}}/items.json", "effect": "read", "evidence": "doc",
+             "preflight": [{"name": "page", "path": "/", "extract": {"build_id": "ssr:__NEXT_DATA__#/props"}}],
+             "response": {"format": "json"}}
+        ]
+    });
+    let spec = itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+    let (runtime, _) = runtime().await;
+    let envelope = runtime.call(&spec, call("items", &[])).await.unwrap();
+    assert_eq!(envelope.data["pageProps"]["items"][0]["id"], 1);
+    // An object is not a value.
+    let error = runtime.call(&spec, call("broken", &[])).await.unwrap_err();
+    assert_eq!(error.public_code, "response_mismatch");
 }
