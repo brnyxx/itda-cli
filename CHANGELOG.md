@@ -38,10 +38,9 @@ change the definition format or the CLI.
   body too, instead of standing in as an empty string where a number or
   null belongs; GraphQL variables typed `Int` or `Boolean` need that.
 - `itda draft page` and `itda setup` read the API description a site
-  publishes: the one the page links to, else the first of `/openapi.json`,
-  `/openapi.yaml`, `/swagger.json`, `/api/openapi.json` and
-  `/.well-known/openapi.json` on the same origin that answers with one (GET
-  only, as itda, at most 4 MB). Its reads join the draft the way `itda draft
+  publishes: the one the page links to, else `/openapi.json` on the same
+  origin when it answers with one (one GET, as itda, at most 4 MB). Its reads
+  join the draft the way `itda draft
   openapi` makes them, drafted once when the page already had the same path;
   its changes become notes, and a read keyed by a credential input is left
   out and listed. A description on another address is noted, not merged,

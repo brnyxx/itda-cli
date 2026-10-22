@@ -24,7 +24,7 @@ pub struct Page {
 }
 
 /// An API description the site publishes, as fetched: the one a page linked
-/// to, or the one a path in [`DESCRIPTION_PATHS`] answered with.
+/// to, or the one [`DESCRIPTION_PATH`] answered with.
 #[derive(Clone, Debug)]
 pub struct Description {
     pub url: String,
@@ -35,15 +35,10 @@ pub struct Description {
 /// large API gets a count instead of a wall of notes.
 const LISTED_CHANGES: usize = 10;
 
-/// Same-origin paths where sites publish their API description, in the
-/// order a caller should try them; the first that parses wins.
-pub const DESCRIPTION_PATHS: &[&str] = &[
-    "/openapi.json",
-    "/openapi.yaml",
-    "/swagger.json",
-    "/api/openapi.json",
-    "/.well-known/openapi.json",
-];
+/// The one same-origin path a caller asks for when no page links to a
+/// description. Every request to a site waits its turn at the gate, so more
+/// paths would cost every site that publishes nothing a second or more each.
+pub const DESCRIPTION_PATH: &str = "/openapi.json";
 
 /// Embedded payloads in the order a definition should prefer them.
 const SSR_KEYS: &[&str] = &[

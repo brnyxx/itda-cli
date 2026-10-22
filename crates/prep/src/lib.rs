@@ -13,7 +13,7 @@ mod page;
 
 pub use har::from_har;
 pub use openapi::{from_openapi, is_openapi};
-pub use page::{DESCRIPTION_PATHS, Description, Page, from_pages, from_pages_and_description};
+pub use page::{DESCRIPTION_PATH, Description, Page, from_pages, from_pages_and_description};
 
 use itda_types::error::AppResult;
 
