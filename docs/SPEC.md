@@ -64,7 +64,7 @@ notices when the page changes:
 | Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | A query input named after that key (`int`); `page` and the like default to 1, `offset` and `start` to 0, and a key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
 | A `GET` form | A read with the form's fields as `query` inputs |
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
-| A sign-in form | Left out; `itda login <site> --browser` signs in |
+| A sign-in form | Left out; `itda setup --user` and `itda login <site>` sign in through it, see `auth` below |
 | `<link rel="alternate">` to RSS or Atom | A read with `format: xml` |
 | A link to an OpenAPI document (`rel="service-desc"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or, when nothing is linked, `/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` would make them, under the page's address; its changes are listed as notes; see below |
 
@@ -412,10 +412,54 @@ Store the value with `echo "$KEY" | itda login <site>` (OS keyring), or set
 picks among several accounts; the default account is `default`. The header is
 only ever sent to `base_url`'s origin, or to `origin` when you set it.
 
+### Sign in with a password
+
+For a site with its own sign-in form, name the form on the `browser` entry
+and itda fills it in for you, as itself:
+
+```yaml
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:JSESSIONID   # the cookie that shows you are signed in
+    login:
+      path: /login                  # the page with the form; a query is fine
+      user: username                # the user name field
+      password: password            # the password field
+```
+
+```console
+$ itda login intranet --user me
+    Password for me on intranet (sent once to the site's own sign-in form, never saved):
+Signed in. The session for intranet/default (2 cookies) is sealed under the data directory with a key in the system keyring; agents only see the account id.
+```
+
+itda reads the page at `path` as itself, takes the form that has those two
+fields (a `POST` form, on the same site), fills them in and sends it once
+with the hidden fields the page gave (a token such as `_csrf`, a return
+address) and the cookies the page set, the way your browser would. A redirect
+means the site accepted the sign-in; the cookies it answered with are the
+session, kept the way a browser sign-in is. The form coming back means it
+did not, and nothing is retried or paused. The password is sent to the form's
+own action and nowhere else, and is never kept. Without a terminal, the
+password is the first line of stdin, so a password manager can pipe it.
+
+`itda setup <page> --user me` does the same when the page needs a sign-in
+(it redirects to one, answers 401 or 403, or says "log in to see this"),
+then drafts from the page as you see it signed in: every action gets `auth:
+session`, and the `login` block is written from the form it found, so the
+command above works later. An agent never gets this path: `itda_setup` over
+MCP refuses pages behind a sign-in and says what you should run.
+
+A change answered with a redirect (post, then redirect, then get, as older
+sites do) has landed; its result carries the address the site pointed at. A
+redirect to a sign-in page instead means the session is no longer accepted:
+the call stops with `auth_required`, and `itda login <site>` signs in again.
+
 ### Browser sign-in
 
-For sites you sign in to with a password, single sign-on or a one-time code,
-and that offer no API key:
+For single sign-on, a one-time code, or a site whose form itda cannot fill
+in:
 
 ```yaml
 auth:
@@ -491,7 +535,10 @@ operations:
 A step is a `GET` to the action's own origin, with the same account, either
 to `path` or to a read action named in `op` (with `args`). Steps run in order,
 after you approve a change and right before it is sent, so the value is always
-fresh. A value is used as `{{step.<step>.<name>}}`; inputs filled this way are not
+fresh. The cookies a step's answer sets go along with the action, the way a
+browser sends them (a Rails site keeps the token it hands out in a session
+cookie it rewrites on every answer); they are used for that one request and
+never kept. A value is used as `{{step.<step>.<name>}}`; inputs filled this way are not
 shown to agents and they cannot set them. When a step finds nothing, the call
 stops with `response_mismatch` and nothing is sent. After the steps, a read is
 classified again with the values filled in: one that would now count as a
