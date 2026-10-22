@@ -184,9 +184,10 @@ itda record <url> [--install]            # or from using it in your browser, beh
 itda draft har <file> / openapi <file>   # or from a saved recording or an API description
 itda add spec.yaml / remove <site>       # install or remove a site (also a URL or github)
 itda ls                                  # installed sites and their actions
+itda describe <site>                     # their inputs and a command to copy each
 itda call <site>.<action> --input value  # run one; --json for agents
 echo "$KEY" | itda login <site>          # store an API key in the OS keyring
-itda login <site> --browser              # or sign in in your own browser, once
+itda login <site> --browser              # or sign in in your own browser, once (sealed under the data directory)
 itda accounts / logout <site>            # see or remove saved sign-ins
 itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # what agents did
@@ -202,6 +203,7 @@ itda feedback                            # report a problem: opens a new issue, 
 itda mcp install claude-desktop   # or cursor, vscode, codex
 itda mcp install claude-code      # prints the `claude mcp add` command
 # add --approve-in-client to approve changes in the client's own form
+# itda mcp --site <name> serves one site only, for a project's own configuration
 ```
 
 The installer merges into the client's config, keeps your other servers and
@@ -227,8 +229,9 @@ exit code:
 | 11 | the page no longer matches its definition |
 | 12 | the site refused; paused until `itda resume` |
 | 13 | rate limited |
-| 20 | needs approval (or changes are off) |
-| 21 | approval used, rejected, expired or for other inputs |
+| 14 | the site refused this one request as not allowed; signing in again will not help |
+| 20 | needs approval, or the user has not answered yet (or changes are off) |
+| 21 | approval used, rejected, expired or withdrawn because the inputs changed |
 | 22 | a change was sent but its outcome is unknown; check the site |
 | 30 | network error |
 

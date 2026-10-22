@@ -180,9 +180,10 @@ itda record <url> [--install]            # 또는 로그인이 필요한 사이�
 itda draft har <file> / openapi <file>   # 또는 저장한 녹화나 API 설명서로
 itda add spec.yaml / remove <site>       # 사이트 설치·삭제 (URL이나 github 같은 이름도 가능)
 itda ls                                  # 설치된 사이트와 액션
+itda describe <site>                     # 액션마다 입력과 복사해 쓸 명령
 itda call <site>.<action> --input value  # 하나 실행, 에이전트용은 --json
 echo "$KEY" | itda login <site>          # API 키를 OS 키링에 저장
-itda login <site> --browser              # 또는 내 브라우저로 한 번 로그인
+itda login <site> --browser              # 또는 내 브라우저로 한 번 로그인 (세션은 데이터 폴더에 봉인)
 itda accounts / logout <site>            # 저장된 로그인 보기·삭제
 itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # 에이전트가 한 일
@@ -198,6 +199,7 @@ itda feedback                            # 문제 신고: 버전과 환경이 �
 itda mcp install claude-desktop   # 또는 cursor, vscode, codex
 itda mcp install claude-code      # `claude mcp add` 명령을 출력
 # --approve-in-client를 붙이면 클라이언트 자체 양식에서 변경을 승인
+# itda mcp --site <name>은 사이트 하나만 제공, 프로젝트별 설정용
 ```
 
 설치 명령은 클라이언트 설정에 병합되고, 다른 서버 설정은 그대로 두며, 기존
@@ -224,8 +226,9 @@ itda mcp install claude-code      # `claude mcp add` 명령을 출력
 | 11 | 페이지가 더 이상 정의와 맞지 않음 |
 | 12 | 사이트가 거부함, `itda resume` 전까지 일시 정지 |
 | 13 | 요청 한도 초과 |
-| 20 | 승인 필요 (또는 변경이 꺼져 있음) |
-| 21 | 승인이 이미 쓰였거나, 거절·만료됐거나, 다른 입력용임 |
+| 14 | 사이트가 이 요청 하나를 허용하지 않음, 다시 로그인해도 소용없음 |
+| 20 | 승인 필요, 또는 사용자가 아직 답하지 않음 (또는 변경이 꺼져 있음) |
+| 21 | 승인이 이미 쓰였거나, 거절·만료됐거나, 입력이 바뀌어 철회됨 |
 | 22 | 변경을 보냈지만 결과를 알 수 없음, 사이트를 확인하세요 |
 | 30 | 네트워크 오류 |
 

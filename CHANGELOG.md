@@ -39,7 +39,9 @@ change the definition format or the CLI.
   when their read also failed, and new ones are tried once and added when
   they answer. The diff is printed in plain words (added, removed, changed,
   kept as edited) and written after a yes, or at once with `-y`; the site
-  is checked right after and the verdict printed. Approvals are untouched.
+  is checked right after and the verdict printed. Approvals for the site
+  are withdrawn, as for any replaced definition: what the user reviewed is
+  no longer what would be sent.
   To make that possible, `itda setup`, `itda draft ... --install` and `itda
   record --install` now write `specs/<site>/sources.json` next to the
   definition: the pages, the API description, the GraphQL endpoints asked,
@@ -126,6 +128,54 @@ change the definition format or the CLI.
 - A GraphQL document nested deeper than 32 levels is refused before it is
   parsed, with a clear message in a definition's default and `bad_request`
   for an agent's input, instead of running the parser out of stack.
+- `api_denied` (exit 14): a 403 that is not a sign-in problem says the site
+  refused that one request as not allowed, with `upstream_status` and, when
+  the site's JSON answer names one of a short list of reasons,
+  `provider_reason`; nothing else from the answer is passed on. A 403 whose
+  reason says the session was rejected stays `auth_required`. Every refusal
+  now carries `upstream_status`, and `itda check` counts an address answered
+  with 404, 405 or 410 and a query answered with errors (`query_failed`,
+  exit 11) as `site_changed`.
+- `approval_pending` (exit 20): a call with an approval the user has not
+  answered yet is told to wait and call again with the same id, with the
+  command to run in `command`; the approval stays. A call with other inputs
+  withdraws the approval (`approval_expired`, `reason: inputs_changed`).
+  `itda reject` also withdraws a granted approval, and `itda logout`, `itda
+  remove`, a new `itda login` and replacing a definition withdraw every
+  approval for the site or account. The review `itda approve` prints, and the
+  form an MCP client shows, name the action, say what it does in the
+  definition's words, and cut a value longer than 500 characters with its
+  length.
+- A read is classified again after its preflight steps with the found values
+  filled in; one that would now be a change stops with `effect_changed`
+  (exit 2) and is not sent. Headers and inputs that override the method
+  (`X-HTTP-Method-Override` and the like) are refused at install and before
+  sending. A GraphQL answer that carries `errors` behind a 2xx is
+  `action_outcome_unknown` for a change and `query_failed` for a read, never
+  a success.
+- `itda audit` and `itda doctor` show a `change_started` record with no
+  outcome after it as a change with an unknown outcome (the process stopped
+  after it was sent), and `itda_manage audit` returns them under
+  `unknown_outcome`. A change that failed before anything left the machine
+  (no turn at the gate, a name that did not resolve, a refused connection)
+  keeps its network code and is reported as not sent instead of unknown.
+- Long secrets are sealed into `vault.sealed` under the data directory
+  (AES-256-GCM, a fresh nonce per write) with one 32-byte master key per data
+  directory kept in the system keyring; every browser session goes there,
+  and so does anything over 1024 bytes or that the keyring refuses as too
+  long (Windows Credential Manager caps a credential at
+  `CRED_MAX_CREDENTIAL_BLOB_SIZE`, 2560 bytes). API keys stay in the keyring.
+  Existing entries keep working and move on their next write, in both
+  directions; `itda doctor` says where secrets are. The cipher comes from
+  `aws-lc-rs`, already built through `rustls`.
+- `itda describe <site>[.<action>]` prints each action's inputs and a command
+  to copy, with a placeholder for every input it cannot run without;
+  `itda ls --json` carries the same command as `example`. An unknown site,
+  action or input names the nearest one ("Did you mean"), in the CLI and
+  over MCP.
+- `itda mcp --site <name>` serves one site only: its actions are the only
+  tools, `itda_setup` is refused, and the other management tools stay inside
+  it.
 
 - Five MCP tools so an agent never needs a terminal to set a site up or
   look after it: `itda_setup` (look at a page as itda, draft, try every
@@ -197,6 +247,13 @@ change the definition format or the CLI.
   and one that does not parse leaves the page draft as it is. The
   header comment and each merged action's `evidence` name where it came from,
   and `itda setup` says what it read in one line.
+
+### Removed
+
+- The `browser-fetch` and `browser` transports and the `derived` credential
+  kind, left over from the port: no code ran them, and a definition that named
+  them was accepted and then refused at run time. `itda add` now refuses them
+  with the field named.
 
 ### Changed
 

@@ -346,7 +346,12 @@ with `itda approve`, and it is sent once, without retries.
 
 When the checks disagree with your `effect: read`, itda treats the action as a
 write. Rename the action or path rather than fighting the classifier: a `GET
-/logout` really is a change.
+/logout` really is a change. Headers and inputs that ask the site to treat
+the request as another method (`X-HTTP-Method-Override`, `X-Method-Override`,
+`X-HTTP-Method`, `_method`) are refused: the method that was reviewed is the
+method that is sent. `transport` other than `http` and `auth` kinds other
+than `none`, `header` and `browser` are refused too; itda sends plain HTTP
+requests as itself.
 
 ## `response`
 
@@ -425,7 +430,7 @@ Then sign in once in your own browser:
 $ itda login intranet --browser
 Sign in to intranet in the browser window that just opened.
 itda continues when the JSESSIONID cookie appears, or press Enter once you are signed in.
-Saved the session for intranet/default (3 cookies) in the system keyring. Agents only see the account id.
+Saved the session for intranet/default (3 cookies); it is sealed under the data directory with a key in the system keyring. Agents only see the account id.
 ```
 
 itda opens Chrome, Edge or Chromium (or `ITDA_BROWSER`) in a fresh, empty
@@ -434,9 +439,17 @@ clicks or types on the page. It keeps only the unexpired cookies for that
 site, closes the window and deletes the profile. The session is sent only to
 addresses on the same site, and cookie values are removed from results.
 
-When the session expires, the site answers 401 or 403, the account pauses with
-`auth_required`, and `itda login <site> --browser` signs it in again and
-resumes it. On a server without a keyring, set
+A session is a whole `Cookie` header, longer than some credential stores
+take (Windows Credential Manager caps a credential at 2560 bytes), so it is
+kept in `vault.sealed` under the data directory, encrypted with a key that
+lives in the system keyring; API keys stay in the keyring itself. The move is
+automatic in both directions, and `itda doctor` says where secrets are.
+
+When the session expires, the site answers 401, or 403 with a reason such as
+`session_expired`, the account pauses with `auth_required`, and `itda login
+<site> --browser` signs it in again and resumes it. A 403 with any other
+reason is `api_denied`: the request was not allowed, and signing in again
+will not help. On a server without a keyring, set
 `ITDA_SECRET__<SITE>__<ACCOUNT>__SESSION` to a `Cookie` header value instead.
 
 ## `preflight`
@@ -480,7 +493,9 @@ to `path` or to a read action named in `op` (with `args`). Steps run in order,
 after you approve a change and right before it is sent, so the value is always
 fresh. A value is used as `{{step.<step>.<name>}}`; inputs filled this way are not
 shown to agents and they cannot set them. When a step finds nothing, the call
-stops with `response_mismatch` and nothing is sent.
+stops with `response_mismatch` and nothing is sent. After the steps, a read is
+classified again with the values filled in: one that would now count as a
+change stops with `effect_changed` (exit 2) and is not sent.
 
 ## `models`
 
@@ -571,7 +586,9 @@ Changes are never sent. Each site ends with one verdict (`ok`, `signed_out`,
 the [contract](agents.md) lists: 11 when a site no longer matches its
 definition, so a scheduled job can warn you before an agent runs into it.
 `itda check --all` checks every installed site and prints one verdict line
-each.
+each. An address the site answers with 404, 405 or 410 and a query it
+answers with errors count as `site_changed`; a read it refuses
+(`api_denied`) is named on its own line without deciding the site's verdict.
 
 ### Draft a changed site again
 
@@ -632,8 +649,9 @@ edited by hand and is kept as it is; one the new draft changed (a renamed
 column, a moved endpoint, a response check) takes the new version; one the
 sources no longer draft is dropped only when its read also failed in the
 check; one the draft now has is tried once and added when it answers.
-Approvals are untouched. `-y` writes without asking; without it, nothing is
-written until you say yes. The site is checked right after and the verdict
+Approvals waiting for the site are withdrawn, as for any replaced
+definition. `-y` writes without asking; without it, nothing is written until
+you say yes. The site is checked right after and the verdict
 is printed, so the exit code says whether the new definition matches.
 Over MCP, `itda_manage` with `refresh` does the same after you confirm the
 diff in a form.
