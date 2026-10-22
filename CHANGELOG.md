@@ -8,6 +8,10 @@ change the definition format or the CLI.
 ## [Unreleased]
 
 ### Changed
+- The landing page on phones: lighter glass, the setup dialog left out of the
+  hero stack, full-width buttons, tighter rhythm, terminal lines wrapped on
+  anything narrower than the two-column layout, and the sky drawn smaller
+  with the cursor effect only while a finger is down.
 - The landing page and both READMEs carry a prompt to hand to an agent: paste
   it into Claude Code, Cursor or Codex with a site's address and the agent
   installs itda, runs `itda setup <address> --client <app> -y` and starts

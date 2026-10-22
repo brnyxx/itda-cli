@@ -208,7 +208,7 @@ h1 {
 .desk .term { left: 0; top: 104px; width: min(100%, 600px); z-index: 2; }
 .desk .about { left: 24px; top: -8px; width: 300px; z-index: 1; }
 .desk .clock { right: 0; top: 0; width: 132px; z-index: 1; text-align: center; }
-.desk .actions { right: -24px; top: 372px; width: 380px; z-index: 3; }
+.desk .actions { right: 0; top: 372px; width: min(380px, 100%); z-index: 3; }
 .desk .setup { left: 48px; top: 520px; width: 310px; z-index: 4; }
 .about-body { display: flex; gap: 14px; align-items: center; padding: 14px 16px; }
 .about-body img { width: 36px; height: 36px; filter: drop-shadow(0 6px 14px rgba(47,91,234,.6)); }
@@ -400,6 +400,7 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
   .hero { padding-top: 64px; }
   .hero-grid, .split { grid-template-columns: 1fr; gap: 40px; }
   .desk { height: auto; display: grid; gap: 14px; }
+  .desk .win { transform: none; }
   .desk .win { position: static; width: auto; }
   .desk .about, .desk .clock { display: none; }
   .race { grid-template-columns: 1fr; }
@@ -411,6 +412,25 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
   .section { padding-top: 80px; }
 }
 @media (max-width: 640px) {
+  /* Phones: lighter glass (blur is the expensive part over WebGL), fewer
+     windows in the hero, full-width buttons, tighter rhythm. */
+  .install, .win, .code, .nav, .footer, .btn-ghost { backdrop-filter: blur(8px) saturate(140%); -webkit-backdrop-filter: blur(8px) saturate(140%); }
+  .desk .win { box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 16px 40px -24px rgba(0,0,0,.9); }
+  .desk .setup { display: none; }
+  .term-body { padding: 14px 14px 18px; font-size: 11.5px; }
+  .action-list li { grid-template-columns: 40px 44px 1fr auto; padding: 8px 12px; }
+  .action-list span { font-size: 12.5px; }
+  .cta .btn { flex: 1 1 auto; justify-content: center; }
+  .section { padding-top: 72px; }
+  .agent-prompt { padding-top: 64px; }
+  h2 { font-size: clamp(30px, 9vw, 40px); }
+  .section-lede, .lede { font-size: 16px; }
+  .prompt-body { font-size: 12px; padding: 16px 14px 18px; }
+  .steps li > :not(.bar), .steps code { margin-left: 18px !important; margin-right: 18px !important; }
+  .features article { padding: 22px 18px; }
+  .lane-rows li { padding: 11px 16px; }
+  .final { padding: 96px 0 80px; }
+  .nav-inner { height: 56px; }
   .nav-links a:not(.nav-gh) { display: none; }
   .nav-links { gap: 10px; }
   .lede { font-size: 16.5px; }
@@ -427,6 +447,6 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
    wide screens and wrap on narrow ones, never widening the page. */
 .term { min-width: 0; overflow: hidden; }
 .term-body { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
-@media (max-width: 640px) {
+@media (max-width: 960px) {
   .term-body { white-space: pre-wrap; word-break: break-word; }
 }
