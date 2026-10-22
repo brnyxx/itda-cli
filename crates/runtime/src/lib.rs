@@ -13,16 +13,19 @@
 //! A `browser` credential is the cookie jar the user's own sign-in left
 //! behind (`itda login --browser`); it is sent only to the same site.
 //! Preflight steps read per-visit values such as a CSRF token from the same
-//! origin just before the action is sent; see `preflight`.
+//! origin just before the action is sent; see `preflight`. A read that
+//! declares `pagination` returns `meta.next`, a handle for the following
+//! page, and continues from it with `next`; see `pagination`.
 //!
 //! With an audit log, every call is recorded with its outcome, and a change
 //! is recorded before it is sent: if that record cannot be written, the
 //! change is not sent.
 pub mod audit;
+mod pagination;
 mod preflight;
 use itda_net::{Network, Request};
 use itda_policy::{
-    Approvals, Effect, ExecutionRequest, ReviewInput, operation_effect, validate_spec,
+    Approvals, Cursors, Effect, ExecutionRequest, ReviewInput, operation_effect, validate_spec,
 };
 use itda_spec::{Operation, Spec, interpolate_template_str};
 use itda_types::{
@@ -46,6 +49,7 @@ pub struct Runtime {
     vault: Arc<Vault>,
     approvals: Option<Arc<Approvals>>,
     audit: Option<Arc<audit::AuditLog>>,
+    cursors: Option<Arc<Cursors>>,
 }
 
 /// One action call. `account` is only needed for actions with credentials.
@@ -56,6 +60,9 @@ pub struct Call {
     pub account: Option<String>,
     /// The id of an approval the user granted for this exact change.
     pub approval: Option<String>,
+    /// The `meta.next` handle of the previous answer, to read the page
+    /// after it with the same inputs.
+    pub next: Option<String>,
 }
 
 /// What an agent receives: the shaped data and where it came from, never the
@@ -75,6 +82,10 @@ pub struct Envelope {
 pub struct Meta {
     pub http_status: u16,
     pub duration_ms: i64,
+    /// A handle for the next page, when the read turns pages and the answer
+    /// said there is one. Pass it back as `next` with the same inputs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
 }
 
 impl Runtime {
@@ -84,7 +95,15 @@ impl Runtime {
             vault,
             approvals: None,
             audit: None,
+            cursors: None,
         }
+    }
+
+    /// Keep page markers in this store, so reads that turn pages can hand
+    /// out `meta.next` and continue from it.
+    pub fn with_pagination(mut self, cursors: Arc<Cursors>) -> Self {
+        self.cursors = Some(cursors);
+        self
     }
 
     /// Record every call in this log.
@@ -147,6 +166,34 @@ impl Runtime {
         let op = spec.op(&call.action)?;
         check_inputs(op, &call.args)?;
         let effect = operation_effect(op, &call.args);
+        if call.next.is_some() {
+            if op.pagination.is_none() || effect != Effect::Read {
+                return Err(usage(
+                    format!("{} does not turn pages", op.name),
+                    "Call it without next.",
+                ));
+            }
+            if op
+                .pagination_input()
+                .is_some_and(|input| call.args.contains_key(input))
+            {
+                return Err(usage(
+                    "next and the page input were both given",
+                    "Pass next alone to continue, or the page input alone to start there.",
+                ));
+            }
+        }
+        if let Some(query) = call.args.get("query")
+            && itda_spec::graphql_too_deep(query)
+        {
+            return Err(usage(
+                format!(
+                    "the GraphQL document nests deeper than {} levels",
+                    itda_spec::GRAPHQL_MAX_DEPTH
+                ),
+                "Send a flatter document.",
+            ));
+        }
         let approvals = match (effect, &self.approvals) {
             (Effect::Read, _) => None,
             (_, Some(approvals)) => Some(approvals),
@@ -159,7 +206,7 @@ impl Runtime {
             ));
         }
 
-        let (url, body) = spec.build_request(op, &call.args)?;
+        let (mut url, mut body) = spec.build_request(op, &call.args)?;
         let destination = validate_url(&url)?;
         let mut headers: Vec<(String, String)> = spec
             .defaults
@@ -187,6 +234,51 @@ impl Runtime {
             exposed.extend(credential.redact);
             secrets.push(credential.secret);
         }
+        let credential_hash = secrets.first().map(Secret::fingerprint).unwrap_or_default();
+
+        // The marker behind `next` goes into the declared input of a copy of
+        // the inputs: the agent's own inputs are what the audit log records.
+        let mut args = call.args.clone();
+        let turning = op
+            .pagination
+            .as_ref()
+            .map(|pagination| -> AppResult<_> {
+                let binding = pagination::binding(
+                    spec,
+                    op,
+                    account.as_deref().unwrap_or_default(),
+                    &call.args,
+                    &credential_hash,
+                )?;
+                Ok((pagination, binding))
+            })
+            .transpose()?;
+        if let Some(handle) = &call.next {
+            let Some((pagination, binding)) = &turning else {
+                return Err(usage(
+                    format!("{} does not turn pages", op.name),
+                    "Call it without next.",
+                ));
+            };
+            let cursors = self.cursors.as_ref().ok_or_else(|| {
+                usage(
+                    "This itda keeps no page markers",
+                    "Call the read without next.",
+                )
+            })?;
+            let marker = cursors.resolve(handle, binding).await?;
+            if !pagination::acceptable(pagination, &marker) {
+                return Err(AppError::api("pagination_expired", 409));
+            }
+            if pagination.hides_input() {
+                exposed.push(marker.clone());
+            }
+            args.insert(pagination.input().0.to_owned(), marker);
+            (url, body) = spec.build_request(op, &args)?;
+            if validate_url(&url)?.origin() != destination.origin() {
+                return Err(AppError::api("unsafe_target", 400));
+            }
+        }
 
         let mut request = Request::read(url.clone());
         request.method = if op.method.is_empty() {
@@ -206,7 +298,7 @@ impl Runtime {
                 account_id: request.account_id.clone(),
                 inputs: call.args.clone(),
                 spec_hash: util::hash(&serde_json::to_vec(spec)?),
-                credential_hash: secrets.first().map(Secret::fingerprint).unwrap_or_default(),
+                credential_hash: credential_hash.clone(),
             };
             match &call.approval {
                 None => {
@@ -249,13 +341,13 @@ impl Runtime {
                 &self.net,
                 spec,
                 op,
-                &call.args,
+                &args,
                 &request.headers,
                 &request.account_id,
                 &destination,
             )
             .await?;
-            let mut args = call.args.clone();
+            let mut args = args.clone();
             args.extend(found.clone());
             let (url, body) = spec.build_request(op, &args)?;
             if validate_url(&url)?.origin() != destination.origin() {
@@ -307,6 +399,17 @@ impl Runtime {
             Err(_) if !read => Value::Null,
             Err(error) => return Err(error),
         };
+        let mut next = None;
+        if let (Some((pagination, binding)), Some(cursors)) = (&turning, &self.cursors)
+            && read
+            && let Some(marker) =
+                pagination::next_marker(spec, op, pagination, &response, &data, &args)
+        {
+            if pagination.hides_input() {
+                exposed.push(marker.clone());
+            }
+            next = Some(cursors.issue(binding, &marker).await?);
+        }
         exposed.extend(secrets.iter().map(|s| s.expose().to_owned()));
         util::redact(&mut data, &exposed);
 
@@ -319,6 +422,7 @@ impl Runtime {
             meta: Meta {
                 http_status: response.status,
                 duration_ms: response.duration_ms,
+                next,
             },
         })
     }
@@ -437,10 +541,17 @@ fn review_inputs(method: &str, url: &str, args: &BTreeMap<String, String>) -> Ve
     .collect()
 }
 
-/// Every input must be declared and not filled by a preflight step; required
-/// ones and types are checked when the request is built.
+/// Every input must be declared and not filled by a preflight step or by the
+/// previous page's answer; required ones and types are checked when the
+/// request is built.
 fn check_inputs(op: &Operation, args: &BTreeMap<String, String>) -> AppResult<()> {
     for name in args.keys() {
+        if op.hidden_input(name) {
+            return Err(usage(
+                format!("{name} comes from the previous answer"),
+                "Pass the meta.next handle as next instead.",
+            ));
+        }
         let declared = op
             .params
             .get(name)

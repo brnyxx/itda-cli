@@ -186,16 +186,20 @@ impl Spec {
                             .iter()
                             .any(|prefix| {
                                 source.starts_with(prefix) && source.len() > prefix.len()
-                            });
+                            })
+                            || ssr_source_valid(source);
                         if !known {
                             add(
                                 &mut out,
                                 &format!("{id}.preflight"),
                                 format!("preflight step {} cannot extract {name}", step.name),
-                                "Use json:/pointer, css:selector[@attribute], header:name or cookie:name",
+                                "Use json:/pointer, css:selector[@attribute], header:name, cookie:name or ssr:key#/pointer",
                             );
                         }
                     }
+                }
+                if let Some(pagination) = &op.pagination {
+                    check_pagination(op, pagination, &id, &mut out);
                 }
                 let path_names = path_vars(&op.path);
                 for n in &path_names {
@@ -278,5 +282,111 @@ impl Spec {
             }
         }
         out
+    }
+}
+
+/// `ssr:<key>#/pointer`: a value in the JSON a page embeds for its scripts.
+/// The key may be `auto`; the pointer must start with `/`.
+fn ssr_source_valid(source: &str) -> bool {
+    source
+        .strip_prefix("ssr:")
+        .and_then(|rest| rest.split_once('#'))
+        .is_some_and(|(key, pointer)| !key.is_empty() && pointer.starts_with('/'))
+}
+
+fn check_pagination(
+    op: &crate::model::Operation,
+    pagination: &crate::model::Pagination,
+    id: &str,
+    out: &mut Vec<Issue>,
+) {
+    let field = format!("{id}.pagination");
+    let mut add = |detail: String, remedy: &str| {
+        out.push(Issue {
+            field: field.clone(),
+            detail,
+            remedy: remedy.into(),
+        });
+    };
+    if !["page", "offset", "cursor"].contains(&pagination.style.as_str()) {
+        add(
+            format!("unsupported style: {}", pagination.style),
+            "page|offset|cursor",
+        );
+    }
+    let pointer = |text: &str| text.starts_with('/') && text.len() <= 512;
+    if !pagination.next.is_empty() && !pointer(&pagination.next) && pagination.next != "header:link"
+    {
+        add(
+            "next must be a JSON pointer starting with / or header:link".into(),
+            "Example: next: /meta/next_cursor",
+        );
+    }
+    if pagination.style == "cursor" && pagination.next.is_empty() {
+        add(
+            "a cursor read must say where the next cursor is".into(),
+            "Set next to a JSON pointer or header:link",
+        );
+    }
+    if !pagination.more.is_empty() && !pointer(&pagination.more) {
+        add(
+            "more must be a JSON pointer starting with /".into(),
+            "Example: more: /pageInfo/hasNextPage",
+        );
+    }
+    let (query, body) = (&pagination.send.query, &pagination.send.body);
+    if query.is_empty() == body.is_empty() {
+        add(
+            "send must name one input: {query: name} or {body: name}".into(),
+            "Example: send: {query: cursor}",
+        );
+        return;
+    }
+    if pagination.next == "header:link" && !body.is_empty() {
+        add(
+            "header:link carries a query value, so send must be a query input".into(),
+            "Use send: {query: name}",
+        );
+    }
+    let declared = if body.is_empty() {
+        op.query.get(query)
+    } else {
+        op.body.as_ref().and_then(|b| b.json.get(body))
+    };
+    let Some(param) = declared else {
+        add(
+            format!(
+                "send names {}, which is not declared under {}",
+                if body.is_empty() { query } else { body },
+                if body.is_empty() {
+                    "query"
+                } else {
+                    "body.json"
+                }
+            ),
+            "Declare the input the marker goes back in",
+        );
+        return;
+    };
+    let expected = if pagination.style == "cursor" {
+        "string"
+    } else {
+        "int"
+    };
+    if param.kind != expected {
+        add(
+            format!(
+                "the {} input must be {expected} for style {}",
+                if body.is_empty() { query } else { body },
+                pagination.style
+            ),
+            "Match the input's type to the style",
+        );
+    }
+    if pagination.style == "cursor" && (param.required || param.default.is_some()) {
+        add(
+            "a cursor input is filled from the previous answer: not required, no default".into(),
+            "Declare it as {type: string}",
+        );
     }
 }

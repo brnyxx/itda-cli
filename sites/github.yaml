@@ -74,6 +74,8 @@ operations:
     query:
       q: {type: string, required: true}
       per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+    pagination: {style: page, next: "header:link", send: {query: page}}
     model: repo
     response:
       format: json
@@ -91,6 +93,8 @@ operations:
       state: {type: string, default: open}
       sort: {type: string, default: updated}
       per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+    pagination: {style: page, next: "header:link", send: {query: page}}
     model: issue
     response:
       format: json
@@ -120,6 +124,8 @@ operations:
       number: {type: int}
     query:
       per_page: {type: int, default: 30}
+      page: {type: int, default: 1}
+    pagination: {style: page, next: "header:link", send: {query: page}}
     model: comment
     response:
       format: json

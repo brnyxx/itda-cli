@@ -528,6 +528,106 @@ pub(crate) fn insert_after(map: &mut Mapping, after: &str, key: &str, value: Yam
 }
 
 /// `name` first and `evidence` after `effect`, as people write them.
+/// A `pagination` block: the style, where the next marker is (`next`, a
+/// pointer or `header:link`, empty for none), the pointer that must be true
+/// for another page (`more`, empty for none) and the input it goes back in.
+pub(crate) fn pagination_yaml(
+    style: &str,
+    next: &str,
+    more: &str,
+    input: &str,
+    in_body: bool,
+) -> Yaml {
+    let mut block = Mapping::new();
+    block.insert("style".into(), style.into());
+    if !next.is_empty() {
+        block.insert("next".into(), next.into());
+    }
+    if !more.is_empty() {
+        block.insert("more".into(), more.into());
+    }
+    let mut send = Mapping::new();
+    send.insert(if in_body { "body" } else { "query" }.into(), input.into());
+    block.insert("send".into(), Yaml::Mapping(send));
+    Yaml::Mapping(block)
+}
+
+/// The response field a next cursor is read from, when `keys` names one
+/// (`next_cursor`, `nextPageToken`, `end_cursor`...), as a JSON pointer.
+pub(crate) fn next_cursor_key<'a>(keys: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    keys.filter(|key| {
+        let plain = key.to_ascii_lowercase().replace(['-', '_'], "");
+        matches!(
+            plain.as_str(),
+            "nextcursor"
+                | "nextpagetoken"
+                | "nexttoken"
+                | "endcursor"
+                | "continuation"
+                | "continuationtoken"
+                | "nextcontinuationtoken"
+                | "next"
+                | "cursor"
+        )
+    })
+    .max_by_key(|key| {
+        // `next_cursor` says more than `next`; `cursor` least of all.
+        let plain = key.to_ascii_lowercase().replace(['-', '_'], "");
+        match plain.as_str() {
+            "cursor" => 0,
+            "next" => 1,
+            _ => 2,
+        }
+    })
+}
+
+/// The query input a cursor goes back in, when `names` has one that says
+/// so (`cursor`, `page_token`, `after`...) and no page number.
+pub(crate) fn cursor_input<'a>(names: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    let mut found = None;
+    for name in names {
+        let plain = name.to_ascii_lowercase().replace(['-', '_'], "");
+        if matches!(
+            plain.as_str(),
+            "cursor"
+                | "after"
+                | "pagetoken"
+                | "nextpagetoken"
+                | "nexttoken"
+                | "continuation"
+                | "continuationtoken"
+                | "startingafter"
+        ) {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(name);
+        }
+    }
+    found
+}
+
+/// The page-number or offset input among `names`, with its style.
+pub(crate) fn counted_input<'a>(
+    names: impl Iterator<Item = &'a str>,
+) -> Option<(&'a str, &'static str)> {
+    let mut found = None;
+    for name in names {
+        let style = match name.to_ascii_lowercase().as_str() {
+            "page" | "page_no" | "pageno" | "page_num" | "pagenum" | "page_index" | "pageindex" => {
+                "page"
+            }
+            "offset" | "skip" | "from" | "start" => "offset",
+            _ => continue,
+        };
+        if found.is_some() {
+            return None;
+        }
+        found = Some((name, style));
+    }
+    found
+}
+
 pub(crate) fn reorder(entry: Mapping) -> Mapping {
     let order = [
         "name",
@@ -542,6 +642,7 @@ pub(crate) fn reorder(entry: Mapping) -> Mapping {
         "params",
         "query",
         "body",
+        "pagination",
         "response",
         "model",
     ];

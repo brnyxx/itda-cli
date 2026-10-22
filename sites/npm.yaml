@@ -55,6 +55,8 @@ operations:
     query:
       text: {type: string, required: true}
       size: {type: int, default: 10}
+      from: {type: int, default: 0}
+    pagination: {style: offset, send: {query: from}}
     model: result
     response:
       format: json

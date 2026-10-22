@@ -355,3 +355,46 @@ fn the_introspection_query_is_a_read() {
     );
     assert!(spec.op("schema").unwrap().graphql_query(&BTreeMap::new()));
 }
+
+#[test]
+fn a_connection_with_page_info_is_read_page_by_page() {
+    let endpoint = "https://app.example/graphql".to_owned();
+    let draft = from_pages(
+        &[board()],
+        &options(vec![Schema {
+            url: endpoint,
+            json: serde_json::from_str(include_str!("fixtures/graphql_relay.json")).unwrap(),
+        }]),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+    let notices = spec.op("notices").unwrap();
+    let pagination = notices.pagination.as_ref().unwrap();
+    assert_eq!(pagination.style, "cursor");
+    assert_eq!(pagination.next, "/data/notices/pageInfo/endCursor");
+    assert_eq!(pagination.more, "/data/notices/pageInfo/hasNextPage");
+    assert_eq!(pagination.input(), ("after", true));
+    let body = notices.body.as_ref().unwrap();
+    let document = body.json["query"]
+        .default
+        .as_ref()
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert!(
+        document.contains("pageInfo { endCursor hasNextPage }"),
+        "{document}"
+    );
+    assert_eq!(
+        body.json_template.as_ref().unwrap()["variables"]["after"],
+        "{{after}}"
+    );
+    // The first page sends no cursor at all.
+    let (_, sent) = spec.build_request(notices, &BTreeMap::new()).unwrap();
+    let sent: Value = serde_json::from_slice(&sent.unwrap()).unwrap();
+    assert_eq!(sent["variables"], json!({}));
+    // A plain list with an `after` argument but no pageInfo is not a connection.
+    assert!(spec.op("tags").unwrap().pagination.is_none());
+}

@@ -139,6 +139,11 @@ pub fn operation_effect(op: &Operation, args: &BTreeMap<String, String>) -> Effe
     if method == "POST" || method == "GET" {
         if let Some(query) = resolved.get("query") {
             use graphql_parser::query::{Definition, OperationDefinition};
+            // A document nested past the limit is never parsed: it needs
+            // review, not a stack.
+            if itda_spec::graphql_too_deep(query) {
+                return Effect::Unknown;
+            }
             match graphql_parser::parse_query::<&str>(query) {
                 Ok(document) => {
                     let operations: Vec<_> = document

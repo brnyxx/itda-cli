@@ -50,3 +50,56 @@ pub trait ResponseLike {
 }
 
 pub const SPEC_VERSION: i64 = 1;
+
+/// How deeply a GraphQL document may nest before it is refused unparsed.
+pub const GRAPHQL_MAX_DEPTH: usize = 32;
+
+/// True when `document` nests braces, brackets or parentheses deeper than
+/// [`GRAPHQL_MAX_DEPTH`], counted without parsing so a hostile document
+/// never reaches the recursive parser. Brackets inside string literals do
+/// not count.
+pub fn graphql_too_deep(document: &str) -> bool {
+    let (mut depth, mut in_string, mut escaped) = (0usize, false, false);
+    for c in document.chars() {
+        if in_string {
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '{' | '[' | '(' => {
+                depth += 1;
+                if depth > GRAPHQL_MAX_DEPTH {
+                    return true;
+                }
+            }
+            '}' | ']' | ')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod depth_tests {
+    use super::graphql_too_deep;
+
+    #[test]
+    fn nesting_is_counted_outside_string_literals() {
+        assert!(!graphql_too_deep("query { a { b { c } } }"));
+        assert!(!graphql_too_deep(&format!(
+            "query {{ a(x: \"{}\") }}",
+            "{".repeat(100)
+        )));
+        assert!(graphql_too_deep(&format!(
+            "query {}{}",
+            "{ a ".repeat(33),
+            "}".repeat(33)
+        )));
+    }
+}

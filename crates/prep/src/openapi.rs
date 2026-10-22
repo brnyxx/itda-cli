@@ -366,8 +366,14 @@ fn operation(
     if !params.is_empty() {
         entry.insert("params".into(), Yaml::Mapping(params));
     }
+    let pagination = read
+        .then(|| pagination(doc, swagger2, op, &query))
+        .flatten();
     if !query.is_empty() {
         entry.insert("query".into(), Yaml::Mapping(query));
+    }
+    if let Some(pagination) = pagination {
+        entry.insert("pagination".into(), pagination);
     }
     let mut body = Mapping::new();
     if let Some(schema) = body_schema {
@@ -439,6 +445,99 @@ fn object_fields(doc: &Value, schema: &Value) -> Mapping {
         }
     }
     fields
+}
+
+/// How a documented read turns pages, when the document says so plainly:
+/// a cursor query parameter with a cursor field in the answer, a `page`
+/// parameter with a `Link` header or on its own, or an offset parameter.
+fn pagination(doc: &Value, swagger2: bool, op: &Value, query: &Mapping) -> Option<Yaml> {
+    let names = || query.keys().filter_map(Yaml::as_str);
+    let typed = |name: &str, kind: &str| {
+        query
+            .get(name)
+            .and_then(|field| field.get("type"))
+            .and_then(Yaml::as_str)
+            == Some(kind)
+    };
+    let (schema, headers) = success(doc, swagger2, op);
+    if let Some(input) = crate::cursor_input(names()).filter(|name| typed(name, "string"))
+        && let Some(next) = schema
+            .as_ref()
+            .and_then(|schema| cursor_pointer(doc, schema))
+    {
+        return Some(crate::pagination_yaml("cursor", &next, "", input, false));
+    }
+    let (input, style) = crate::counted_input(names()).filter(|(name, _)| typed(name, "int"))?;
+    let link = style == "page"
+        && headers
+            .and_then(Value::as_object)
+            .is_some_and(|headers| headers.keys().any(|h| h.eq_ignore_ascii_case("link")));
+    Some(crate::pagination_yaml(
+        style,
+        if link { "header:link" } else { "" },
+        "",
+        input,
+        false,
+    ))
+}
+
+/// The JSON schema and the headers of the documented success response.
+fn success<'a>(
+    doc: &'a Value,
+    swagger2: bool,
+    op: &'a Value,
+) -> (Option<&'a Value>, Option<&'a Value>) {
+    let Some(responses) = op["responses"].as_object() else {
+        return (None, None);
+    };
+    let Some((_, success)) = responses.iter().find(|(code, _)| code.starts_with('2')) else {
+        return (None, None);
+    };
+    let success = resolve(doc, success);
+    let schema = if swagger2 {
+        success.get("schema").map(|s| resolve(doc, s))
+    } else {
+        success["content"]
+            .as_object()
+            .and_then(|content| content.iter().find(|(k, _)| k.contains("json")))
+            .map(|(_, json)| resolve(doc, &json["schema"]))
+    };
+    (schema, success.get("headers"))
+}
+
+/// A string field in the success schema that names the next cursor, at the
+/// top level or inside one object such as `meta` or `page_info`.
+fn cursor_pointer(doc: &Value, schema: &Value) -> Option<String> {
+    let properties = resolve(doc, schema)["properties"].as_object()?;
+    let string_keys = |object: &serde_json::Map<String, Value>| -> Vec<String> {
+        object
+            .iter()
+            .filter(|(_, property)| {
+                let property = resolve(doc, property);
+                property["type"].as_str() == Some("string")
+                    || property["type"]
+                        .as_array()
+                        .is_some_and(|types| types.iter().any(|t| t == "string"))
+            })
+            .map(|(name, _)| name.clone())
+            .collect()
+    };
+    let escape = |name: &str| name.replace('~', "~0").replace('/', "~1");
+    let top = string_keys(properties);
+    if let Some(key) = crate::next_cursor_key(top.iter().map(String::as_str)) {
+        return Some(format!("/{}", escape(key)));
+    }
+    for (name, property) in properties {
+        let property = resolve(doc, property);
+        let Some(inner) = property["properties"].as_object() else {
+            continue;
+        };
+        let keys = string_keys(inner);
+        if let Some(key) = crate::next_cursor_key(keys.iter().map(String::as_str)) {
+            return Some(format!("/{}/{}", escape(name), escape(key)));
+        }
+    }
+    None
 }
 
 /// The declared success response: required top-level fields of a JSON object

@@ -114,3 +114,36 @@ fn submitted_jobs_run_before_later_calls() {
         .unwrap();
     assert_eq!(count, 1);
 }
+
+#[test]
+fn two_processes_starting_at_once_both_migrate_without_an_error() {
+    let dir = std::env::temp_dir().join(format!("itda-store-{}", itda_types::util::id()));
+    let path = dir.join("itda.db");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let tasks: Vec<_> = (0..2)
+        .map(|_| {
+            let (path, barrier) = (path.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                let store = Store::open(&path).unwrap();
+                barrier.wait();
+                store.migrate(&NOTES)
+            })
+        })
+        .collect();
+    for task in tasks {
+        assert_eq!(task.join().unwrap().unwrap(), 2);
+    }
+    let store = Store::open(&path).unwrap();
+    let version: i64 = store
+        .call_blocking(|conn| {
+            Ok(conn.query_row(
+                "SELECT version FROM store_migration WHERE component='notes'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+    assert_eq!(version, 2);
+    drop(store);
+    std::fs::remove_dir_all(dir).ok();
+}

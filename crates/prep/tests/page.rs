@@ -46,6 +46,12 @@ fn a_board_page_becomes_a_list_a_search_a_post_and_a_feed() {
     assert!(html.fields["link"].absolute_url);
     assert_eq!(board.query["page"].kind, "int");
     assert_eq!(board.query["page"].default, Some(1.into()));
+    let pagination = board.pagination.as_ref().unwrap();
+    assert_eq!(
+        (pagination.style.as_str(), pagination.next.as_str()),
+        ("page", "")
+    );
+    assert_eq!(pagination.input(), ("page", false));
     assert_eq!(html.fields["author"].selector, "td:nth-child(3)");
 
     let one = spec.op("get-board-by-id").unwrap();
@@ -712,4 +718,56 @@ fn a_page_with_nothing_to_read_is_still_only_a_title_check() {
         "{:?}",
         draft.notes
     );
+}
+
+#[test]
+fn a_page_with_page_links_but_no_records_does_not_turn_pages() {
+    let html = r#"<html><head><title>About</title><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","blocks":[{"a":1}]}</script></head>
+<body><h1>About us</h1><p>Text.</p><a href="/about?page=2">2</a><a href="/about?page=3">3</a></body></html>"#;
+    let draft = from_pages(
+        &[Page {
+            url: "https://example.org/about".into(),
+            html: html.into(),
+        }],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    for op in &spec.operations {
+        assert!(op.pagination.is_none(), "{}: {}", op.name, draft.yaml);
+    }
+}
+
+#[test]
+fn links_that_count_records_declare_an_offset() {
+    let html = r#"<html><head><title>Forum</title></head><body><h1>Topics</h1>
+<table><thead><tr><th>Title</th><th>Replies</th></tr></thead><tbody>
+<tr><td><a href="/t/1">First</a></td><td>3</td></tr>
+<tr><td><a href="/t/2">Second</a></td><td>0</td></tr>
+<tr><td><a href="/t/3">Third</a></td><td>7</td></tr>
+</tbody></table>
+<a href="/viewforum?start=25">2</a><a href="/viewforum?start=50">3</a></body></html>"#;
+    let draft = from_pages(
+        &[Page {
+            url: "https://forum.example/viewforum".into(),
+            html: html.into(),
+        }],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let list = spec
+        .operations
+        .iter()
+        .find(|op| op.pagination.is_some())
+        .unwrap_or_else(|| panic!("{}", draft.yaml));
+    let pagination = list.pagination.as_ref().unwrap();
+    assert_eq!(
+        (pagination.style.as_str(), pagination.next.as_str()),
+        ("offset", "")
+    );
+    assert_eq!(pagination.input(), ("start", false));
+    assert_eq!(list.query["start"].default, Some(0.into()));
 }

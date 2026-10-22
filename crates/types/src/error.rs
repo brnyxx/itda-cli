@@ -112,6 +112,12 @@ fn remedy(public_code: &str) -> &'static str {
         "approval_expired" => {
             "The approval was used, rejected, expired or no longer matches these inputs. Call again to request a new one."
         }
+        "pagination_expired" => {
+            "The page handle has expired. Call the read again without next to start from the first page."
+        }
+        "pagination_invalid" => {
+            "Pass the meta.next handle of the previous answer, with the same action, account and inputs, within fifteen minutes; otherwise start again without next."
+        }
         "action_outcome_unknown" => {
             "Check the website before trying again; the change may already have happened. itda never resends a change on its own."
         }

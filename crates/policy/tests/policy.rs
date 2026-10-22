@@ -346,3 +346,78 @@ fn a_site_interval_must_be_a_time() {
             .all(|p| p.field != "defaults.interval")
     );
 }
+
+#[test]
+fn a_document_nested_too_deep_is_refused_without_being_parsed() {
+    let deep = format!("query {}{}", "{ a ".repeat(40), "}".repeat(40));
+    let mut op = fixture("https://example.com").operations.remove(0);
+    op.method = "POST".into();
+    op.path = "/graphql".into();
+    let mut args = BTreeMap::new();
+    args.insert("query".to_owned(), deep.clone());
+    assert_eq!(operation_effect(&op, &args), Effect::Unknown);
+
+    let spec = spec_from(
+        json!({"spec_version":1,"site":{"name":"g","base_url":"https://g.example"},
+        "operations":[{"name":"notices","method":"POST","path":"/graphql","effect":"read","evidence":"doc",
+            "body":{"json":{"query":{"type":"string","default":deep}}}}]}),
+    );
+    let error = validate_spec(&spec).unwrap_err();
+    assert!(
+        error.msg.contains("nests deeper than 32 levels"),
+        "{}",
+        error.msg
+    );
+    let shallow = format!("query {}{}", "{ a ".repeat(30), "}".repeat(30));
+    let spec = spec_from(
+        json!({"spec_version":1,"site":{"name":"g","base_url":"https://g.example"},
+        "operations":[{"name":"notices","method":"POST","path":"/graphql","effect":"read","evidence":"doc",
+            "body":{"json":{"query":{"type":"string","default":shallow}}}}]}),
+    );
+    validate_spec(&spec).unwrap();
+}
+
+#[test]
+fn pagination_is_for_reads_and_may_name_a_page_token() {
+    let base = json!({"spec_version":1,"site":{"name":"p","base_url":"https://p.example"}});
+    let with = |op: serde_json::Value| {
+        let mut value = base.clone();
+        value["operations"] = json!([op]);
+        spec_from(value)
+    };
+    validate_spec(&with(
+        json!({"name":"list","method":"GET","path":"/items","effect":"read","evidence":"doc",
+        "query":{"page_token":{"type":"string"}},
+        "pagination":{"style":"cursor","next":"/next_page_token","send":{"query":"page_token"}}}),
+    ))
+    .unwrap();
+    let error = validate_spec(&with(
+        json!({"name":"create","method":"POST","path":"/items","effect":"write","evidence":"doc",
+        "body":{"json":{"title":{"type":"string"},"cursor":{"type":"string"}}},
+        "pagination":{"style":"cursor","next":"/next","send":{"body":"cursor"}}}),
+    ))
+    .unwrap_err();
+    assert!(
+        error.msg.contains("only a read turns pages"),
+        "{}",
+        error.msg
+    );
+    let error = validate_spec(&with(
+        json!({"name":"list","method":"GET","path":"/items","effect":"read","evidence":"doc",
+        "query":{"cursor":{"type":"string"}},
+        "pagination":{"style":"cursor","next":"/session_token","send":{"query":"cursor"}}}),
+    ))
+    .unwrap_err();
+    assert!(error.msg.contains("credential-named"), "{}", error.msg);
+    let error = validate_spec(&with(
+        json!({"name":"list","method":"GET","path":"/items","effect":"read","evidence":"doc",
+        "query":{"auth_token":{"type":"string"}},
+        "pagination":{"style":"cursor","next":"/next","send":{"query":"auth_token"}}}),
+    ))
+    .unwrap_err();
+    assert!(
+        error.msg.contains("credentials must come from"),
+        "{}",
+        error.msg
+    );
+}

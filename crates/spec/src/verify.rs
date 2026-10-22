@@ -6,15 +6,17 @@ use crate::ResponseLike;
 use crate::model::Operation;
 
 impl Operation {
-    pub fn parse_json_response(&self, response: &impl ResponseLike) -> Option<Value> {
+    /// The whole JSON answer, before `extract_pointer` narrows it: an
+    /// embedded payload, a prefixed body or a plain one.
+    pub fn parse_json_document(&self, response: &impl ResponseLike) -> Option<Value> {
         let expected = self.response.as_ref();
         if let Some(exp) = expected
             && !exp.ssr_json.is_empty()
         {
             let html = String::from_utf8_lossy(response.body());
-            return itda_html::extract_ssr_json(&html, &exp.ssr_json, &exp.extract_pointer);
+            return itda_html::extract_ssr_json(&html, &exp.ssr_json, "");
         }
-        let mut parsed = response.json().or_else(|| {
+        response.json().or_else(|| {
             let text = std::str::from_utf8(response.body()).ok()?.trim_start();
             let stripped = if let Some(exp) = expected {
                 if !exp.strip_prefix.is_empty() {
@@ -35,13 +37,17 @@ impl Operation {
                 None
             })?;
             serde_json::from_str(stripped).ok()
-        })?;
-        if let Some(exp) = expected
-            && !exp.extract_pointer.is_empty()
-        {
-            parsed = itda_types::json::resolve_pointer(&parsed, &exp.extract_pointer)?.clone();
+        })
+    }
+
+    pub fn parse_json_response(&self, response: &impl ResponseLike) -> Option<Value> {
+        let parsed = self.parse_json_document(response)?;
+        match self.response.as_ref() {
+            Some(exp) if !exp.extract_pointer.is_empty() => {
+                itda_types::json::resolve_pointer(&parsed, &exp.extract_pointer).cloned()
+            }
+            _ => Some(parsed),
         }
-        Some(parsed)
     }
     pub fn matches_response(&self, response: &impl ResponseLike) -> bool {
         if !response.successful() {

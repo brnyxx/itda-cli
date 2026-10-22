@@ -549,14 +549,14 @@ fn page_actions(
         .and_then(|e| e.extract(&page.html, url.as_str()))
         .and_then(|value| value.get("items").and_then(Value::as_array).cloned())
         .unwrap_or_default();
-    let start = |name: &str, desc: &str| {
+    let start = |name: &str, desc: &str, lists: bool| {
         let mut entry = Mapping::new();
         entry.insert("name".into(), name.into());
         entry.insert("desc".into(), desc.into());
         entry.insert("method".into(), "GET".into());
         entry.insert("path".into(), path.into());
         entry.insert("effect".into(), "read".into());
-        page_inputs(&mut entry, page, url, params);
+        page_inputs(&mut entry, page, url, params, lists);
         entry
     };
     let page_name = if path == "/" {
@@ -572,7 +572,7 @@ fn page_actions(
             },
             None => Label::List { title: &subject },
         };
-        let mut entry = start(name, &describe(&desc, lang));
+        let mut entry = start(name, &describe(&desc, lang), true);
         let mut response = Mapping::new();
         response.insert("format".into(), "html".into());
         if let Some(title) = &title {
@@ -609,7 +609,11 @@ fn page_actions(
             slug(&format!("get-{}", last.split('.').next().unwrap_or(last)))
         };
         let name = unique(names, &name);
-        let mut entry = start(&name, &describe(&Label::Page { title: &subject }, lang));
+        let mut entry = start(
+            &name,
+            &describe(&Label::Page { title: &subject }, lang),
+            false,
+        );
         let mut response = Mapping::new();
         response.insert("format".into(), "html".into());
         response.insert(
@@ -668,7 +672,11 @@ fn page_actions(
     }
 
     let name = unique(names, &page_name);
-    let mut entry = start(&name, &describe(&Label::Page { title: &subject }, lang));
+    let mut entry = start(
+        &name,
+        &describe(&Label::Page { title: &subject }, lang),
+        false,
+    );
     let mut response = Mapping::new();
     response.insert("format".into(), "html".into());
     if !has_lists && let Some((key, pointer, pointers)) = embedded(&page.html) {
@@ -742,7 +750,10 @@ fn page_actions(
 
 /// The page's path inputs and its query string as inputs with defaults, plus
 /// a `page` input when the page links to its next page.
-fn page_inputs(entry: &mut Mapping, page: &Page, url: &url::Url, params: &[String]) {
+/// `lists` says the read returns records, so it can turn pages with the
+/// key the page's links use; a read of a title or a whole payload has
+/// nothing to go on to.
+fn page_inputs(entry: &mut Mapping, page: &Page, url: &url::Url, params: &[String], lists: bool) {
     if !params.is_empty() {
         entry.insert("params".into(), Yaml::Mapping(required_strings(params)));
     }
@@ -767,16 +778,30 @@ fn page_inputs(entry: &mut Mapping, page: &Page, url: &url::Url, params: &[Strin
         );
         query.insert(key.as_ref().into(), Yaml::Mapping(field));
     }
-    if let Some(pages) = evidence::pagination(&page.html, url.as_str())
-        && !query.contains_key(pages.key.as_str())
-    {
-        let mut field = Mapping::new();
-        field.insert("type".into(), "int".into());
-        field.insert("default".into(), pages.default.into());
-        query.insert(pages.key.into(), Yaml::Mapping(field));
+    let mut pagination = None;
+    if let Some(pages) = evidence::pagination(&page.html, url.as_str()) {
+        if !query.contains_key(pages.key.as_str()) {
+            let mut field = Mapping::new();
+            field.insert("type".into(), "int".into());
+            field.insert("default".into(), pages.default.into());
+            query.insert(pages.key.clone().into(), Yaml::Mapping(field));
+        }
+        let counted = query
+            .get(pages.key.as_str())
+            .and_then(|field| field.get("type"))
+            .and_then(Yaml::as_str)
+            == Some("int");
+        // A key that starts at 0 counts records, one that starts at 1 pages.
+        let style = if pages.default == 0 { "offset" } else { "page" };
+        if counted && lists {
+            pagination = Some(crate::pagination_yaml(style, "", "", &pages.key, false));
+        }
     }
     if !query.is_empty() {
         entry.insert("query".into(), Yaml::Mapping(query));
+    }
+    if let Some(pagination) = pagination {
+        entry.insert("pagination".into(), pagination);
     }
 }
 
@@ -1152,7 +1177,7 @@ fn listing_action(
         )
         .into(),
     );
-    page_inputs(&mut entry, page, url, params);
+    page_inputs(&mut entry, page, url, params, true);
     let mut response = Mapping::new();
     response.insert("format".into(), "html".into());
     response.insert("ssr_json".into(), listing.key.clone().into());

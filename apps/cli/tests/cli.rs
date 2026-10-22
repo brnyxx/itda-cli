@@ -56,6 +56,31 @@ operations:
     std::fs::write(dir.join("spec.yaml"), spec).unwrap();
 }
 
+/// A second site whose one read hands out a cursor.
+fn install_paged(home: &Path, base: &str) {
+    let dir = home.join("specs/paged");
+    std::fs::create_dir_all(&dir).unwrap();
+    let spec = format!(
+        "spec_version: 1
+site:
+  name: paged
+  base_url: {base}
+operations:
+  - name: pages
+    desc: List the pages
+    method: GET
+    path: /pages
+    effect: read
+    evidence: doc
+    query:
+      cursor: {{type: string}}
+    pagination: {{style: cursor, next: /next_cursor, send: {{query: cursor}}}}
+    response: {{format: json, extract_pointer: /items}}
+"
+    );
+    std::fs::write(dir.join("spec.yaml"), spec).unwrap();
+}
+
 async fn serve() -> String {
     let router = Router::new()
         .route(
@@ -67,6 +92,24 @@ async fn serve() -> String {
             get(|headers: HeaderMap| async move {
                 axum::Json(json!({"key_seen": headers.contains_key("x-key")}))
             }),
+        )
+        .route(
+            "/pages",
+            get(
+                |axum::extract::Query(q): axum::extract::Query<
+                    std::collections::HashMap<String, String>,
+                >| async move {
+                    let from: usize = q
+                        .get("cursor")
+                        .map(|c| c.trim_start_matches("cur-").parse().unwrap())
+                        .unwrap_or(0);
+                    let items: Vec<Value> = (from..(from + 2).min(4))
+                        .map(|i| json!({"id": i}))
+                        .collect();
+                    let next = (from + 2 < 4).then(|| format!("cur-{}", from + 2));
+                    axum::Json(json!({"items": items, "next_cursor": next}))
+                },
+            ),
         );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -124,6 +167,53 @@ async fn calls_return_an_untrusted_envelope() {
 
     let human = itda(&home, &["call", "fixture.list-items"], &[]).await;
     assert!(String::from_utf8_lossy(&human.stdout).contains("\"first\""));
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_list_continues_with_next_and_refuses_other_handles() {
+    let home = home();
+    let base = serve().await;
+    install(&home, &base);
+    install_paged(&home, &base);
+    let first = itda(&home, &["call", "paged.pages", "--json"], &[]).await;
+    assert!(first.status.success(), "{first:?}");
+    let first = stdout_json(&first);
+    assert_eq!(first["data"][0]["id"], 0);
+    let handle = first["meta"]["next"].as_str().unwrap().to_owned();
+    assert!(handle.starts_with("ic_"), "{handle}");
+    assert!(!first.to_string().contains("cur-"));
+
+    let second = itda(
+        &home,
+        &["call", "paged.pages", "--next", &handle, "--json"],
+        &[],
+    )
+    .await;
+    assert!(second.status.success(), "{second:?}");
+    let second = stdout_json(&second);
+    assert_eq!(second["data"][0]["id"], 2);
+    assert!(second["meta"].get("next").is_none(), "{second}");
+
+    // For people: the answer, then where to go on.
+    let human = itda(&home, &["call", "paged.pages"], &[]).await;
+    assert!(String::from_utf8_lossy(&human.stderr).contains("--next ic_"));
+
+    let other = itda(
+        &home,
+        &["call", "fixture.list-items", "--next", &handle, "--json"],
+        &[],
+    )
+    .await;
+    assert_eq!(other.status.code(), Some(2));
+    let made_up = itda(
+        &home,
+        &["call", "paged.pages", "--next", "cur-2", "--json"],
+        &[],
+    )
+    .await;
+    assert_eq!(made_up.status.code(), Some(23));
+    assert_eq!(stdout_json(&made_up)["status"], "pagination_invalid");
     std::fs::remove_dir_all(home).ok();
 }
 
