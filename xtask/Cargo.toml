@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+# Writes the .mcpb bundle (a zip) and reads the Windows archive dist makes.
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true
