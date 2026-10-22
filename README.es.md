@@ -372,7 +372,7 @@ ramificar según el código de salida:
 | 14 | el sitio rechazó esta petición concreta como no permitida; iniciar sesión de nuevo no ayudará |
 | 20 | necesita aprobación, o el usuario aún no ha respondido (o los cambios están desactivados) |
 | 21 | aprobación usada, rechazada, caducada o retirada porque las entradas cambiaron |
-| 22 | itda envió un cambio pero su resultado es desconocido; revisa el sitio |
+| 22 | itda envió un cambio pero su resultado es desconocido; con `outcome_check`, la lectura que el cambio nombra dice si se aplicó |
 | 30 | error de red |
 
 ## Principios

@@ -372,7 +372,7 @@ pada kode keluar:
 | 14 | situs menolak permintaan yang satu ini sebagai tidak diizinkan; masuk lagi tidak akan membantu |
 | 20 | perlu persetujuan, atau pengguna belum menjawab (atau perubahan dimatikan) |
 | 21 | persetujuan sudah dipakai, ditolak, kedaluwarsa atau ditarik karena masukan berubah |
-| 22 | itda mengirim perubahan tetapi hasilnya tidak diketahui; periksa situs |
+| 22 | itda mengirim perubahan tetapi hasilnya tidak diketahui; dengan `outcome_check`, pembacaan yang disebut perubahan itu menyatakan apakah perubahan sudah masuk |
 | 30 | galat jaringan |
 
 ## Prinsip

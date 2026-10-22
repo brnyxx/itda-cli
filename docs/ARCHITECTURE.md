@@ -48,7 +48,10 @@ testing and reusing the format needs no network stack.
 6. **Send.** `itda-net` resolves DNS and refuses private addresses unless
    allowed. It waits for the site's pacing slot, then sends with the honest
    `itda/<version>` user agent and size and time limits. Reads may retry once;
-   changes never retry or follow redirects.
+   changes never retry or follow redirects. When a change's answer is lost and
+   its definition names a confirming read (`confirm`), itda runs that read once
+   and reports `landed`, `not_found` or `unknown` next to
+   `action_outcome_unknown`; it never resends.
 7. **Classify the answer.** A block, challenge or rate limit pauses the site;
    a 401 on a signed-in request pauses that account. Both stay paused until
    `itda resume`.
@@ -91,7 +94,6 @@ Everything is in the data directory (`ITDA_HOME` or the platform's data folder).
 |---|---|
 | Desktop approvals | Approve through a desktop prompt instead of a terminal or MCP elicitation |
 | Signed site packs | Share and install reviewed definitions with hash-locked, signed packs |
-| Outcome check after a lost answer | A change names the read that shows it landed; after `action_outcome_unknown` itda runs that read before asking you to approve again |
 
 ## Provenance
 

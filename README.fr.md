@@ -378,7 +378,7 @@ brancher sur le code de sortie :
 | 14 | le site a refusé cette requête comme non autorisée ; se reconnecter n'aidera pas |
 | 20 | approbation nécessaire, ou l'utilisateur n'a pas encore répondu (ou les modifications sont désactivées) |
 | 21 | approbation utilisée, rejetée, expirée ou retirée parce que les entrées ont changé |
-| 22 | itda a envoyé une modification mais son résultat est inconnu ; vérifiez le site |
+| 22 | itda a envoyé une modification mais son résultat est inconnu ; avec `outcome_check`, la lecture que la modification nomme dit si elle a été appliquée |
 | 30 | erreur réseau |
 
 ## Principes

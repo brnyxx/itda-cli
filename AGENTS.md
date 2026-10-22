@@ -59,9 +59,9 @@ MCP itda marks every result `untrusted` for that reason.
 - `approval_rejected` means the user said no. Do not ask again unless they
   change their mind.
 - `action_outcome_unknown` (exit 22) means itda sent the change but got no
-  answer. The site may or may not have applied it. Never call that change
-  again on your own. Tell the user and ask them to check the site; only they
-  decide whether to ask for it again.
+  answer. Never call it again; without `outcome_check`, the user checks the site.
+  With it, itda ran the read the change names: `landed` means it is in (tell the
+  user, do not ask again), `not_found`: they may ask again, `unknown`: it failed.
 
 ## When something that worked stops working
 

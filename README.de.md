@@ -375,7 +375,7 @@ nach dem Exit-Code verzweigen:
 | 14 | die Site hat diese eine Anfrage als nicht erlaubt abgelehnt; erneut anmelden hilft nicht |
 | 20 | braucht Freigabe, oder der Benutzer hat noch nicht geantwortet (oder Änderungen sind aus) |
 | 21 | Freigabe benutzt, abgelehnt, abgelaufen oder zurückgezogen, weil sich die Eingaben geändert haben |
-| 22 | itda hat eine Änderung gesendet, aber ihr Ergebnis ist unbekannt; prüfen Sie die Site |
+| 22 | itda hat eine Änderung gesendet, aber ihr Ergebnis ist unbekannt; mit `outcome_check` sagt der Lesevorgang, den die Änderung nennt, ob sie angekommen ist |
 | 30 | Netzwerkfehler |
 
 ## Grundsätze

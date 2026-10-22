@@ -350,7 +350,7 @@ Agent chỉ có shell có thể gọi `itda call … --json` và rẽ nhánh the
 | 14 | trang web từ chối riêng yêu cầu này vì không được phép; đăng nhập lại cũng không giúp |
 | 20 | cần phê duyệt, hoặc người dùng chưa trả lời (hoặc thay đổi đang tắt) |
 | 21 | phê duyệt đã dùng, bị từ chối, hết hạn hoặc bị rút lại vì đầu vào đã đổi |
-| 22 | itda đã gửi một thay đổi nhưng không rõ kết quả; hãy kiểm tra trang web |
+| 22 | itda đã gửi một thay đổi nhưng không rõ kết quả; với `outcome_check`, lượt đọc mà thay đổi chỉ định cho biết nó đã được áp dụng hay chưa |
 | 30 | lỗi mạng |
 
 ## Nguyên tắc

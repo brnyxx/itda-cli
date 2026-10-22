@@ -343,7 +343,7 @@ exit code:
 | 14 | the site refused this one request as not allowed; signing in again will not help |
 | 20 | needs approval, or the user has not answered yet (or changes are off) |
 | 21 | approval used, rejected, expired or withdrawn because the inputs changed |
-| 22 | itda sent a change but its outcome is unknown; check the site |
+| 22 | itda sent a change but its outcome is unknown; with `outcome_check`, the read the change names says whether it landed |
 | 30 | network error |
 
 ## Principles

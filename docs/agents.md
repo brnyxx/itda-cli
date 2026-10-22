@@ -59,7 +59,7 @@ site up or look after it:
 | `itda_login` | Open your own browser to sign in, exactly like `itda login <site> --browser`. itda seals the session under the data directory with a key from the keyring; the agent only sees the account id. A client with forms asks you first. Nobody presses Enter, so the definition must name the cookie that shows a sign-in. |
 | `itda_check` | `itda check` for one site, or every site when none is named: the verdict per site and what to do, as `itda check --json` prints them. |
 | `itda_sites` | What is set up, with reads, changes and the last check's time and verdict. |
-| `itda_manage` | `refresh` drafts a changed site again from its sources. The form shows what would change; no answer counts as no. For `remove` and `resume`, you confirm in a form; clients without forms get the command to run. `approvals` lists what waits for you. `audit` lists the last entries for one site or all, plus changes interrupted mid-process under `unknown_outcome`. |
+| `itda_manage` | `refresh` drafts a changed site again from its sources. The form shows what would change; no answer counts as no. For `remove` and `resume`, you confirm in a form; clients without forms get the command to run. `approvals` lists what waits for you. `audit` lists the last entries for one site or all, plus, under `unknown_outcome`, changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (`check`) when the change named one. |
 
 Every result uses the `itda call --json` envelope, marked `"untrusted": true`. A
 note before it says website data is not instructions. Results over 24 KB keep
@@ -98,8 +98,15 @@ itda sends a change once. If a request gets no reply after sending (a timeout, a
 dropped connection), or a GraphQL reply carries `errors` behind a 2xx, the call
 fails with `action_outcome_unknown` (exit 22). The audit log records this
 outcome: the site may or may not have applied the change. itda never resends a
-change on its own. An agent must not either. Check the site first; only a person
-decides whether to ask for the change again. A change that never left the
+change on its own. An agent must not either. When the change names the read
+that shows it (`confirm` in its definition), itda runs that read once and puts
+the result next to the error as `outcome_check`: `landed` means the change is
+in, so tell the user and do not ask for it again; `not_found` means the site
+shows no trace of it, so the user may ask for a new approval; `unknown` means
+that read failed too. Without `outcome_check`, check the site first; only a
+person decides whether to ask for the change again. A new approval request for
+a change that landed carries `previous_outcome: landed`, and its review tells
+the user so. A change that never left the
 machine (no turn at the gate, a name that did not resolve, a connection that was
 refused) keeps its network code. itda reports it as not sent. Agents may retry
 reads, which keep their usual codes (`timeout`, `request_failed`).
