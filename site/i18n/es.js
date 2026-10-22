@@ -59,7 +59,7 @@ window.ITDA_I18N["es"] = {
   "scope.y2": "Páginas que incrustan sus datos para sus scripts (<code>__NEXT_DATA__</code>, <code>ld+json</code>)",
   "scope.y3": "Páginas dibujadas por scripts que llaman a una API JSON: itda las observa cargar en tu navegador",
   "scope.y4": "Formularios con token CSRF, leído de nuevo antes de cada envío aprobado",
-  "scope.y5": "Sesiones por cookie o una sesión en la dirección: el formulario de inicio de sesión del propio sitio, o tu navegador para el inicio de sesión único",
+  "scope.y5": "Sesiones por cookie, una sesión en la dirección o un token de portador que una aplicación de página única guarda en el navegador: el formulario de inicio de sesión del propio sitio, o tu navegador para el inicio de sesión único",
   "scope.y5b": "Páginas hechas de marcos, incluso cuando un marco pide su propio inicio de sesión",
   "scope.y6": "Una descripción OpenAPI o un endpoint GraphQL que publique el sitio",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",

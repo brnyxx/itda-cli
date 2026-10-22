@@ -59,7 +59,7 @@ window.ITDA_I18N["id"] = {
   "scope.y2": "Halaman yang menyematkan data untuk skripnya (<code>__NEXT_DATA__</code>, <code>ld+json</code>)",
   "scope.y3": "Halaman yang digambar skrip yang memanggil API JSON: itda mengamatinya dimuat di browser Anda",
   "scope.y4": "Formulir dengan token CSRF, dibaca baru sebelum setiap kiriman yang disetujui",
-  "scope.y5": "Sesi cookie atau sesi di alamat: formulir masuk milik situs, atau browser Anda untuk single sign-on",
+  "scope.y5": "Sesi cookie, sesi di alamat, atau token bearer yang disimpan aplikasi satu halaman di browser: formulir masuk milik situs, atau browser Anda untuk single sign-on",
   "scope.y5b": "Halaman yang dibangun dari frame, bahkan saat sebuah frame minta masuk sendiri",
   "scope.y6": "Deskripsi OpenAPI atau endpoint GraphQL yang diterbitkan situs",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",

@@ -59,7 +59,7 @@ window.ITDA_I18N["zh-Hant"] = {
   "scope.y2": "為指令碼內嵌資料的頁面（<code>__NEXT_DATA__</code>、<code>ld+json</code>）",
   "scope.y3": "由指令碼繪製、呼叫 JSON API 的頁面：itda 在你的瀏覽器裡觀察它們載入",
   "scope.y4": "含有 CSRF 權杖的表單：每次執行經核准的提交前，都會重新讀取權杖",
-  "scope.y5": "Cookie 工作階段或網址中的工作階段：用網站自己的登入表單，單一登入則用你的瀏覽器",
+  "scope.y5": "Cookie 工作階段、網址中的工作階段，或單頁應用程式保存在瀏覽器中的 bearer 權杖：用網站自己的登入表單，單一登入則用你的瀏覽器",
   "scope.y5b": "由頁框組成的頁面，即使個別頁框需要另外登入也能使用",
   "scope.y6": "網站公開的 OpenAPI 說明或 GraphQL 端點",
   "scope.y7": "GitLab、Jira、Confluence、Redmine、Discourse、MediaWiki、WordPress、Gitea",

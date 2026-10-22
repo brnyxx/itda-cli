@@ -59,7 +59,7 @@ window.ITDA_I18N["zh-Hans"] = {
   "scope.y2": "为脚本内嵌数据的页面（<code>__NEXT_DATA__</code>、<code>ld+json</code>）",
   "scope.y3": "由脚本绘制、调用 JSON API 的页面：itda 在你的浏览器里观察它们加载",
   "scope.y4": "带 CSRF 令牌的表单，每次执行获批的提交前都会重新读取令牌",
-  "scope.y5": "Cookie 会话或地址中的会话：用站点自己的登录表单，单点登录则用你的浏览器",
+  "scope.y5": "Cookie 会话、地址中的会话，或单页应用保存在浏览器中的 bearer 令牌：用站点自己的登录表单，单点登录则用你的浏览器",
   "scope.y5b": "由框架组成的页面，即使其中的框架需要单独登录也支持",
   "scope.y6": "站点公开的 OpenAPI 说明或 GraphQL 端点",
   "scope.y7": "GitLab、Jira、Confluence、Redmine、Discourse、MediaWiki、WordPress、Gitea",

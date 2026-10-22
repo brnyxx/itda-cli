@@ -59,7 +59,7 @@ window.ITDA_I18N["ja"] = {
   "scope.y2": "スクリプト向けにデータを埋め込んだページ (<code>__NEXT_DATA__</code>、<code>ld+json</code>)",
   "scope.y3": "JSON API を呼ぶスクリプトで描かれたページ: あなたのブラウザで読み込む様子を itda が見守る",
   "scope.y4": "CSRF トークンを使うフォーム。承認された送信の直前に、毎回トークンを読み取る",
-  "scope.y5": "Cookie やアドレスに含まれるセッション: サイトのサインインフォームを使用し、シングルサインオンにはブラウザを使用",
+  "scope.y5": "Cookie のセッション、アドレスに含まれるセッション、またはシングルページアプリがブラウザに保持するベアラートークン: サイトのサインインフォームを使用し、シングルサインオンにはブラウザを使用",
   "scope.y5b": "フレームで組まれたページ。フレームが別にサインインを求めても",
   "scope.y6": "サイトが公開している OpenAPI 説明や GraphQL エンドポイント",
   "scope.y7": "GitLab、Jira、Confluence、Redmine、Discourse、MediaWiki、WordPress、Gitea",
