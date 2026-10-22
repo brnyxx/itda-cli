@@ -95,6 +95,12 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 말합니다). 그냥 `itda`만 치면 주소를 물어보고, 스크립트에서는 `itda setup <주소>`에
 옵션을 줍니다.
 
+에이전트가 한번 연결되면 그냥 말로 시켜도 됩니다. "news.ycombinator.com
+세팅해 줘"라고 하면 에이전트가 `itda_setup`을 부르고, 같은 방식으로 페이지를
+살펴 초안을 만들고 실제로 불러본 뒤, 그 사이트의 액션이 같은 대화 안에서
+도구로 나타납니다. 읽기가 로그인하라고 하면 `itda_login`이 내 브라우저를 열어
+주고, 에이전트는 계정 id만 봅니다.
+
 터미널이 싫으면 내가 쓰는 사이트 주소만 바꿔서 Claude Code, Cursor, Codex에
 이걸 건네면 됩니다:
 
@@ -234,8 +240,9 @@ itda mcp install claude-code      # `claude mcp add` 명령을 출력
 | 4 | `itda-net` | 제한된 HTTP, 속도 조절, 차단 감지, 사설 주소 차단 |
 | 5 | `itda-vault` | OS 키링이나 환경 변수 속 계정과 비밀 정보 |
 | 7 | `itda-runtime` | 액션 실행: 인증 정보, 승인, 결과 정리, 감사 로그 |
-| 9 | `itda-mcp` | stdio MCP 서버 |
-| 10 | `apps/cli` | `itda` 명령 |
+| 9 | `itda-setup` | 세팅, 로그인, 점검 단계. CLI와 MCP 서버가 같이 씀 |
+| 10 | `itda-mcp` | stdio MCP 서버 |
+| 11 | `apps/cli` | `itda` 명령 |
 
 ## 개발
 

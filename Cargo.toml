@@ -23,6 +23,7 @@ itda-browser = { path = "crates/browser" }
 itda-runtime = { path = "crates/runtime" }
 itda-mcp = { path = "crates/mcp" }
 itda-prep = { path = "crates/prep" }
+itda-setup = { path = "crates/setup" }
 
 axum = "0.8.9"
 clap = { version = "4.6.7", features = ["derive"] }

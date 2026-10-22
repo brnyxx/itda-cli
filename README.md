@@ -93,6 +93,12 @@ your computer and connects them after one Enter (`ITDA_LANG=ko` makes it speak
 Korean). A bare `itda` asks for the address; `itda setup <address>` takes flags
 for scripts.
 
+Once an agent is connected, you can also just ask it: "set up
+news.ycombinator.com for me". It calls `itda_setup`, the site is looked at,
+drafted and tried the same way, and its actions appear as tools in the same
+conversation; when a read says to sign in, `itda_login` opens your own
+browser and the agent only sees the account id.
+
 Or skip the terminal and hand this to Claude Code, Cursor or Codex, with the
 address of a site you use:
 
@@ -233,8 +239,9 @@ Crates depend only on crates below them; `cargo xtask check-layers` enforces it.
 | 4 | `itda-net` | Bounded HTTP, pacing, block detection, private-address guard |
 | 5 | `itda-vault` | Accounts and secrets in the OS keyring or environment |
 | 7 | `itda-runtime` | Runs actions: credentials, approvals, shaping, audit log |
-| 9 | `itda-mcp` | MCP server over stdio |
-| 10 | `apps/cli` | The `itda` command |
+| 9 | `itda-setup` | The setup, sign-in and check steps, for the CLI and the MCP server alike |
+| 10 | `itda-mcp` | MCP server over stdio |
+| 11 | `apps/cli` | The `itda` command |
 
 ## Develop
 

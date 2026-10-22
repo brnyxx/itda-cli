@@ -2,7 +2,8 @@
 
 A site definition (`spec.yaml`) tells itda which actions a website has, what
 each one sends, what a correct answer looks like and whether it changes
-anything. itda reads it from `<data dir>/specs/<site>/spec.yaml`; `itda add
+anything. itda reads it from `<data dir>/specs/<site>/spec.yaml` (next to it,
+`check.json` keeps the time and verdict of the last `itda check`); `itda add
 spec.yaml` copies it there after a short review, `itda doctor` prints the data
 directory, and `ITDA_HOME` moves it.
 

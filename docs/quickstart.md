@@ -40,6 +40,19 @@ apps it finds on your computer after one more Enter. From then on, ask your
 agent for things on that site. `itda setup <address>` does the same from a
 script; `itda setup --help` lists the flags.
 
+## From inside your agent
+
+Once itda is connected (`itda mcp install <client>`, or the question at the
+end of a setup), you can skip the terminal for the next sites. Tell your
+agent "use news.ycombinator.com": it calls `itda_setup` with the address,
+the site is looked at, drafted and tried the same way, and its actions show
+up as tools in the same conversation. When a read says to sign in, the agent
+calls `itda_login` and your own browser opens for you to sign in; the agent
+only ever sees the account id. `itda_check`, `itda_sites` and `itda_manage`
+cover checking, listing, removing and resuming sites and reading approvals
+and the audit log, with a form for you to confirm the ones that change
+something. Nothing an agent can call approves a change.
+
 ## Try the sandbox
 
 The repository includes a small fake intranet that only listens on
@@ -107,7 +120,7 @@ moment. A site definition can ask for more room with `defaults.interval`.
 | `itda resume <site>` | Resume after a block or an expired sign-in |
 | `itda approvals` · `approve <id>` · `reject <id>` | Review changes agents asked for |
 | `itda audit [--limit n] [--verify] [--json]` | What agents did |
-| `itda mcp [--mode direct\|catalog]` | Serve installed sites over MCP |
+| `itda mcp [--mode direct\|catalog] [--approve-in-client]` | Serve installed sites over MCP, with tools to set up, sign in, check and manage sites from the agent |
 | `itda mcp install <client> [--dry-run]` | Add itda to an MCP client |
 | `itda doctor` | Check the setup |
 | `itda feedback [--no-open]` | Print and open a link to a new GitHub issue with the version, the platform and the doctor checks filled in; sends nothing itself |

@@ -1440,6 +1440,7 @@ dependencies = [
  "itda-policy",
  "itda-prep",
  "itda-runtime",
+ "itda-setup",
  "itda-spec",
  "itda-store",
  "itda-types",
@@ -1471,6 +1472,7 @@ dependencies = [
  "itda-net",
  "itda-policy",
  "itda-runtime",
+ "itda-setup",
  "itda-spec",
  "itda-store",
  "itda-types",
@@ -1556,6 +1558,26 @@ dependencies = [
  "axum",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "itda-setup"
+version = "0.4.0"
+dependencies = [
+ "itda-browser",
+ "itda-html",
+ "itda-net",
+ "itda-policy",
+ "itda-prep",
+ "itda-runtime",
+ "itda-spec",
+ "itda-types",
+ "itda-vault",
+ "serde",
+ "serde_json",
+ "serde_norway",
+ "tokio",
+ "url",
 ]
 
 [[package]]

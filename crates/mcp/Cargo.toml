@@ -12,6 +12,7 @@ itda-types.workspace = true
 itda-spec.workspace = true
 itda-policy.workspace = true
 itda-runtime.workspace = true
+itda-setup.workspace = true
 rmcp.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

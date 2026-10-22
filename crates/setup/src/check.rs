@@ -4,8 +4,9 @@
 use itda_policy::{Effect, operation_effect};
 use itda_runtime::{Call, Runtime};
 use itda_spec::{Operation, Spec};
-use serde::Serialize;
-use std::collections::BTreeMap;
+use itda_types::error::AppResult;
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, Serialize)]
 pub struct Outcome {
@@ -117,7 +118,7 @@ pub fn needed_inputs(op: &Operation) -> Vec<String> {
 }
 
 /// One word per site, worst last: what to do about the site as a whole.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
     Ok,
@@ -193,6 +194,43 @@ pub struct SiteVerdict {
     pub verdict: Verdict,
     pub hint: String,
 }
+
+/// The last verdict a site got, kept next to its definition as
+/// `check.json` so `itda_sites` can say when a site was last checked.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LastCheck {
+    pub at: String,
+    pub verdict: Verdict,
+    pub hint: String,
+}
+
+/// Keep each site's verdict next to its definition. A site whose definition
+/// is gone is skipped.
+pub fn remember(home: &Path, verdicts: &[SiteVerdict]) -> AppResult<()> {
+    for site in verdicts {
+        let dir = crate::sites::specs_dir(home).join(&site.site);
+        if !dir.is_dir() {
+            continue;
+        }
+        let last = LastCheck {
+            at: itda_types::util::now(),
+            verdict: site.verdict,
+            hint: site.hint.clone(),
+        };
+        itda_types::util::atomic_file(&dir.join(CHECK_FILE), &serde_json::to_vec(&last)?)?;
+    }
+    Ok(())
+}
+
+/// When the site was last checked and what the verdict was; `None` before
+/// its first check.
+pub fn last(home: &Path, site: &str) -> Option<LastCheck> {
+    let path = crate::sites::specs_dir(home).join(site).join(CHECK_FILE);
+    let bytes = itda_types::util::read_bounded(&path, 64 * 1024).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+const CHECK_FILE: &str = "check.json";
 
 /// One verdict per site, in the order the sites were checked.
 pub fn verdicts(outcomes: &[Outcome]) -> Vec<SiteVerdict> {

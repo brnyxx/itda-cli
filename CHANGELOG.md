@@ -9,6 +9,25 @@ change the definition format or the CLI.
 
 ### Added
 
+- Five MCP tools so an agent never needs a terminal to set a site up or
+  look after it: `itda_setup` (look at a page as itda, draft, try every
+  read once, keep what works; the site's actions become tools in the same
+  session, announced with `notifications/tools/list_changed`, which the
+  server now declares with `tools.listChanged`), `itda_login` (the person
+  signs in in their own browser, after a form in clients that show one;
+  the definition must name the sign-in cookie), `itda_check` (the verdict
+  per site, as `itda check --json`), `itda_sites` (what is set up, with
+  the last check's time and verdict, now kept in `specs/<site>/check.json`)
+  and `itda_manage` (`remove` and `resume` after the person confirms in a
+  form, `approvals`, `audit`). `itda_setup` never records and never keeps
+  a credential; pages that need a sign-in or scripts are refused with the
+  command to run instead. The server instructions, `AGENTS.md` and the
+  skill say when to call them.
+- A new `itda-setup` crate holds the steps behind `itda setup`, `itda login
+  --browser`, `itda check` and the installed sites, with the questions
+  answered through a trait and progress reported through a callback, so the
+  command line and the MCP server run the same code. The CLI's words and
+  questions are unchanged.
 - `itda draft page` and `itda setup` draft a typed read for each list they
   find in a page's embedded data, instead of one read that returns the whole
   payload: an `ItemList` or a list of one typed thing (`NewsArticle`,
