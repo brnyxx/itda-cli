@@ -7,6 +7,10 @@ your AI agent a short list of actions in plain words. Reads just work.
 Nothing changes on the site until you say yes. It runs on your own computer,
 and it works on the old intranet behind a login too.
 
+It is for the sites your company runs and the services you have an account
+on, not the web at large. [What it can and cannot do](https://github.com/brnyxx/itda-cli#what-it-can-and-cannot-do)
+lists both, and what happens when a site changes.
+
 <img src="https://raw.githubusercontent.com/brnyxx/itda-cli/main/assets/setup.gif" alt="itda setup on news.ycombinator.com: it finds a list of 30 records, a form and a feed, tries both reads, saves the site and adds itda to Claude Desktop, in fourteen seconds" width="100%">
 
 ```console

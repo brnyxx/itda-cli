@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>itda: just type an address and your AI can use the site</title>
-  <meta name="description" content="One command turns any website you use into a short list of plain-word actions your AI agent can call. Reads just work; nothing changes on the site until you say yes. Runs on your own computer.">
+  <meta name="description" content="One command turns a site you use into a short list of plain-word actions your AI agent can call: the sites your company runs and the services you have an account on. Reads just work; nothing changes on the site until you say yes. Runs on your own computer.">
   <meta property="og:title" content="itda: just type an address and your AI can use the site">
-  <meta property="og:description" content="One command turns any website into safe, plain-word actions for your AI agent. Reads just work; changes wait for your yes.">
+  <meta property="og:description" content="One command turns a site you use into safe, plain-word actions for your AI agent. Reads just work; changes wait for your yes.">
   <meta property="og:image" content="https://brnyxx.github.io/itda-cli/assets/social.png">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
@@ -41,6 +41,7 @@
         <div class="hero-copy">
           <h1 data-i18n="hero.h1">Just type an address<br>after itda<br><em class="accent">and your AI<br>can use the site.</em></h1>
           <p class="lede" data-i18n="hero.lede">Give itda one address. It learns what the site can do, tries it, and hands your AI agent a short list of actions in plain words. Reads just work. Nothing changes on the site until you say yes. Even the old intranet behind a login.</p>
+          <p class="lede who" data-i18n="hero.who">For the sites your company runs and the services you have an account on, not the web at large.</p>
 
           <div class="install" data-tabs>
             <div class="install-tabs" role="tablist">
@@ -192,8 +193,77 @@
       </div>
     </section>
 
+    <section class="section wrap" id="scope">
+      <p class="eyebrow"><b>[ 03 ]</b> <span data-i18n="eyebrow.scope">What it can and cannot do</span></p>
+      <h2 data-i18n="scope.h2">What works, and what does not.</h2>
+      <p class="section-lede" data-i18n="scope.lede">For the sites your company runs and the services you have an account on. Every line here is true of the code today.</p>
+      <div class="scope">
+        <div class="win scope-col yes">
+          <div class="bar"><span></span><em data-i18n="scope.yes">works today</em></div>
+          <ul>
+            <li data-i18n="scope.y1">Pages drawn on the server: tables, lists, cards, search and post forms, feeds</li>
+            <li data-i18n="scope.y2">Pages that embed their data for their scripts (<code>__NEXT_DATA__</code>, <code>ld+json</code>)</li>
+            <li data-i18n="scope.y3">Pages drawn by scripts that call a JSON API: itda watches them load in your browser</li>
+            <li data-i18n="scope.y4">Forms with a CSRF token, read fresh before each approved post</li>
+            <li data-i18n="scope.y5">Cookie sessions: the site's own sign-in form, or your browser for single sign-on</li>
+            <li data-i18n="scope.y6">An OpenAPI description or a GraphQL endpoint the site publishes</li>
+            <li data-i18n="scope.y7">GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea</li>
+            <li data-i18n="scope.y8">Anything you recorded yourself using</li>
+          </ul>
+        </div>
+        <div class="win scope-col rec">
+          <div class="bar"><span></span><em data-i18n="scope.rec">works after you record it</em></div>
+          <ul>
+            <li data-i18n="scope.r1">A page that shows a plain fetch nothing and loads nothing by itself: what it only fetches after you click, search or sign in</li>
+          </ul>
+          <p class="scope-note" data-i18n="scope.rec.note"><code>itda record</code> watches you use it and drafts from the calls it saw.</p>
+        </div>
+        <div class="win scope-col no">
+          <div class="bar"><span></span><em data-i18n="scope.no">does not work</em></div>
+          <ul>
+            <li data-i18n="scope.n1">WebSocket</li>
+            <li data-i18n="scope.n2">APIs that sign every request</li>
+            <li data-i18n="scope.n3">Pages assembled from HTML fragments (htmx and the like)</li>
+            <li data-i18n="scope.n4">Content drawn on a canvas or into an image</li>
+            <li data-i18n="scope.n5">Sites behind a challenge or a bot manager: itda is an honest client and stops</li>
+            <li data-i18n="scope.n6">Anything your account cannot see</li>
+          </ul>
+        </div>
+      </div>
+      <p class="packs-note" data-i18n="scope.more">The full list, with what each line means, is in the <a href="https://github.com/brnyxx/itda-cli#what-it-can-and-cannot-do">README</a>.</p>
+    </section>
+
+    <section class="section wrap" id="changes">
+      <p class="eyebrow"><b>[ 04 ]</b> <span data-i18n="eyebrow.changes">When the site changes</span></p>
+      <h2 data-i18n="changes.h2">Noticed by a check, drafted again, reviewed by you.</h2>
+      <p class="section-lede" data-i18n="changes.lede">A browser agent adapts on every run, and is slow and nondeterministic for it. itda is one request and the same answer every time, and breaks loudly when the site moves.</p>
+      <ol class="steps">
+        <li class="win">
+          <div class="bar"><span></span><em>step 01</em></div>
+          <span class="step-n">1</span>
+          <h3 data-i18n="changes.1">Notice</h3>
+          <p data-i18n="changes.1p">itda check runs every read that needs no input, never sends a change, and ends with one verdict: ok, signed_out, site_changed, blocked or unreachable. Exit code 11 means the site changed. Run it on a schedule.</p>
+          <code>itda check board</code>
+        </li>
+        <li class="win">
+          <div class="bar"><span></span><em>step 02</em></div>
+          <span class="step-n">2</span>
+          <h3 data-i18n="changes.2">Draft again</h3>
+          <p data-i18n="changes.2p">itda refresh drafts the site again from what it was set up from: its pages, the API description, the GraphQL endpoint, or the kept shape of the recording with every value blanked.</p>
+          <code>itda refresh board</code>
+        </li>
+        <li class="win">
+          <div class="bar"><span></span><em>step 03</em></div>
+          <span class="step-n">3</span>
+          <h3 data-i18n="changes.3">Review</h3>
+          <p data-i18n="changes.3p">It shows what would change per action and writes nothing until you say yes. What you edited by hand is kept, a new action is tried once before it is added, and the site is checked again right after.</p>
+          <code>Write these changes to 'board'? [y/N]</code>
+        </li>
+      </ol>
+    </section>
+
     <section class="section wrap">
-      <p class="eyebrow"><b>[ 03 ]</b> <span data-i18n="eyebrow.cmp">The same site, two agents</span></p>
+      <p class="eyebrow"><b>[ 05 ]</b> <span data-i18n="eyebrow.cmp">The same site, two agents</span></p>
       <h2 data-i18n="cmp.h2">Same website, very different risks.</h2>
       <div class="race">
         <div class="win lane other">
@@ -221,10 +291,11 @@
           <p class="lane-note" data-i18n="cmp.ours.note">One answer per action, every change waits for you, stops when refused.</p>
         </div>
       </div>
+      <p class="cmp-next" data-i18n="cmp.next">Playwright MCP, browser-use and computer use drive a browser on every task, and itda does not replace them: a page you will use once, or a site itda does not cover, is theirs. itda is for the site an agent will call again and again: record it once in a browser, review the actions, then run them over HTTP. Use both: a browser agent to explore, itda for the calls that run every day.</p>
     </section>
 
     <section class="section wrap">
-      <p class="eyebrow"><b>[ 04 ]</b> <span data-i18n="eyebrow.safe">Safety</span></p>
+      <p class="eyebrow"><b>[ 06 ]</b> <span data-i18n="eyebrow.safe">Safety</span></p>
       <h2 data-i18n="safe.h2">Six things that keep you safe.</h2>
       <div class="features win">
         <div class="bar"><span></span><em data-i18n="win.safe">safety.six</em></div>
@@ -264,7 +335,7 @@
     <section class="section wrap">
       <div class="split">
         <div>
-          <p class="eyebrow"><b>[ 05 ]</b> <span data-i18n="eyebrow.agents">For agents</span></p>
+          <p class="eyebrow"><b>[ 07 ]</b> <span data-i18n="eyebrow.agents">For agents</span></p>
           <h2 data-i18n="agents.h2">Small, stable tool lists.</h2>
           <p class="section-lede" data-i18n="agents.lede">Up to 30 actions appear as one MCP tool each, with input schemas and read-only, destructive and idempotent hints. Past that, three stable tools keep the list short and prompt caches warm.</p>
           <ul class="ticks">
@@ -291,7 +362,7 @@
     </section>
 
     <section class="section wrap" id="sites">
-      <p class="eyebrow"><b>[ 06 ]</b> <span data-i18n="eyebrow.sites">Ready-made sites</span></p>
+      <p class="eyebrow"><b>[ 08 ]</b> <span data-i18n="eyebrow.sites">Ready-made sites</span></p>
       <h2 data-i18n="sites.h2">Four sites come already set up.</h2>
       <p class="section-lede" data-i18n="sites.lede">GitHub, npm, crates.io and PyPI work the moment itda is installed, with nothing to record. Each one talks only to that site's official interface, and <code>itda check</code> confirms every read still answers the way it should.</p>
       <div class="packs">
