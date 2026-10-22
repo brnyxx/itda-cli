@@ -124,4 +124,5 @@ moment. A site definition can ask for more room with `defaults.interval`.
 | `itda mcp install <client> [--dry-run]` | Add itda to an MCP client |
 | `itda doctor` | Check the setup |
 | `itda feedback [--no-open]` | Print and open a link to a new GitHub issue with the version, the platform and the doctor checks filled in; sends nothing itself |
-| `itda check [<site>] [--account id] [--json]` | Run every read that needs no input and end each site with a verdict: `ok`, `signed_out`, `site_changed`, `blocked` or `unreachable`, with what to do. Run it when an action that used to work fails, before retrying or re-drafting |
+| `itda check [<site>\|--all] [--account id] [--json]` | Run every read that needs no input and end each site with a verdict: `ok`, `signed_out`, `site_changed`, `blocked` or `unreachable`, with what to do; `--all` prints one verdict line per site. Run it when an action that used to work fails, before retrying or re-drafting |
+| `itda refresh <site> [-y]` | When a check says `site_changed`: draft the site again from the sources it was set up from, show what would change (actions added, removed, changed) and write it after a yes, keeping the sign-in, the defaults, the name and every action you edited by hand. Then checks the site |

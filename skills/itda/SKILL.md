@@ -48,7 +48,7 @@ for a new definition. The last line per site is the verdict:
 |---|---|
 | `ok` | retry the action; the site is fine |
 | `signed_out` | ask the user to run `itda login <site>`, or call `itda_login` over MCP |
-| `site_changed` | ask the user to run `itda setup <url>` again, or call `itda_setup` over MCP |
+| `site_changed` | ask the user to run `itda refresh <site>`, or call `itda_manage` with `refresh` over MCP; it re-drafts from the same sources and keeps what the user decided |
 | `blocked` | tell the user; they check the site, then `itda resume <site>` |
 | `unreachable` | wait and check again |
 
@@ -62,7 +62,8 @@ for a new definition. The last line per site is the verdict:
 - Sign-in: when a read says `auth_required`, call `itda_login` with the site
   (the user signs in in their own browser) or ask them to run
   `itda login <site> --browser`.
-- `itda_manage` removes or resumes a site after the user confirms in a form,
-  and lists approvals and the audit log. It never approves a change.
+- `itda_manage` refreshes, removes or resumes a site after the user confirms
+  in a form, and lists approvals and the audit log. It never approves a
+  change.
 - Problem with itda: `itda feedback` prints a link to a new issue with the
   version and platform filled in. It sends nothing by itself.
