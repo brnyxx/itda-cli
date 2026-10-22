@@ -135,5 +135,41 @@ Each change that users will notice gets a line in `CHANGELOG.md` under
    passes when the four agree.
 2. On GitHub, open Actions → Release → Run workflow, and enter the tag, such as
    `v0.2.0`. The workflow builds every platform. It creates the tag and
-   publishes the release with installers. Leave the default `dry-run` to build
-   without publishing.
+   publishes the release with installers and one `itda-<target>.mcpb` bundle
+   per platform. Leave the default `dry-run` to build without publishing.
+3. winget: `manifests/b/brnyxx/itda/<version>/` holds the three manifest files
+   for the latest version. For a new version copy the folder, change
+   `PackageVersion`, the `InstallerUrl` and the `InstallerSha256` (the
+   `.sha256` file next to the Windows zip in the release has it), run
+   `winget validate --manifest <folder>` on a Windows machine and open a pull
+   request to microsoft/winget-pkgs with only that folder.
+
+### Homebrew, later
+
+dist can publish a formula to a tap, but a release fails at that step until
+the tap exists, so it is not configured yet. When the owner has done these
+two steps:
+
+1. Create the repository `brnyxx/homebrew-tap` (a README is enough; dist
+   manages the rest).
+2. Create a GitHub personal access token with the `repo` scope and add it to
+   this repository as the secret `HOMEBREW_TAP_TOKEN`.
+
+add to `dist-workspace.toml`:
+
+```toml
+installers = ["shell", "powershell", "homebrew"]
+tap = "brnyxx/homebrew-tap"
+publish-jobs = ["homebrew"]
+```
+
+and to `[package.metadata.dist]` in `apps/cli/Cargo.toml`, so the formula is
+named after the binary:
+
+```toml
+formula = "itda"
+```
+
+then run `dist generate` (cargo-dist 0.32.0) to add the
+`publish-homebrew-formula` job to `release.yml`, and list
+`brew install brnyxx/tap/itda` on the landing and in the READMEs.

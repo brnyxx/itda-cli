@@ -3,13 +3,15 @@
 for (const box of document.querySelectorAll("[data-tabs]")) {
   const tabs = box.querySelectorAll("[data-tab]");
   const panels = box.querySelectorAll("[data-panel]");
+  const copy = box.querySelector(".copy");
   for (const tab of tabs) {
     tab.addEventListener("click", () => {
       for (const t of tabs) t.setAttribute("aria-selected", String(t === tab));
       for (const p of panels) p.hidden = p.dataset.panel !== tab.dataset.tab;
+      // A panel of download links has nothing to copy.
+      if (copy) copy.hidden = [...panels].some((p) => !p.hidden && p.hasAttribute("data-nocopy"));
     });
   }
-  const copy = box.querySelector(".copy");
   copy?.addEventListener("click", async () => {
     const shown = [...panels].find((p) => !p.hidden);
     try {

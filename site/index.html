@@ -47,11 +47,13 @@
             <div class="install-tabs" role="tablist">
               <button role="tab" aria-selected="true" data-tab="unix">macOS / Linux</button>
               <button role="tab" aria-selected="false" data-tab="win">Windows</button>
+              <button role="tab" aria-selected="false" data-tab="desktop">Claude Desktop</button>
               <button role="tab" aria-selected="false" data-tab="cargo">Cargo</button>
             </div>
             <div class="install-body">
               <code data-panel="unix">curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh</code>
               <code data-panel="win" hidden>irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex</code>
+              <p class="install-file" data-panel="desktop" data-nocopy hidden data-i18n="install.desktop">Download <a href="https://github.com/brnyxx/itda-cli/releases/latest/download/itda-aarch64-apple-darwin.mcpb">macOS (Apple silicon)</a>, <a href="https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-apple-darwin.mcpb">macOS (Intel)</a> or <a href="https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-pc-windows-msvc.mcpb">Windows</a> and open the file. Claude Desktop installs itda and its tools.</p>
               <code data-panel="cargo" hidden>cargo install --git https://github.com/brnyxx/itda-cli itda-cli</code>
               <button class="copy" type="button" aria-label="Copy install command">
                 <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" stroke-width="2"/></svg>

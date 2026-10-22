@@ -18,6 +18,14 @@ Download an archive from
 [Releases](https://github.com/brnyxx/itda-cli/releases), or build from source
 with `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
+Claude Desktop, with no terminal: download the bundle for
+[macOS (Apple silicon)](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-aarch64-apple-darwin.mcpb),
+[macOS (Intel)](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-apple-darwin.mcpb) or
+[Windows](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-pc-windows-msvc.mcpb) and open the file. Claude
+Desktop installs itda with its tools, and "use the-site-you-use.example" sets
+a site up from inside the conversation. Approving a change still happens in a
+terminal with `itda approve`, so for changes install the command too.
+
 Check the setup:
 
 ```console

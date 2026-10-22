@@ -4,8 +4,12 @@
 //!
 //! `cargo xtask check-layers`: every workspace crate may depend only on crates in
 //! a lower layer. Cargo already rejects cycles; this keeps the direction right.
-use std::path::Path;
+//!
+//! `cargo xtask mcpb`: wrap the built binaries into MCP Bundles for Claude Desktop.
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
+
+mod mcpb;
 
 /// Lower number = lower layer. A new crate must be added here before it builds in CI.
 const LAYERS: &[(&str, u8)] = &[
@@ -151,7 +155,58 @@ fn check_changelog() -> Result<(), Vec<String>> {
     }
 }
 
+/// `mcpb [--distrib dir] [--out dir]` packs every dist archive in `distrib`
+/// (dist's `target/distrib` unless given); `mcpb --binary path --target triple
+/// [--out dir]` packs one binary you built yourself. Bundles land in `out`
+/// (`target/mcpb` unless given), which is where `dist-workspace.toml` expects
+/// them.
+fn mcpb(args: &[String]) -> Result<(), String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("xtask has no parent directory")?
+        .to_path_buf();
+    // dist writes its archives under CARGO_TARGET_DIR when that is set.
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("target"));
+    let mut distrib = target_dir.join("distrib");
+    let mut out = root.join("target").join("mcpb");
+    let mut binary: Option<PathBuf> = None;
+    let mut target: Option<String> = None;
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let value = args.next().ok_or(format!("{arg} needs a value"));
+        match arg.as_str() {
+            "--distrib" => distrib = PathBuf::from(value?),
+            "--out" => out = PathBuf::from(value?),
+            "--binary" => binary = Some(PathBuf::from(value?)),
+            "--target" => target = Some(value?.clone()),
+            _ => return Err(format!("unknown option {arg}")),
+        }
+    }
+    let version = env!("CARGO_PKG_VERSION");
+    match (binary, target) {
+        (Some(binary), Some(target)) => {
+            let contents = mcpb::Contents {
+                target: &target,
+                binary: &binary,
+                license: &root.join("LICENSE"),
+                notice: &root.join("NOTICE"),
+            };
+            let path = mcpb::pack(&contents, version, &out).map_err(|e| e.to_string())?;
+            let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+            println!("{target}: {} ({size} bytes)", path.display());
+            Ok(())
+        }
+        (None, None) => mcpb::from_distrib(&distrib, &root, version, &out)
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        _ => Err("--binary and --target go together".into()),
+    }
+}
+
 fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(2).collect();
     match std::env::args().nth(1).as_deref() {
         Some("check-changelog") => match check_changelog() {
             Ok(()) => {
@@ -162,6 +217,13 @@ fn main() -> ExitCode {
                 for problem in problems {
                     eprintln!("{problem}");
                 }
+                ExitCode::FAILURE
+            }
+        },
+        Some("mcpb") => match mcpb(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(problem) => {
+                eprintln!("{problem}");
                 ExitCode::FAILURE
             }
         },
@@ -178,7 +240,9 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            eprintln!("usage: cargo xtask check-layers | check-changelog");
+            eprintln!(
+                "usage: cargo xtask check-layers | check-changelog\n       cargo xtask mcpb [--distrib dir] [--out dir]\n       cargo xtask mcpb --binary path --target triple [--out dir]"
+            );
             ExitCode::from(2)
         }
     }

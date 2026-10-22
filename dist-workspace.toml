@@ -19,3 +19,15 @@ install-updater = false
 install-success-msg = "itda is installed. Open a new terminal window and type: itda"
 # Start releases from the Actions tab; the workflow creates the tag
 dispatch-releases = true
+
+# One MCP Bundle per platform for Claude Desktop, packed from the archives above
+# once every platform has built (cargo xtask mcpb, xtask/src/mcpb.rs)
+[[dist.extra-artifacts]]
+artifacts = [
+  "target/mcpb/itda-aarch64-apple-darwin.mcpb",
+  "target/mcpb/itda-aarch64-unknown-linux-gnu.mcpb",
+  "target/mcpb/itda-x86_64-apple-darwin.mcpb",
+  "target/mcpb/itda-x86_64-unknown-linux-gnu.mcpb",
+  "target/mcpb/itda-x86_64-pc-windows-msvc.mcpb",
+]
+build = ["cargo", "xtask", "mcpb"]
