@@ -63,7 +63,17 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
                     let pages = [page];
                     options.schemas =
                         introspect(home, &crate::introspect::endpoints_in_pages(&pages)).await?;
-                    draft = Some(itda_prep::from_pages(&pages, &options)?);
+                    let net = crate::open(home)?.net;
+                    let description = crate::description::find(&net, &pages).await;
+                    let drafted = itda_prep::from_pages_and_description(
+                        &pages,
+                        description.as_ref(),
+                        &options,
+                    )?;
+                    if let Some(described) = &drafted.described {
+                        eprintln!("    {}", crate::text::described(described));
+                    }
+                    draft = Some(drafted);
                 }
             }
             Err(why) => {
@@ -341,6 +351,9 @@ fn describe_page(page: &itda_prep::Page) -> String {
     }
     if !evidence::feeds(&page.html, &page.url).is_empty() {
         parts.push(t("found_feed").to_owned());
+    }
+    if evidence::openapi_link(&page.html, &page.url).is_some() {
+        parts.push(t("found_description").to_owned());
     }
     if parts.is_empty() {
         parts.push(t("found_title").to_owned());
