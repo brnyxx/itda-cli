@@ -8,6 +8,10 @@ change the definition format or the CLI.
 ## [Unreleased]
 
 ### Changed
+- The landing page and both READMEs carry a prompt to hand to an agent: paste
+  it into Claude Code, Cursor or Codex with a site's address and the agent
+  installs itda, runs `itda setup <address> --client <app> -y` and starts
+  using the site.
 
 - The landing page has a living sky behind the whole page: liquid chrome
   with striped, colour-split reflections and a holographic sheen, a wire

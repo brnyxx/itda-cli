@@ -95,6 +95,20 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 말합니다). 그냥 `itda`만 치면 주소를 물어보고, 스크립트에서는 `itda setup <주소>`에
 옵션을 줍니다.
 
+터미널이 싫으면 내가 쓰는 사이트 주소만 바꿔서 Claude Code, Cursor, Codex에
+이걸 건네면 됩니다:
+
+```text
+itda를 설치하고 내가-쓰는-사이트.example을 세팅해 줘.
+1. 설치: curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh
+   (Windows면: irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex)
+2. 실행: itda setup https://내가-쓰는-사이트.example --client claude-code -y
+   (네가 cursor, codex, claude-desktop이면 그 이름으로)
+3. https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md 를 읽고 itda로 그 사이트를 써.
+   읽기는 그냥 하면 돼. 사이트를 바꾸는 건 내 승인을 기다려.
+   읽기가 로그인하라고 하면 나한테 이걸 실행하라고 말해: itda login <site> --browser
+```
+
 조각 명령도 따로 있습니다. 로그인 없이 열리는 페이지라면 주소만 주면 됩니다. 표와 목록은 레코드로, 검색 폼은 읽기로, 글쓰기
 폼은 변경으로, 피드도 함께 초안이 됩니다.
 
