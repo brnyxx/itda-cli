@@ -1232,6 +1232,37 @@ async fn setup_leaves_out_a_read_the_site_challenges_and_does_not_pause_it() {
     std::fs::remove_dir_all(home).ok();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn setup_on_a_known_host_uses_the_ready_made_definition() {
+    let home = home();
+    let added = itda(&home, &["add", "pypi"], &[]).await;
+    assert!(added.status.success(), "{added:?}");
+    // The page is never fetched: the ready-made definition is what would be
+    // saved, and an installed one is kept without --yes, so this sends
+    // nothing to pypi.org.
+    let again = itda(
+        &home,
+        &[
+            "setup",
+            "https://pypi.org/project/requests/",
+            "--no-record",
+            "--client",
+            "none",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&again.stderr);
+    assert!(!again.status.success(), "{said}");
+    assert!(said.contains("This is PyPI. Using its JSON API."), "{said}");
+    assert!(
+        !said.contains("The page opens without signing in."),
+        "{said}"
+    );
+    assert!(said.contains("Kept the existing 'pypi'"), "{said}");
+    std::fs::remove_dir_all(home).ok();
+}
+
 /// A GraphQL fixture: answers introspection with the prep crate's schema
 /// when `enabled`, or refuses it the way servers do, and answers every
 /// query with `{"data": {<field>: ...}}`.

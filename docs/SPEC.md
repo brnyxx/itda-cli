@@ -135,6 +135,20 @@ base and merges the page's reads again. Over MCP, `itda_setup` does the same, ta
 `none`) and names the template it used in its result. The templates are not
 installed by `itda add`: their `base_url` is a placeholder the setup fills.
 
+## Sites with a ready-made definition
+
+A page on `pypi.org`, `github.com`, `www.npmjs.com` (or `npmjs.com`) or
+`crates.io` gets the definition `itda add` installs for that site
+(`pypi`, `github`, `npm`, `crates-io`), which reads the site's own API
+instead of its pages. `itda setup` says so in one line, "This is PyPI. Using
+its JSON API.", does not fetch the page, saves the definition under its own
+name and tries its reads once as on any site. `--no-template` reads the page
+like any other and `--as <software>` uses that template instead; over MCP,
+`itda_setup` takes the same path, with `template: none` to skip it, and puts
+the line in its notes. A site set up this way has no sources to draft again
+from, so `itda refresh` does not apply; `itda add <site> --force` installs
+the current definition.
+
 ## When setup tries the reads
 
 `itda setup` tries every read once while you watch, and a read the site

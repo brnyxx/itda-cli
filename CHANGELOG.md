@@ -225,6 +225,12 @@ change the definition format or the CLI.
   when it is open, or says that opening it is enough; for Claude Code it runs
   `claude mcp add` itself when `claude` is on the PATH.
 - `itda doctor` lists the agent apps whose settings already start itda.
+- `itda setup` on a page of `pypi.org`, `github.com`, `npmjs.com` (with or
+  without `www.`) or `crates.io` uses the ready-made definition `itda add`
+  installs for it, says "This is PyPI. Using its JSON API." (or the site's
+  name and API), does not fetch the page and tries the definition's reads;
+  `--no-template` reads the page instead. `itda_setup` over MCP does the
+  same and puts the line in its notes.
 
 ### Removed
 

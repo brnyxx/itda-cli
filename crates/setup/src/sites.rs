@@ -19,6 +19,68 @@ pub const BUNDLED: [(&str, &str); 4] = [
     ("pypi", include_str!("../../../sites/pypi.yaml")),
 ];
 
+/// A host whose ready-made definition `itda setup` uses instead of reading
+/// the page: the definition's name in [`BUNDLED`], the name people know the
+/// site by, and the interface the definition reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Known {
+    pub site: &'static str,
+    pub title: &'static str,
+    pub api: &'static str,
+}
+
+const HOSTS: [(&str, Known); 5] = [
+    (
+        "pypi.org",
+        Known {
+            site: "pypi",
+            title: "PyPI",
+            api: "JSON API",
+        },
+    ),
+    (
+        "github.com",
+        Known {
+            site: "github",
+            title: "GitHub",
+            api: "REST API",
+        },
+    ),
+    (
+        "www.npmjs.com",
+        Known {
+            site: "npm",
+            title: "npm",
+            api: "registry API",
+        },
+    ),
+    (
+        "npmjs.com",
+        Known {
+            site: "npm",
+            title: "npm",
+            api: "registry API",
+        },
+    ),
+    (
+        "crates.io",
+        Known {
+            site: "crates-io",
+            title: "crates.io",
+            api: "API",
+        },
+    ),
+];
+
+/// The ready-made definition for a page on `host`, when there is one.
+pub fn known_host(host: &str) -> Option<Known> {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    HOSTS
+        .iter()
+        .find(|(name, _)| *name == host)
+        .map(|(_, known)| *known)
+}
+
 pub fn bundled(name: &str) -> Option<&'static str> {
     BUNDLED
         .iter()
@@ -213,5 +275,30 @@ fn count(n: usize, noun: &str) -> String {
         format!("1 {noun}")
     } else {
         format!("{n} {noun}s")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_hosts_name_a_bundled_definition() {
+        for (host, site) in [
+            ("pypi.org", "pypi"),
+            ("PyPI.org.", "pypi"),
+            ("github.com", "github"),
+            ("www.npmjs.com", "npm"),
+            ("npmjs.com", "npm"),
+            ("crates.io", "crates-io"),
+        ] {
+            let known = known_host(host).unwrap_or_else(|| panic!("{host}"));
+            assert_eq!(known.site, site);
+            let spec = itda_spec::parse(bundled(site).unwrap().as_bytes()).unwrap();
+            assert_eq!(spec.site.name, site);
+        }
+        for host in ["test.pypi.org", "gist.github.com", "example.com", ""] {
+            assert_eq!(known_host(host), None, "{host}");
+        }
     }
 }

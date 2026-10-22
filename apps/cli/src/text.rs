@@ -36,6 +36,11 @@ pub fn t(key: &str) -> &'static str {
             "{software}로 보입니다. {base}의 API를 씁니다.",
         ),
         (
+            "bundled",
+            "This is {title}. Using its {api}.",
+            "{title}입니다. {api}를 씁니다.",
+        ),
+        (
             "template_unconfirmed",
             "Using the {software} template at {base} as asked; its API did not answer there yet.",
             "요청대로 {software} 템플릿을 {base}에 씁니다. 그 주소의 API는 아직 응답하지 않았습니다.",

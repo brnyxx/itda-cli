@@ -182,6 +182,12 @@ fn say(progress: Progress<'_>, width: &mut usize) {
                 tf(key, &[("software", &found.title), ("base", &found.base)])
             );
         }
+        Progress::Bundled(known) => {
+            eprintln!(
+                "    {}",
+                tf("bundled", &[("title", known.title), ("api", known.api)])
+            );
+        }
         Progress::PageFetched(summary) => {
             eprintln!(
                 "    {}",
