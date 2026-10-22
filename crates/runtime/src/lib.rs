@@ -463,7 +463,7 @@ fn check_inputs(op: &Operation, args: &BTreeMap<String, String>) -> AppResult<()
 
 /// Why a response that was not a success failed. Blocks and expired sessions
 /// have already paused the scope in the network layer.
-fn refusal(response: &itda_net::Response, signed_in: bool) -> AppError {
+pub fn refusal(response: &itda_net::Response, signed_in: bool) -> AppError {
     match (response.defense.as_str(), response.status) {
         ("none", 401 | 403) if signed_in => AppError::api("auth_required", 401),
         ("none", 404) => AppError::api("not_found", 404),

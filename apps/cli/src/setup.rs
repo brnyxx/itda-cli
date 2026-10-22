@@ -300,6 +300,14 @@ async fn probe(home: &Path, url: &str) -> AppResult<Result<itda_prep::Page, Fall
         }
         Err(error) => return Err(error),
     };
+    if let Some(error) = crate::site_refusal(url, &response) {
+        eprintln!("    {}", error.msg);
+        return Ok(Err(if error.public_code == "auth_required" {
+            Fallback::SignIn
+        } else {
+            Fallback::Blocked
+        }));
+    }
     if matches!(response.status, 401 | 403) {
         return Ok(Err(Fallback::SignIn));
     }

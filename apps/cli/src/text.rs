@@ -48,6 +48,56 @@ pub fn t(key: &str) -> &'static str {
         ),
         ("why_blocked", "it refused", "거부됨"),
         (
+            "blocked_cloudflare",
+            "{host} is behind Cloudflare and refused itda.",
+            "{host}는 Cloudflare 뒤에 있어 itda를 거부했습니다.",
+        ),
+        (
+            "blocked_bot_manager",
+            "{host} runs a bot manager that refused itda.",
+            "{host}의 봇 차단이 itda를 거부했습니다.",
+        ),
+        (
+            "blocked_captcha",
+            "{host} asks for a captcha before it shows the page.",
+            "{host}는 페이지를 보여주기 전에 캡차를 요구합니다.",
+        ),
+        (
+            "blocked_other",
+            "{host} refused itda (HTTP {status}).",
+            "{host}가 itda를 거부했습니다 (HTTP {status}).",
+        ),
+        (
+            "blocked_fix",
+            "itda does not go around that; try the site's official API or ask the owner.",
+            "itda는 이를 우회하지 않습니다. 사이트의 공식 API를 쓰거나 운영자에게 물어보세요.",
+        ),
+        (
+            "rate_limited_wait",
+            "{host} limits how often it is read and asked itda to wait {n} s.",
+            "{host}는 읽는 횟수를 제한하며 itda에게 {n}초 기다리라고 했습니다.",
+        ),
+        (
+            "rate_limited",
+            "{host} limits how often it is read and refused itda for now.",
+            "{host}는 읽는 횟수를 제한해 지금은 itda를 거부했습니다.",
+        ),
+        (
+            "redirect_signin",
+            "{host} sends itda to a sign-in page instead of showing {path}.",
+            "{host}는 {path}를 보여주는 대신 itda를 로그인 페이지로 보냅니다.",
+        ),
+        (
+            "redirect_signin_fix",
+            "Pages behind a sign-in: record yourself using them with `itda record`, or `itda setup` and answer yes to recording.",
+            "로그인이 필요한 페이지는 `itda record`로 직접 쓰는 모습을 녹화하거나, `itda setup`에서 녹화에 예라고 답하세요.",
+        ),
+        (
+            "rate_limited_fix",
+            "Try again after the wait, or use the site's official API.",
+            "기다린 뒤 다시 시도하거나 사이트의 공식 API를 쓰세요.",
+        ),
+        (
             "why_scripted",
             "it is drawn by scripts",
             "스크립트로 그려지는 페이지",

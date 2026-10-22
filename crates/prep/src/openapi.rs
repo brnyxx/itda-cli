@@ -149,6 +149,7 @@ pub(crate) fn openapi_parts(
         base_url,
         auth,
         operations: operations.into_iter().map(|(_, op)| op).collect(),
+        models: Mapping::new(),
         notes,
         source: format!("`itda draft openapi` from {source}"),
     })

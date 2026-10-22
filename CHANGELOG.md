@@ -9,6 +9,18 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda draft page` and `itda setup` draft a typed read for each list they
+  find in a page's embedded data, instead of one read that returns the whole
+  payload: an `ItemList` or a list of one typed thing (`NewsArticle`,
+  `Product`...) in `ld+json`, and in `__NEXT_DATA__`, `__NEXT_F__`,
+  `__APOLLO_STATE__`, `__PRELOADED_STATE__` and the like the list of objects
+  with the most to read. Each read is named after what it holds
+  (`list-news-articles`), points `extract_pointer` at the list and keeps up
+  to eight plain fields of every record through a `model`, ids and titles
+  first and credentials left out. `itda check` counts its records. The whole
+  payload is drafted only when no list is in it.
+- An Apollo cache (`__APOLLO_STATE__`) is also grouped by typename, so a
+  definition can point at `/Question` or `/Product`.
 - `defaults.interval` in a site definition asks for more time between
   requests to that site (`2s`, `500ms`, up to 30 s). itda's own pace, one
   request at a time per site about 1.2 seconds apart, is the floor; a
@@ -49,6 +61,17 @@ change the definition format or the CLI.
   and `itda setup` says what it read in one line.
 
 ### Changed
+
+- `itda draft page` and `itda setup` on a page that refuses itda say what the
+  gate saw instead of `error[internal]: <url> answered HTTP 403`: the host is
+  behind Cloudflare, runs a bot manager or asks for a captcha
+  (`blocked_by_site`, exit 12), or limits how often it is read, with the wait
+  it asked for when it named one (`site_rate_limited`, exit 13), in English
+  or Korean. A captcha served with HTTP 200 is reported the same way, and a
+  page that sends itda on to a sign-in page says so (`auth_required`, exit
+  10) and points at recording.
+- A `Retry-After: 0`, or a date already past, no longer counts as a rate
+  limit: a site that sends it with every page is read as itself.
 - The landing page on phones: lighter glass, the setup dialog left out of the
   hero stack, full-width buttons, tighter rhythm, terminal lines wrapped on
   anything narrower than the two-column layout, and the sky drawn smaller

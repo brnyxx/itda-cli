@@ -458,17 +458,33 @@ fn public_ip(address: IpAddr) -> bool {
         }
     }
 }
+/// The wait a `Retry-After` header asks for. `0`, a date already past or a
+/// value that is not a time is no wait at all: a site that sends
+/// `Retry-After: 0` with every page is not rate limiting it.
 pub fn retry_after(headers: &[(String, String)]) -> Option<Duration> {
     let value = headers
         .iter()
         .find(|(key, _)| key.eq_ignore_ascii_case("retry-after"))
         .map(|(_, value)| value)?;
     if let Ok(seconds) = value.trim().parse::<u64>() {
-        return Some(Duration::from_secs(seconds.clamp(1, 86_400)));
+        return (seconds > 0).then(|| Duration::from_secs(seconds.min(86_400)));
     }
-    httpdate::parse_http_date(value).ok().map(|date| {
-        date.duration_since(std::time::SystemTime::now())
-            .unwrap_or(Duration::from_secs(1))
-            .min(Duration::from_secs(86_400))
-    })
+    let date = httpdate::parse_http_date(value).ok()?;
+    let wait = date.duration_since(std::time::SystemTime::now()).ok()?;
+    (!wait.is_zero()).then(|| wait.min(Duration::from_secs(86_400)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_retry_after_of_zero_or_in_the_past_is_no_wait() {
+        let header = |value: &str| vec![("retry-after".to_owned(), value.to_owned())];
+        assert_eq!(retry_after(&header("0")), None);
+        assert_eq!(retry_after(&header("3")), Some(Duration::from_secs(3)));
+        assert_eq!(retry_after(&header("Wed, 21 Oct 2015 07:28:00 GMT")), None);
+        assert_eq!(retry_after(&header("soon")), None);
+        assert_eq!(retry_after(&[]), None);
+    }
 }

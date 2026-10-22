@@ -12,6 +12,9 @@ pub enum Label<'a> {
     List { title: &'a str },
     /// Read the data a page embeds for its scripts.
     Embedded { title: &'a str },
+    /// Read one kind of record a page embeds, named in plain words
+    /// (`news articles`, `products`).
+    Records { what: &'a str, title: &'a str },
     /// A search form on a page.
     Search { title: &'a str },
     /// A form that changes the site.
@@ -60,6 +63,9 @@ fn korean(label: &Label<'_>) -> String {
         Label::Page { title } => format!("{} 읽기", subject(title)),
         Label::List { title } => format!("{} 목록 읽기", subject(title)),
         Label::Embedded { title } => format!("{} 데이터 읽기", subject(title)),
+        Label::Records { what, title } => {
+            format!("{}의 {} 목록 읽기", subject(title), korean_what(what))
+        }
         Label::Search { title } => format!("{}에서 검색", subject(title)),
         Label::Submit { title } => format!("{}의 폼 보내기", subject(title)),
         Label::Feed { title } => {
@@ -104,6 +110,7 @@ fn english(label: &Label<'_>) -> String {
         Label::Page { title } => format!("Read {}", subject(title)),
         Label::List { title } => format!("List what {} shows", subject(title)),
         Label::Embedded { title } => format!("Read the data behind {}", subject(title)),
+        Label::Records { what, title } => format!("List the {what} on {}", subject(title)),
         Label::Search { title } => format!("Search on {}", subject(title)),
         Label::Submit { title } => format!("Submit the form on {}", subject(title)),
         Label::Feed { title } => {
@@ -136,8 +143,34 @@ fn english(label: &Label<'_>) -> String {
     }
 }
 
+/// The Korean word for a kind of record, when there is a common one; the
+/// English words otherwise.
+fn korean_what(what: &str) -> &str {
+    match what {
+        "news articles" => "뉴스 기사",
+        "articles" | "blog postings" => "기사",
+        "posts" => "글",
+        "products" => "상품",
+        "questions" => "질문",
+        "projects" => "프로젝트",
+        "events" => "행사",
+        "job postings" | "jobs" => "채용 공고",
+        "recipes" => "레시피",
+        "videos" | "video objects" => "동영상",
+        "books" => "책",
+        "courses" => "강의",
+        "people" | "persons" => "사람",
+        "places" => "장소",
+        "comments" => "댓글",
+        "reviews" => "후기",
+        "content" => "콘텐츠",
+        "items" => "항목",
+        other => other,
+    }
+}
+
 /// `exploreProjects` and `explore-projects` both read as `explore projects`.
-fn words(name: &str) -> String {
+pub(crate) fn words(name: &str) -> String {
     let mut out = String::new();
     let mut previous_lower = false;
     for c in name.chars() {
@@ -207,6 +240,26 @@ mod tests {
                 "en"
             ),
             "Run create issue (changes the site)"
+        );
+        assert_eq!(
+            describe(
+                &Label::Records {
+                    what: "news articles",
+                    title: "BBC News"
+                },
+                "en"
+            ),
+            "List the news articles on BBC News"
+        );
+        assert_eq!(
+            describe(
+                &Label::Records {
+                    what: "products",
+                    title: "Shop"
+                },
+                "ko"
+            ),
+            "Shop의 상품 목록 읽기"
         );
         assert_eq!(language("", "ko-KR"), "ko");
         assert_eq!(language("en", "ko"), "en");

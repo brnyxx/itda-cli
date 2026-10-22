@@ -87,7 +87,7 @@ fn an_app_shell_reads_its_embedded_data_and_points_at_recording() {
     let response = products.response.as_ref().unwrap();
     assert_eq!(response.ssr_json, "__NEXT_DATA__");
     assert_eq!(response.extract_pointer, "/props/pageProps/products");
-    assert_eq!(response.required_pointers, ["/0/id", "/0/name"]);
+    assert_eq!(response.required_pointers, ["/0/name", "/0/id"]);
     assert!(!draft.yaml.contains("private-value"));
     assert!(draft.notes.iter().any(|n| n.contains("__NEXT_DATA__")));
 }
@@ -334,4 +334,137 @@ fn a_description_elsewhere_or_unreadable_leaves_the_page_draft_alone() {
         draft.notes
     );
     assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+}
+
+#[test]
+fn an_ld_json_item_list_becomes_a_typed_read_of_its_articles() {
+    let draft = from_pages(
+        &[page("https://news.example/top", "ld-itemlist.html")],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let op = spec.op("list-news-articles").unwrap();
+    assert_eq!(op.desc, "List the news articles on Top stories");
+    let response = op.response.as_ref().unwrap();
+    assert_eq!(response.ssr_json, "ld+json");
+    assert_eq!(response.extract_pointer, "/blocks/0/itemListElement");
+    assert_eq!(
+        response.required_pointers,
+        ["/0/item/headline", "/0/item/url"]
+    );
+    assert_eq!(op.model, "news-article");
+    let model = &spec.models["news-article"];
+    assert_eq!(model["headline"].path, "item.headline");
+    assert_eq!(model["datePublished"].path, "item.datePublished");
+    assert_eq!(model["description"].kind, "string");
+    assert_eq!(model["author_name"].path, "item.author.name");
+    assert!(!model.contains_key("name"), "{:?}", model.keys());
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("`news-article` model")),
+        "{:?}",
+        draft.notes
+    );
+}
+
+#[test]
+fn a_next_f_list_gets_a_model_without_its_secrets() {
+    let draft = from_pages(
+        &[page("https://blog.example/", "next-f.html")],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let op = spec.op("list-items").unwrap();
+    assert_eq!(op.desc, "블로그의 항목 목록 읽기");
+    let response = op.response.as_ref().unwrap();
+    assert_eq!(response.ssr_json, "__NEXT_F__");
+    assert_eq!(response.extract_pointer, "/data");
+    assert_eq!(response.required_pointers, ["/0/title", "/0/id"]);
+    let model = &spec.models["item"];
+    let fields: Vec<&String> = model.keys().collect();
+    assert!(fields.contains(&&"released_at".to_string()), "{fields:?}");
+    assert!(fields.contains(&&"likes".to_string()), "{fields:?}");
+    assert_eq!(model["likes"].kind, "int");
+    assert!(!draft.yaml.contains("api_token"), "{}", draft.yaml);
+    assert!(!draft.yaml.contains("secret-1"), "{}", draft.yaml);
+}
+
+#[test]
+fn an_apollo_cache_is_read_by_typename() {
+    let draft = from_pages(
+        &[page(
+            "https://ask.example/questions?sort=new",
+            "apollo.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let op = spec.op("list-questions").unwrap();
+    let response = op.response.as_ref().unwrap();
+    assert_eq!(response.ssr_json, "__APOLLO_STATE__");
+    assert_eq!(response.extract_pointer, "/Question");
+    assert_eq!(op.query["sort"].default, Some("new".into()));
+    let model = &spec.models["question"];
+    assert_eq!(model["answerCount"].kind, "int");
+    assert!(model.contains_key("createdAt"));
+    assert!(!model.contains_key("author"));
+}
+
+#[test]
+fn a_preloaded_state_lists_what_has_a_title_not_the_navigation() {
+    let draft = from_pages(
+        &[page("https://shop.example/deals", "preloaded.html")],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let op = spec.op("list-deals").unwrap();
+    let response = op.response.as_ref().unwrap();
+    assert_eq!(response.ssr_json, "__PRELOADED_STATE__");
+    assert_eq!(response.extract_pointer, "/deals/list");
+    assert_eq!(response.required_pointers, ["/0/name", "/0/id", "/0/url"]);
+    let model = &spec.models["deal"];
+    assert_eq!(model["price"].kind, "float");
+    assert!(model.contains_key("endsAt"));
+    assert!(!draft.yaml.contains("csrf_token"), "{}", draft.yaml);
+}
+
+#[test]
+fn fields_one_object_down_are_read_and_menus_are_not_lists() {
+    let draft = from_pages(
+        &[page(
+            "https://code.example/rust-lang/rust/issues",
+            "nested.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let op = spec.op("list-issues").unwrap();
+    assert_eq!(op.desc, "List the issues on Issues");
+    let response = op.response.as_ref().unwrap();
+    assert_eq!(response.extract_pointer, "/props/pageProps/results");
+    assert_eq!(
+        response.required_pointers,
+        ["/0/issue/title", "/0/id", "/0/issue/url"]
+    );
+    let model = &spec.models["issue"];
+    assert_eq!(model["title"].path, "issue.title");
+    assert_eq!(model["issue_id"].path, "issue.id");
+    assert_eq!(model["url"].path, "issue.url");
+    assert_eq!(model["number"].kind, "int");
+    assert!(model.contains_key("createdAt"), "{:?}", model.keys());
+    assert!(!model.contains_key("author"));
+    assert!(!draft.yaml.contains("mainNavigation"), "{}", draft.yaml);
 }

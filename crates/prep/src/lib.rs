@@ -141,21 +141,15 @@ pub(crate) struct Parts {
     pub base_url: String,
     pub auth: Vec<Yaml>,
     pub operations: Vec<Mapping>,
+    /// The `models` block: the fields each typed read keeps, by name.
+    pub models: Mapping,
     pub notes: Vec<String>,
     pub source: String,
 }
 
 impl Parts {
     pub(crate) fn finish(self) -> Draft {
-        finish(
-            &self.site,
-            &self.title,
-            &self.base_url,
-            self.auth,
-            self.operations,
-            self.notes,
-            &self.source,
-        )
+        finish(self, "")
     }
 
     fn key(entry: &Mapping) -> (String, String) {
@@ -206,6 +200,9 @@ impl Parts {
             if !known {
                 self.auth.push(strategy);
             }
+        }
+        for (name, model) in other.models {
+            self.models.entry(name).or_insert(model);
         }
         self.notes.extend(other.notes);
         self.operations.len() - before
@@ -268,16 +265,25 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
 }
 
 /// Writes the definition and checks it with the rules `itda` applies at
-/// install time. `source` says what drafted it, for the header comment.
-pub(crate) fn finish(
-    site: &str,
-    title: &str,
-    base_url: &str,
-    auth: Vec<Yaml>,
-    operations: Vec<Mapping>,
-    notes: Vec<String>,
-    source: &str,
-) -> Draft {
+/// install time. The parts' `source` says what drafted it, for the header
+/// comment; `title` is the site's human name when the source gave one.
+pub(crate) fn finish(parts: Parts, title: &str) -> Draft {
+    let Parts {
+        site,
+        title: own_title,
+        base_url,
+        auth,
+        operations,
+        models,
+        notes,
+        source,
+    } = parts;
+    let title = if title.is_empty() {
+        own_title.as_str()
+    } else {
+        title
+    };
+    let (site, base_url, source) = (site.as_str(), base_url.as_str(), source.as_str());
     let mut site_map = Mapping::new();
     site_map.insert("name".into(), site.into());
     if !title.is_empty() {
@@ -299,6 +305,9 @@ pub(crate) fn finish(
         "operations".into(),
         Yaml::Sequence(operations.into_iter().map(Yaml::Mapping).collect()),
     );
+    if !models.is_empty() {
+        root.insert("models".into(), Yaml::Mapping(models));
+    }
     let body = serde_norway::to_string(&Yaml::Mapping(root)).unwrap_or_default();
     let yaml = format!(
         "# Drafted by {source}. Review every operation before use:\n# check names, effects and response checks, and remove what agents should not call.\n{body}"
@@ -349,6 +358,7 @@ pub(crate) fn reorder(entry: Mapping) -> Mapping {
         "query",
         "body",
         "response",
+        "model",
     ];
     let mut out = Mapping::new();
     for key in order {

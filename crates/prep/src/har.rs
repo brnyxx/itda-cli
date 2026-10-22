@@ -26,6 +26,10 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
+    pub(crate) fn of_json(value: &Value) -> Kind {
+        Kind::of(value)
+    }
+
     fn of(value: &Value) -> Kind {
         match value {
             Value::Bool(_) => Kind::Bool,
@@ -678,6 +682,7 @@ fn parts_at(
         base_url,
         auth,
         operations,
+        models: Mapping::new(),
         notes,
         source: format!("`itda draft har` from a recording of {host}"),
     })
@@ -969,7 +974,27 @@ fn looks_like_id(segment: &str) -> bool {
                 && segment.chars().any(|c| c.is_ascii_digit())))
 }
 
-fn singular(word: &str) -> String {
+/// `article` is `articles`, `entry` is `entries`; a word already plural, or
+/// one with no plural, stays.
+pub(crate) fn plural(word: &str) -> String {
+    if word.is_empty()
+        || word.ends_with('s')
+        || matches!(word, "content" | "data" | "news" | "media" | "people")
+    {
+        return word.to_owned();
+    }
+    if let Some(stem) = word.strip_suffix('y')
+        && !stem.ends_with(['a', 'e', 'i', 'o', 'u'])
+    {
+        return format!("{stem}ies");
+    }
+    if word.ends_with("ch") || word.ends_with("sh") || word.ends_with('x') {
+        return format!("{word}es");
+    }
+    format!("{word}s")
+}
+
+pub(crate) fn singular(word: &str) -> String {
     if let Some(stem) = word.strip_suffix("ies") {
         format!("{stem}y")
     } else if word.len() > 3 && word.ends_with('s') && !word.ends_with("ss") {
