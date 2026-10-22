@@ -286,7 +286,7 @@
 
   const resize = () => {
     const w = window.innerWidth, h = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2) * 0.6;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * (coarse ? 0.45 : 0.6);
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
@@ -499,6 +499,12 @@
     if (ripples.length > 6) ripples.shift();
   }, { passive: true });
   document.documentElement.addEventListener("mouseleave", () => { handOn = false; });
+  // On touch screens the hand is only there while a finger is down.
+  if (coarse) {
+    const lift = () => { handOn = false; };
+    window.addEventListener("pointerup", lift, { passive: true });
+    window.addEventListener("pointercancel", lift, { passive: true });
+  }
   window.addEventListener("resize", () => { resize(); if (still) step(performance.now()); }, { passive: true });
 
   resize();
