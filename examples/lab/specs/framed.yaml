@@ -4,7 +4,8 @@
 # (`itda setup http://127.0.0.1:8086/frame/list --user lab`) and it signs in and
 # drafts the board the same way the intranet does; this is that draft, reviewed:
 # the list read got a response check and the write form a name that says what it
-# does. Following the iframe from the shell waits on feature/frames-and-url-tokens.
+# does. Signing in from the shell (whose `/frame/board` iframe redirects to a
+# login itda will not follow) is not wired up yet, so point setup at the frame.
 spec_version: 1
 site:
   name: framed

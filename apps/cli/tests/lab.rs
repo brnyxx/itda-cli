@@ -383,9 +383,11 @@ fn the_lab_definitions_are_valid() {
 // ---------------------------------------------------------------------------
 // Three uglier intranets: the board inside an iframe (`framed`, 8086), a table
 // a script draws from an XHR (`scripted`, 8087), and a session carried in the
-// URL (`urltoken`, 8088). Each is measured in examples/lab/README.md. Where
-// itda cannot do it today the test states the behaviour we want and is marked
-// `#[ignore]` with the reason, so the frames-and-url-tokens work can turn it on.
+// URL (`urltoken`, 8088). Each is measured in examples/lab/README.md. The
+// url-token session and the direct-frame board both run through a reviewed
+// definition now (b35a612 landed frame following and query sessions). The one
+// left is signing in from a shell whose frame redirects to a login; that test
+// states the behaviour we want and is marked `#[ignore]` with the reason.
 // ---------------------------------------------------------------------------
 
 /// Install a reviewed ugly-case definition, sign in through its form, run its
@@ -483,12 +485,16 @@ fn framed_from_the_reviewed_definition_to_an_approved_change() {
     }
 }
 
-// Today `itda setup http://127.0.0.1:8086/` drafts only a read of the shell's
-// `<h1>`; the notices table two iframes down (`/frame/board` -> `/frame/list`)
-// is never reached, so no read answers with records. The frames work should
-// follow the iframe, sign in and draft the board.
+// Frame following (b35a612) reaches a shell's own frames, but the framed
+// board sits behind a sign-in: `itda setup http://127.0.0.1:8086/` follows
+// the `/frame/board` iframe, which answers 303 to `/frame/login`. itda will
+// not follow a redirect to a sign-in page (it is a credential path), so the
+// frame is noted-but-not-read and setup never signs in from a shell whose
+// frame wants a login; it still drafts only the shell's `<h1>`. Signing in
+// from a frame's login redirect is orchestration in `setup::run`, not inside
+// the frames code, so it is left for a follow-up.
 #[test]
-#[ignore = "needs feature/frames-and-url-tokens"]
+#[ignore = "setup does not sign in from a shell frame that redirects to a login"]
 fn framed_setup_from_the_shell_reaches_the_board() {
     if !lab_is_on() {
         return;
@@ -600,13 +606,13 @@ fn scripted_setup_watches_the_xhr_and_drafts_the_list() {
     std::fs::remove_dir_all(home).ok();
 }
 
-// Today `itda setup http://127.0.0.1:8088/notices --user lab` signs in, but the
-// site answers the sign-in with a redirect to `/notices?sid=<token>` and sets
-// no cookie; itda keeps sessions in cookies, so it stops with "accepted the
-// sign-in but set no cookie" and the URL `sid` token is dropped. The url-token
-// work should carry the `sid` so a drafted read answers with records.
+// `itda setup http://127.0.0.1:8088/notices --user lab` sees the redirect to
+// the sign-in, signs in through the form, reads the `sid` out of the sign-in's
+// redirect to `/notices?sid=<token>` (the site sets no cookie) and drafts a
+// kind: browser session with `value_from: query:sid`; `sid` is dropped from
+// the operation inputs. A drafted read then answers with records, with the
+// `sid` appended to the request and redacted from the result.
 #[test]
-#[ignore = "needs feature/frames-and-url-tokens"]
 fn urltoken_setup_carries_the_url_session_token() {
     if !lab_is_on() {
         return;
@@ -650,10 +656,18 @@ fn urltoken_setup_carries_the_url_session_token() {
 }
 
 #[test]
+fn urltoken_from_the_reviewed_definition_to_an_approved_change() {
+    if lab_is_on() {
+        reviewed_change_flow("urltoken", "list-notices", "post-notice");
+    }
+}
+
+#[test]
 fn the_ugly_lab_definitions_are_valid() {
     for (site, read, change) in [
         ("framed", "list-notices", "post-notice"),
         ("scripted", "list-notices", "post-notice"),
+        ("urltoken", "list-notices", "post-notice"),
     ] {
         let bytes = std::fs::read(spec_path(site)).unwrap();
         let spec = itda_spec::parse(&bytes).unwrap();
