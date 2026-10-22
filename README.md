@@ -94,8 +94,12 @@ Every line here is true of the code today. `itda setup` says which case it met;
   itself. It drafts from those calls. It does not click or type.
 - Forms that want a CSRF token: a preflight step reads a fresh one from the
   form page right before each approved post.
+- Pages that are a shell around frames: the content sits in an `<iframe>` on
+  the same site, often behind its own sign-in. itda reads each frame as a page
+  of the site and signs in first when the frame asks for it.
 - Cookie sessions: a sign-in through the site's own form with your user name
-  and password, or your own browser for single sign-on and one-time codes.
+  and password, or your own browser for single sign-on and one-time codes. A
+  session carried in the address (`?sid=...`) works the same way.
 - An OpenAPI or Swagger description the site publishes, and a GraphQL
   endpoint that answers introspection: one read per operation or query field.
 - Sites that run GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
