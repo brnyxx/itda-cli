@@ -48,6 +48,41 @@ feat: add same-site checks based on the public suffix list
 - Branch names follow the commit type: `feat/net-gate`, `fix/redirect-origin`.
 - The description says what a reader sees before and after the change, then how.
 
+## Site definitions and software templates
+
+The easiest contribution is a site. Two kinds live in the repository:
+
+- `sites/<name>.yaml` is one public site, built into the binary so
+  `itda add <name>` works without a checkout. Add the file and its line to
+  `BUNDLED` in `crates/setup/src/sites.rs` and to the table in
+  `sites/README.md`. A test installs every bundled site and checks that its
+  `site.name` matches the file name.
+- `sites/software/<name>.yaml` is one kind of software (GitLab, Jira, a wiki),
+  with a placeholder `base_url` that `itda setup` fills in. Add the file and
+  its entry to `SOFTWARE` in `crates/setup/src/software.rs`, with the words
+  and the one confirming request that recognise it. A test fills every
+  template and runs the install checks on it.
+
+A good definition reads public data or uses the site's documented API, gives
+every read a `response` check and a `model`, keeps changes to the few an agent
+needs, and links each action's documentation in `evidence`. It never works
+around a block or imitates a browser; see [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+Before opening the pull request, run `itda add sites/<name>.yaml` and
+`itda check <name>` against the real site and paste the check's summary into
+the description.
+
+## Issues and questions
+
+- A bug: the **Bug report** template. `itda feedback` fills in the version,
+  the platform and the doctor checks.
+- A site that stopped answering: the **Site stopped working** template, with
+  `itda check <site>` output.
+- A site or software you want set up well: the **Site request** template.
+- A question about whether itda fits what you are doing, or how to set a site
+  up: [Discussions](https://github.com/brnyxx/itda-cli/discussions).
+- A vulnerability: privately, as [SECURITY.md](SECURITY.md) says. Never in an
+  issue.
+
 ## Translations
 
 `README.ko.md` and the Korean strings in `site/i18n.js` follow `README.md` and
