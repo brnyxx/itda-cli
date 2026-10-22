@@ -119,12 +119,16 @@ fn submitted_jobs_run_before_later_calls() {
 fn two_processes_starting_at_once_both_migrate_without_an_error() {
     let dir = std::env::temp_dir().join(format!("itda-store-{}", itda_types::util::id()));
     let path = dir.join("itda.db");
+    // Both handles are opened here, one after the other: the race under test
+    // is the migration, and a thread that failed to open would never reach
+    // the barrier and leave the other waiting forever.
+    let stores: Vec<Store> = (0..2).map(|_| Store::open(&path).unwrap()).collect();
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
-    let tasks: Vec<_> = (0..2)
-        .map(|_| {
-            let (path, barrier) = (path.clone(), barrier.clone());
+    let tasks: Vec<_> = stores
+        .into_iter()
+        .map(|store| {
+            let barrier = barrier.clone();
             std::thread::spawn(move || {
-                let store = Store::open(&path).unwrap();
                 barrier.wait();
                 store.migrate(&NOTES)
             })
