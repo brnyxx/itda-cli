@@ -89,6 +89,19 @@ scripts shows little to a plain fetch; `itda draft page` says so and points
 at recording the site instead, and `itda setup` first watches the page load
 in your browser (below).
 
+When a fetched page is a shell whose main content is one or more
+`<iframe src>` (or an older `<frameset>`'s `<frame src>`) on the same origin,
+and the page itself has no records, data, form or feed of its own, itda
+fetches each frame's page as itself, on the same pacing and with the same
+session, and drafts from the frame pages as pages of the site. Each frame
+read keeps the frame's own address as its operation path, since that is what
+a request to the server looks like; a form inside a frame posts to the
+frame's action like any other. At most four frames are followed, at most two
+deep. A frame whose page is on another origin is listed in the notes and
+never fetched, and so is a same-origin frame that answered with nothing.
+`itda draft page` and `itda setup` say what they followed ("Followed 1 frame:
+/frame/board.").
+
 ## Start from the software a site runs
 
 Most intranets run software everyone knows, and that software has a stable
@@ -254,7 +267,17 @@ such as `JSESSIONID` or `SID`) and no token get a `kind: browser` entry, so
 `preflight` step that reads it from the form page recorded before the post, so
 each change sends a fresh one. A header such as `X-CSRF-Token` gets the same
 treatment from a `<meta name="csrf-token">` tag on an earlier page, the pattern
-Rails, Laravel and many single-page apps use; other token and session fields are left out and
+Rails, Laravel and many single-page apps use. A session the site carries in
+the URL rather than a cookie gets a `kind: browser` entry too, with
+`value_from: query:<key>`: when a sign-in's answer hands out a query key
+whose value looks like a session (in the redirect `Location`, or on the links
+of the first page after the sign-in) and every signed-in call then carries
+it, that key is drafted as the session, every operation that sent it gets
+`auth: <name>`, and the key is taken off each operation's inputs. The value
+is kept in the keyring, never in the definition; at run time it is appended
+to the query of each request the way a `cookie:` session is sent as a cookie.
+The sign-in call itself is left out, as a person signs in, never an agent.
+Any other token and session field is left out and
 listed, since they come from sign-in, never from the agent. Calls to other addresses, file uploads and failed calls are skipped.
 Delete the HAR file when you are done with it.
 
@@ -477,6 +500,29 @@ then drafts from the page as you see it signed in: every action gets `auth:
 session`, and the `login` block is written from the form it found, so the
 command above works later. An agent never gets this path: `itda_setup` over
 MCP refuses pages behind a sign-in and says what you should run.
+
+Some older sites keep the session in the address instead of a cookie, as a
+query parameter the sign-in hands out (`?sid=...`). Name that key with
+`value_from: query:<key>` in place of the cookie:
+
+```yaml
+auth:
+  - name: session
+    kind: browser
+    value_from: query:sid         # the query key the signed-in session rides in
+    login:
+      path: /login
+      user: username
+      password: password
+```
+
+itda signs in the same way; when the site answers with no session cookie but
+a redirect (or a first page) carrying `sid`, that value is the session. It is
+kept in the keyring like any other, and at run time it is appended to the
+query of every request to the site, the way a cookie session is sent as a
+cookie. Because it travels in URLs, it can reach a server's or a proxy's
+logs; see [THREAT_MODEL.md](THREAT_MODEL.md). A `browser` entry carries one or
+the other, a cookie or a query key, not both.
 
 A change answered with a redirect (post, then redirect, then get, as older
 sites do) has landed; its result carries the address the site pointed at. A

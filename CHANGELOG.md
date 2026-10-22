@@ -9,6 +9,31 @@ change the definition format or the CLI.
 
 ### Added
 
+- Frames: when `itda draft page` or `itda setup` fetches a page that is a
+  shell whose content lives in one or more `<iframe src>` (or an older
+  frameset) on the same origin, and the page has nothing of its own to read,
+  itda fetches each frame page as itself, on the same pacing and with the same
+  session, and drafts from the frame pages as pages of the site, each under
+  the frame's own address. At most four frames are followed, at most two deep;
+  a cross-origin frame, and a same-origin frame that answered with nothing,
+  are listed in the notes and never fetched. The setup lines and the draft say
+  what was followed ("Followed 1 frame: /frame/board."). `itda refresh`
+  follows them again.
+- Query sessions: a site that carries its session in the URL as a query key
+  (`?sid=...`) rather than a cookie now gets a `kind: browser` auth entry with
+  `value_from: query:<key>`. `itda draft har`, `itda record` and `itda setup`
+  recognise it when a sign-in's answer hands the key out (in the redirect
+  `Location` or on the first signed-in page) and every signed-in call carries
+  it: every operation that sent it gets `auth: session`, the key is dropped
+  from the operations' inputs, and the value goes to the keyring, never into
+  the definition. `itda login <site>` captures it from the sign-in the same
+  way it captures a cookie. At run time the value is appended to the query of
+  each request; it is redacted in results, error text, the audit log and the
+  recording kept for a refresh (addresses, `Location` headers and the links in
+  recorded pages). `value_from` on a `browser` entry now accepts `query:<key>`
+  beside `cookie:<name>`, with a validation error for anything else. Because
+  the value rides in URLs, `docs/THREAT_MODEL.md` notes it can reach server
+  and proxy logs. SPEC bump to come with the next minor.
 - `cargo xtask check-changelog`, run by CI: the changelog has one of each
   section per release, the newest release matches the workspace version, and
   the landing page and quickstart print the same version. CONTRIBUTING.md
