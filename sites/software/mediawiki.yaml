@@ -1,0 +1,227 @@
+# MediaWiki, through api.php. `itda setup` fills base_url with the script
+# path the wiki publishes (for en.wikipedia.org that is /w), so the one path
+# below is api.php and the action is a query input.
+spec_version: 1
+site:
+  name: mediawiki
+  title: MediaWiki
+  base_url: https://wiki.example/w
+auth:
+  # Reading needs no account. Editing uses your own browser session:
+  #   itda login mediawiki --browser
+  # https://www.mediawiki.org/wiki/API:Edit
+  - name: session
+    kind: browser
+models:
+  search_result:
+    title: {path: title}
+    pageid: {path: pageid, type: int}
+    size: {path: size, type: int}
+    words: {path: wordcount, type: int}
+    snippet: {path: snippet}
+    timestamp: {path: timestamp}
+  change:
+    type: {path: type}
+    title: {path: title}
+    pageid: {path: pageid, type: int}
+    revid: {path: revid, type: int}
+    user: {path: user}
+    timestamp: {path: timestamp}
+    comment: {path: comment}
+    old_length: {path: oldlen, type: int}
+    new_length: {path: newlen, type: int}
+  page:
+    pageid: {path: pageid, type: int}
+    title: {path: title}
+    namespace: {path: ns, type: int}
+operations:
+  - name: site-info
+    desc: Show the wiki's name, MediaWiki version and main page
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Siteinfo
+    query:
+      action: {type: string, default: query}
+      meta: {type: string, default: siteinfo}
+      siprop: {type: string, default: general}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    response:
+      format: json
+      extract_pointer: /query/general
+      required_pointers: [/sitename, /generator]
+  - name: search
+    desc: Search pages by text; returns titles with a snippet
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Search
+    query:
+      action: {type: string, default: query}
+      list: {type: string, default: search}
+      srsearch: {type: string, required: true}
+      srlimit: {type: int, default: 10}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    model: search_result
+    response:
+      format: json
+      extract_pointer: /query/search
+  - name: suggest-titles
+    desc: Suggest page titles that start with the given text
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Opensearch
+    query:
+      action: {type: string, default: opensearch}
+      search: {type: string, required: true}
+      limit: {type: int, default: 10}
+      namespace: {type: int, default: 0}
+      format: {type: string, default: json}
+    response:
+      format: json
+      required_pointers: [/1]
+  - name: page-wikitext
+    desc: Read a page's wikitext by title
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Parsing_wikitext
+    query:
+      action: {type: string, default: parse}
+      page: {type: string, required: true}
+      prop: {type: string, default: wikitext}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    response:
+      format: json
+      extract_pointer: /parse
+      required_pointers: [/title, /wikitext]
+  - name: page-html
+    desc: Read a page as rendered HTML by title
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Parsing_wikitext
+    query:
+      action: {type: string, default: parse}
+      page: {type: string, required: true}
+      prop: {type: string, default: text}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    response:
+      format: json
+      extract_pointer: /parse
+      required_pointers: [/title, /text]
+  - name: revisions
+    desc: List a page's latest revisions with author, time and summary
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Revisions
+    query:
+      action: {type: string, default: query}
+      prop: {type: string, default: revisions}
+      titles: {type: string, required: true}
+      rvlimit: {type: int, default: 10}
+      rvprop: {type: string, default: "ids|timestamp|user|comment|size"}
+      rvslots: {type: string, default: main}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    response:
+      format: json
+      extract_pointer: /query/pages
+  - name: recent-changes
+    desc: List the wiki's most recent changes
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:RecentChanges
+    query:
+      action: {type: string, default: query}
+      list: {type: string, default: recentchanges}
+      rclimit: {type: int, default: 20}
+      rcprop: {type: string, default: "title|ids|sizes|flags|user|timestamp|comment"}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    model: change
+    response:
+      format: json
+      extract_pointer: /query/recentchanges
+  - name: category-members
+    desc: List the pages in a category (give the full title, e.g. "Category:Physics")
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Categorymembers
+    query:
+      action: {type: string, default: query}
+      list: {type: string, default: categorymembers}
+      cmtitle: {type: string, required: true}
+      cmlimit: {type: int, default: 50}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    model: page
+    response:
+      format: json
+      extract_pointer: /query/categorymembers
+  - name: all-pages
+    desc: List pages in title order, starting from a title
+    method: GET
+    path: /api.php
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Allpages
+    query:
+      action: {type: string, default: query}
+      list: {type: string, default: allpages}
+      apfrom: {type: string}
+      aplimit: {type: int, default: 50}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    model: page
+    response:
+      format: json
+      extract_pointer: /query/allpages
+  - name: user-info
+    desc: Show the account the session belongs to and its rights
+    method: GET
+    path: /api.php
+    auth: session
+    effect: read
+    evidence: https://www.mediawiki.org/wiki/API:Userinfo
+    query:
+      action: {type: string, default: query}
+      meta: {type: string, default: userinfo}
+      uiprop: {type: string, default: rights}
+      format: {type: string, default: json}
+      formatversion: {type: int, default: 2}
+    response:
+      format: json
+      extract_pointer: /query/userinfo
+      required_pointers: [/name]
+  - name: edit-page
+    desc: Replace a page's wikitext, or append to it, with an edit summary
+    method: POST
+    path: /api.php
+    auth: session
+    effect: write
+    evidence: https://www.mediawiki.org/wiki/API:Edit
+    preflight:
+      - name: tokens
+        path: /api.php?action=query&meta=tokens&format=json&formatversion=2
+        extract:
+          csrf: "json:/query/tokens/csrftoken"
+    body:
+      form:
+        action: {type: string, default: edit}
+        title: {type: string, required: true}
+        text: {type: string}
+        appendtext: {type: string}
+        summary: {type: string}
+        format: {type: string, default: json}
+        token: {type: string, default: "{{step.tokens.csrf}}"}
+    response:
+      format: json
+      required_pointers: [/edit]

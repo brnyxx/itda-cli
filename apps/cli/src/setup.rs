@@ -4,7 +4,7 @@
 //! the end.
 use crate::text::{client_label, t, tf};
 use itda_policy::{Effect, operation_effect};
-use itda_setup::{Answers, Fallback, Finished, Progress, Stopped, check};
+use itda_setup::{Answers, Fallback, Finished, Progress, Stopped, Template, check};
 use itda_spec::Spec;
 use itda_types::error::{AppResult, usage};
 use std::{
@@ -20,6 +20,7 @@ pub struct Flags {
     pub name: Option<String>,
     /// `Some(true)` records, `Some(false)` never opens the browser, `None` asks.
     pub record: Option<bool>,
+    pub template: Template,
     pub client: Option<String>,
     pub yes: bool,
 }
@@ -82,6 +83,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
             url: flags.url.clone(),
             name: flags.name.clone(),
             record: flags.record == Some(true),
+            template: flags.template.clone(),
         },
         &mut answers,
         &mut |progress| say(progress, &mut width),
@@ -143,6 +145,17 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
 fn say(progress: Progress<'_>, width: &mut usize) {
     match progress {
         Progress::Looking { host } => step(1, &tf("looking", &[("host", host)])),
+        Progress::Recognised(found) => {
+            let key = if found.confirmed {
+                "recognised"
+            } else {
+                "template_unconfirmed"
+            };
+            eprintln!(
+                "    {}",
+                tf(key, &[("software", &found.title), ("base", &found.base)])
+            );
+        }
         Progress::PageFetched(summary) => {
             eprintln!("    {}", t("fetched_page"));
             eprintln!("    {}", tf("found", &[("what", &describe_page(summary))]));

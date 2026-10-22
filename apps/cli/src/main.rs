@@ -135,6 +135,14 @@ enum Command {
         /// Never open the browser; fail if the page cannot be read
         #[arg(long)]
         no_record: bool,
+        /// Use the template for this software whatever the page says:
+        /// gitlab, jira, confluence, redmine, discourse, mediawiki, wordpress
+        /// or gitea (also Forgejo)
+        #[arg(long = "as", value_name = "SOFTWARE", conflicts_with_all = ["no_template", "record"])]
+        software: Option<String>,
+        /// Read the page like any other, even when it runs known software
+        #[arg(long)]
+        no_template: bool,
         /// The agent to connect: claude-desktop, claude-code, cursor, vscode,
         /// codex or none
         #[arg(long)]
@@ -425,6 +433,8 @@ fn main() -> ExitCode {
             name,
             record,
             no_record,
+            software,
+            no_template,
             client,
             yes,
         } => block_on(setup::run(
@@ -438,6 +448,11 @@ fn main() -> ExitCode {
                     Some(false)
                 } else {
                     None
+                },
+                template: match software {
+                    Some(name) => itda_setup::Template::Named(name),
+                    None if no_template => itda_setup::Template::Off,
+                    None => itda_setup::Template::Auto,
                 },
                 client,
                 yes,
@@ -581,6 +596,8 @@ fn first_command(typed: &str) -> Option<First> {
         name: None,
         record: false,
         no_record: false,
+        software: None,
+        no_template: false,
         client: None,
         yes: false,
     }))

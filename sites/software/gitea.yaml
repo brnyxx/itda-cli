@@ -1,0 +1,289 @@
+# Gitea and Forgejo, through their API v1. `itda setup` fills base_url with
+# the instance it recognised (<instance>/api/v1), sub-path included. The
+# paths and fields below are from the API description every instance serves
+# at /swagger.v1.json.
+spec_version: 1
+site:
+  name: gitea
+  title: Gitea
+  base_url: https://gitea.example/api/v1
+auth:
+  # Public repositories can be read without an account. Private ones and
+  # changes need an access token (Settings > Applications), sent as
+  # "Authorization: token <token>":
+  #   echo "$GITEA_TOKEN" | itda login gitea
+  - name: token
+    kind: header
+    header: Authorization
+    prefix: "token "
+    value_from: store:gitea/api-key
+models:
+  repo:
+    id: {path: id, type: int}
+    full_name: {path: full_name}
+    description: {path: description}
+    default_branch: {path: default_branch}
+    private: {path: private, type: bool}
+    fork: {path: fork, type: bool}
+    stars: {path: stars_count, type: int}
+    forks: {path: forks_count, type: int}
+    open_issues: {path: open_issues_count, type: int}
+    updated_at: {path: updated_at}
+    url: {path: html_url}
+  issue:
+    number: {path: number, type: int}
+    title: {path: title}
+    state: {path: state}
+    author: {path: user.login}
+    comments: {path: comments, type: int}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    url: {path: html_url}
+    body: {path: body}
+  pull:
+    number: {path: number, type: int}
+    title: {path: title}
+    state: {path: state}
+    author: {path: user.login}
+    head: {path: head.ref}
+    base: {path: base.ref}
+    merged: {path: merged, type: bool}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    url: {path: html_url}
+  comment:
+    id: {path: id, type: int}
+    author: {path: user.login}
+    created_at: {path: created_at}
+    updated_at: {path: updated_at}
+    body: {path: body}
+  release:
+    tag: {path: tag_name}
+    name: {path: name}
+    draft: {path: draft, type: bool}
+    prerelease: {path: prerelease, type: bool}
+    published_at: {path: published_at}
+    url: {path: html_url}
+    notes: {path: body}
+  branch:
+    name: {path: name}
+    protected: {path: protected, type: bool}
+    commit: {path: commit.id}
+    committed_at: {path: commit.timestamp}
+  org:
+    id: {path: id, type: int}
+    name: {path: name}
+    full_name: {path: full_name}
+    description: {path: description}
+    website: {path: website}
+    visibility: {path: visibility}
+operations:
+  - name: version
+    desc: Show the Gitea or Forgejo version
+    method: GET
+    path: /version
+    effect: read
+    evidence: "GET /version (getVersion), https://gitea.com/swagger.v1.json"
+    response:
+      format: json
+      required_pointers: [/version]
+  - name: search-repos
+    desc: Search repositories by name or description, most recently updated first
+    method: GET
+    path: /repos/search
+    effect: read
+    evidence: "GET /repos/search (repoSearch), https://gitea.com/swagger.v1.json"
+    query:
+      q: {type: string}
+      sort: {type: string, default: updated}
+      order: {type: string, default: desc}
+      limit: {type: int, default: 20}
+      page: {type: int, default: 1}
+    model: repo
+    response:
+      format: json
+      extract_pointer: /data
+  - name: repo
+    desc: Show a repository's description, stars and default branch
+    method: GET
+    path: /repos/{owner}/{repo}
+    effect: read
+    evidence: "GET /repos/{owner}/{repo} (repoGet), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    model: repo
+    response:
+      format: json
+      required_pointers: [/id, /full_name]
+  - name: user-repos
+    desc: List the repositories a user or organisation owns
+    method: GET
+    path: /users/{username}/repos
+    effect: read
+    evidence: "GET /users/{username}/repos (userListRepos), https://gitea.com/swagger.v1.json"
+    params:
+      username: {type: string}
+    query:
+      limit: {type: int, default: 30}
+      page: {type: int, default: 1}
+    model: repo
+    response:
+      format: json
+  - name: orgs
+    desc: List the organisations on the instance
+    method: GET
+    path: /orgs
+    effect: read
+    evidence: "GET /orgs (orgGetAll), https://gitea.com/swagger.v1.json"
+    query:
+      limit: {type: int, default: 30}
+      page: {type: int, default: 1}
+    model: org
+    response:
+      format: json
+  - name: issues
+    desc: List a repository's issues; state is open, closed or all, q searches the text
+    method: GET
+    path: /repos/{owner}/{repo}/issues
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/issues (issueListIssues), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    query:
+      state: {type: string, default: open}
+      q: {type: string}
+      type: {type: string, default: issues}
+      limit: {type: int, default: 20}
+      page: {type: int, default: 1}
+    model: issue
+    response:
+      format: json
+  - name: issue
+    desc: Read one issue with its description
+    method: GET
+    path: /repos/{owner}/{repo}/issues/{index}
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/issues/{index} (issueGetIssue), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+      index: {type: int}
+    model: issue
+    response:
+      format: json
+      required_pointers: [/number, /title]
+  - name: issue-comments
+    desc: Read the comments on an issue or pull request
+    method: GET
+    path: /repos/{owner}/{repo}/issues/{index}/comments
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/issues/{index}/comments (issueGetComments), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+      index: {type: int}
+    model: comment
+    response:
+      format: json
+  - name: pulls
+    desc: List a repository's pull requests; state is open, closed or all
+    method: GET
+    path: /repos/{owner}/{repo}/pulls
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/pulls (repoListPullRequests), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    query:
+      state: {type: string, default: open}
+      sort: {type: string, default: recentupdate}
+      limit: {type: int, default: 20}
+      page: {type: int, default: 1}
+    model: pull
+    response:
+      format: json
+  - name: releases
+    desc: List a repository's releases, newest first
+    method: GET
+    path: /repos/{owner}/{repo}/releases
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/releases (repoListReleases), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    query:
+      limit: {type: int, default: 20}
+      page: {type: int, default: 1}
+    model: release
+    response:
+      format: json
+  - name: latest-release
+    desc: Show a repository's latest release and its notes
+    method: GET
+    path: /repos/{owner}/{repo}/releases/latest
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/releases/latest (repoGetLatestRelease), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    model: release
+    response:
+      format: json
+      required_pointers: [/tag_name]
+  - name: branches
+    desc: List a repository's branches
+    method: GET
+    path: /repos/{owner}/{repo}/branches
+    effect: read
+    evidence: "GET /repos/{owner}/{repo}/branches (repoListBranches), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    query:
+      limit: {type: int, default: 50}
+      page: {type: int, default: 1}
+    model: branch
+    response:
+      format: json
+  - name: me
+    desc: Show the account the token belongs to
+    method: GET
+    path: /user
+    auth: token
+    effect: read
+    evidence: "GET /user (userGetCurrent), https://gitea.com/swagger.v1.json"
+    response:
+      format: json
+      required_pointers: [/id, /login]
+  - name: create-issue
+    desc: Open an issue in a repository
+    method: POST
+    path: /repos/{owner}/{repo}/issues
+    auth: token
+    effect: write
+    evidence: "POST /repos/{owner}/{repo}/issues (issueCreateIssue), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+    body:
+      json:
+        title: {type: string, required: true}
+        body: {type: string}
+    model: issue
+  - name: comment-issue
+    desc: Add a comment to an issue or pull request
+    method: POST
+    path: /repos/{owner}/{repo}/issues/{index}/comments
+    auth: token
+    effect: write
+    evidence: "POST /repos/{owner}/{repo}/issues/{index}/comments (issueCreateComment), https://gitea.com/swagger.v1.json"
+    params:
+      owner: {type: string}
+      repo: {type: string}
+      index: {type: int}
+    body:
+      json:
+        body: {type: string, required: true}
+    model: comment

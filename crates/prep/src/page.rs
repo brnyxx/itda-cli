@@ -66,10 +66,7 @@ pub fn from_pages_and_description(
     description: Option<&Description>,
     options: &Options,
 ) -> AppResult<Draft> {
-    let mut parts = page_parts(pages, options)?;
-    let described = description.and_then(|d| merge_description(&mut parts, d, options));
-    let lang = language(&options.lang, &page_lang(&pages[0].html));
-    crate::add_schemas(&mut parts, options, &lang);
+    let (parts, described) = page_parts_with_description(pages, description, options)?;
     if parts.operations.is_empty() {
         return Err(usage(
             "No actions could be drafted",
@@ -79,6 +76,20 @@ pub fn from_pages_and_description(
     let mut draft = parts.finish();
     draft.described = described;
     Ok(draft)
+}
+
+/// The pages' parts with the description's reads and the GraphQL schemas'
+/// reads merged in, before the final checks.
+pub(crate) fn page_parts_with_description(
+    pages: &[Page],
+    description: Option<&Description>,
+    options: &Options,
+) -> AppResult<(Parts, Option<Described>)> {
+    let mut parts = page_parts(pages, options)?;
+    let described = description.and_then(|d| merge_description(&mut parts, d, options));
+    let lang = language(&options.lang, &page_lang(&pages[0].html));
+    crate::add_schemas(&mut parts, options, &lang);
+    Ok((parts, described))
 }
 
 /// Reads from the description join the page's operations, under the page's

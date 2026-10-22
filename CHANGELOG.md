@@ -9,6 +9,28 @@ change the definition format or the CLI.
 
 ### Added
 
+- Sites that run known software are recognised. `itda setup` reads the
+  page's HTML for GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
+  WordPress and Gitea or Forgejo (a `generator` meta, well-known asset paths,
+  the Atlassian context-path metas, body classes), confirms the guess with
+  exactly one GET to that software's own version or info endpoint, and then
+  drafts from a template under `sites/software/` instead of reading the page
+  like any other: the reads an agent needs most, up to three changes marked
+  as such, models and the software's own way of signing in, every operation
+  with its documentation in `evidence`. The template's `base_url` is filled
+  with the instance's API base, context path included (`/jira`, `/w`, a
+  GitLab relative URL root, a Gitea `appSubUrl`, the WordPress API root the
+  page links to); the site is named after the host; one line says so ("This
+  looks like GitLab. Using its API at <base>."). The page draft still runs
+  and its lists, forms and feeds join the template, the same method and path
+  drafted once, and a page that needs a sign-in or scripts still gets the
+  template when the software is confirmed. A fingerprint the API does not
+  confirm is dropped quietly. `itda setup --as <software>` forces a
+  template, `--no-template` skips them, `itda check` works on the result as
+  on any site, and `itda_setup` over MCP takes `template` and names the
+  template it used in its result. The site's `sources.json` names the
+  template and its API base, so `itda refresh` fills the same template
+  again, with the page read again when it still opens.
 - `itda refresh <site>`: when `itda check` says `site_changed`, draft the
   site again from the sources it was set up from and merge the result with
   the installed definition. The site's name, title and address, `defaults`,

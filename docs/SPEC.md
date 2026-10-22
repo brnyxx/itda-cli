@@ -88,6 +88,52 @@ form always sends it; nothing else from the page is copied. A page drawn by
 scripts shows little to a plain fetch; the draft says so and points at
 recording the site instead.
 
+## Start from the software a site runs
+
+Most intranets run software everyone knows, and that software has a stable
+API worth more than a reading of one page. `itda setup` recognises eight of
+them from the page's HTML (a `generator` meta, a well-known asset path, an
+Atlassian context-path meta, a body class) and confirms the guess with exactly
+one GET to that software's own endpoint, as itda, through the same gate as
+every other request. No fingerprint, no request. A confirmed match says so in
+one line, "This looks like GitLab. Using its API at <base>.", and drafts from
+the software's template under [`sites/software/`](https://github.com/brnyxx/itda-cli/tree/main/sites/software):
+
+| Software | Recognised by | Confirmed with | API base | Signs in with |
+|---|---|---|---|---|
+| GitLab | `og:site_name` GitLab, `gl-*` body classes, `/assets/webpack/` scripts (their prefix is the relative URL root) | `GET /api/v4/projects?per_page=1` | `<root>/api/v4` | `PRIVATE-TOKEN` |
+| Jira (Data Center, Cloud) | `application-name` JIRA, `ajs-context-path` | `GET /rest/api/2/serverInfo`, whose `baseUrl` becomes the base | `<baseUrl>` | the `Authorization` header you store: `Bearer <PAT>` or `Basic <email:token>` |
+| Confluence | `confluence-base-url` / `confluence-context-path` metas | `GET /rest/api/space?limit=1` | `<context>` | the same |
+| Redmine | `controller-*` and `action-*` body classes with `/stylesheets/application.css` (its prefix is the sub-directory) | `GET /projects.json?limit=1` | `<root>` | `X-Redmine-API-Key` |
+| Discourse | `generator` Discourse | `GET /site/basic-info.json` | origin | reads only (posting needs two headers a definition cannot send yet) |
+| MediaWiki | `generator` MediaWiki or the `mediawiki` body class; `EditURI` names `api.php` | `GET api.php?action=query&meta=siteinfo` | the script path (`/w` on Wikipedia) | the browser session, for editing |
+| WordPress | `<link rel="https://api.w.org/">`, else `generator` WordPress | `GET <wp-json>/` listing `wp/v2` | the linked API root | an application password, as basic auth |
+| Gitea, Forgejo | their default `keywords` meta; `appSubUrl` in `window.config` | `GET /api/v1/version` (a `+gitea-` version is Forgejo) | `<sub>/api/v1` | `Authorization: token` |
+
+Each template holds the reads an agent needs most (lists, search, one item;
+eight to fourteen), up to three changes marked as such, models for the
+records and the software's own way of signing in, every operation with its
+documentation in `evidence`. The site is named after the host
+(`issues.apache.org` becomes `issues-apache`; `--name` overrides), the
+template's `store:<software>/...` secrets follow that name, and every read
+is tried once as on any site; a read the instance does not answer (a
+private project list, a disabled module) is removed. The page draft still
+runs: its lists, forms and feeds join the template under the page's own
+address when it differs from the API's, the same method and path drafted
+once. A page that is not enough on its own, because it needs a sign-in or is
+drawn by scripts, still gets the template when the software is confirmed.
+When the page says WordPress but `/wp-json/` does not answer the way
+WordPress does, nothing is said and the page is drafted like any other.
+
+`itda setup --as <software>` forces a template (the fingerprint's base when
+the page agrees, else the API under the page's origin; the confirm request is
+still made and the line says when it did not answer), `--no-template` reads
+the page like any other, and `itda check` and `itda refresh` work on the
+result as on any site: a refresh fills the same template at the same API
+base and merges the page's reads again. Over MCP, `itda_setup` does the same, takes `template` (a name, or
+`none`) and names the template it used in its result. The templates are not
+installed by `itda add`: their `base_url` is a placeholder the setup fills.
+
 ## Start from a browser recording
 
 Most internal and older sites publish no API description, but their pages
@@ -482,7 +528,9 @@ one. That copy keeps the shape of the recording and not its values: cookie,
 token and session values, private query and body fields and the answers of
 sign-in calls are blanked to `<redacted>` before it is written, since a
 refresh needs names and shapes only; `itda remove` deletes it with the site. `template` names the ready-made template a
-site came from, once there are any. `base_url`, `include` and `lang` are the
+site came from (`gitlab`, `jira`...), with its API base in `base_url`, so a
+refresh fills the same template again and reads the page again when it still
+opens. `base_url`, `include` and `lang` are otherwise the
 choices the draft was made with, each left out when it was not given. Nothing in the file is a secret. `drafted`
 holds a hash of every operation as it was drafted, which is how a refresh
 tells an operation you edited by hand from one it may replace. A definition

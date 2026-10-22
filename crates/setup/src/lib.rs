@@ -7,7 +7,9 @@
 //!
 //! The sign-in ([`login`]), the check ([`check`]), the installed sites
 //! ([`sites`]) and the credentials a recording used ([`credentials`]) are
-//! the same pieces the other commands are built from.
+//! the same pieces the other commands are built from. [`software`]
+//! recognises the software a site runs, so a GitLab or a Jira gets its real
+//! API from a ready-made template instead of a reading of the page.
 pub mod check;
 pub mod credentials;
 pub mod description;
@@ -16,6 +18,7 @@ pub mod login;
 pub mod record;
 pub mod refresh;
 pub mod sites;
+pub mod software;
 
 use itda_html::evidence;
 use itda_net::Network;
@@ -51,6 +54,22 @@ pub struct Request {
     pub name: Option<String>,
     /// Start by recording, without looking at the page first.
     pub record: bool,
+    /// Whether to use a ready-made template for software the site runs.
+    pub template: Template,
+}
+
+/// Which ready-made template to use, when the site runs software itda
+/// knows (`sites/software/`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Template {
+    /// Recognise the software from the page and confirm it with one request
+    /// to its own API.
+    #[default]
+    Auto,
+    /// Use this template whatever the page says (`itda setup --as jira`).
+    Named(String),
+    /// Read the page like any other (`--no-template`).
+    Off,
 }
 
 /// Why a fetched page is not enough to draft from.
@@ -195,6 +214,8 @@ pub enum Progress<'a> {
     Looking {
         host: &'a str,
     },
+    /// The site runs software itda knows; its template is used.
+    Recognised(&'a software::Recognised),
     /// The page opened without a sign-in and this is what it offers.
     PageFetched(&'a PageSummary),
     /// A GraphQL endpoint was asked what it offers.
@@ -242,6 +263,8 @@ pub struct Done {
     pub removed: Vec<String>,
     /// Whether a credential the recording used was kept.
     pub kept_credentials: bool,
+    /// The software the site was recognised as, when a template was used.
+    pub recognised: Option<software::Recognised>,
 }
 
 /// Why the steps ended without a site.
@@ -273,6 +296,15 @@ pub async fn run(
 ) -> AppResult<Finished> {
     let url = itda_types::url::validate_url(&request.url)?;
     let host = url.host_str().unwrap_or_default().to_owned();
+    let forced = match &request.template {
+        Template::Named(name) => Some(software::by_name(name).ok_or_else(|| {
+            usage(
+                format!("No template for software named {name}"),
+                format!("Templates: {}.", software::names().join(", ")),
+            )
+        })?),
+        _ => None,
+    };
     let mut options = Options {
         name: request.name.clone(),
         base_url: None,
@@ -285,26 +317,64 @@ pub async fn run(
     report(Progress::Looking { host: &host });
     let mut record = request.record;
     let mut draft = None;
+    let mut recognised = None;
     if !record {
-        match probe(ctx, url.as_str()).await? {
-            Ok(page) => {
+        let probed = probe(ctx, url.as_str()).await?;
+        // The software the site runs decides first, from the page's HTML,
+        // confirmed by one request to its own API.
+        let html = probed.page.as_ref().map(|page| page.html.as_str());
+        recognised = if request.template == Template::Off {
+            None
+        } else if let Some(definition) = forced {
+            match software::forced(definition, html, url.as_str()) {
+                Some(hint) => Some(software::confirm(&ctx.net, &hint).await.unwrap_or(
+                    software::Recognised {
+                        software: definition.name,
+                        title: hint.title,
+                        base: hint.base,
+                        version: None,
+                        confirmed: false,
+                    },
+                )),
+                None => None,
+            }
+        } else {
+            match html.and_then(|html| software::fingerprint(html, url.as_str())) {
+                Some(hint) => software::confirm(&ctx.net, &hint).await,
+                None => None,
+            }
+        };
+        if let Some(found) = &recognised {
+            report(Progress::Recognised(found));
+        }
+        match probed.outcome {
+            Ok(()) => {
+                let page = probed.page.ok_or_else(|| AppError::api("internal", 500))?;
                 let summary = summarize(&page);
                 report(Progress::PageFetched(&summary));
                 if summary.sign_in_form && answers.record_anyway()? {
                     record = true;
                 } else {
-                    draft = Some(draft_page(ctx, &page, &mut options, report).await?);
+                    draft = Some(
+                        draft_page(ctx, &page, &mut options, recognised.as_ref(), report).await?,
+                    );
                 }
             }
             Err((why, refused)) => {
                 if let Some(refused) = &refused {
                     report(Progress::Refused(refused));
                 }
-                report(Progress::NeedsRecord(why));
-                if !answers.record(why)? {
-                    return Ok(Finished::Stopped(Stopped::NoRecord { why, refused }));
+                // A page that is not enough on its own still gets the
+                // software's API when the software is known.
+                if let Some(found) = &recognised {
+                    draft = Some(itda_prep::from_template(&fill(found), &[], None, &options)?);
+                } else {
+                    report(Progress::NeedsRecord(why));
+                    if !answers.record(why)? {
+                        return Ok(Finished::Stopped(Stopped::NoRecord { why, refused }));
+                    }
+                    record = true;
                 }
-                record = true;
             }
         }
     }
@@ -330,7 +400,12 @@ pub async fn run(
     } else {
         vec![request.url.clone()]
     };
-    let sources = refresh::Sources::of_pages(&pages, &draft, &options);
+    let mut sources = refresh::Sources::of_pages(&pages, &draft, &options);
+    if let Some(found) = &recognised {
+        // A refresh fills the same template at the same API base.
+        sources.template = Some(found.software.to_owned());
+        sources.base_url = Some(found.base.clone());
+    }
 
     // 3. Save, replacing only with a yes.
     let path = sites::specs_dir(&ctx.home).join(&site).join("spec.yaml");
@@ -385,15 +460,41 @@ pub async fn run(
         outcomes,
         removed,
         kept_credentials,
+        recognised,
     })))
 }
 
-/// Fetch the page as itda; `Err` says why that is not enough, with what the
-/// gate saw when the page refused itda.
-pub async fn probe(
-    ctx: &Context,
-    url: &str,
-) -> AppResult<Result<Page, (Fallback, Option<Refused>)>> {
+/// What fills a software's template for one site.
+pub fn fill(found: &software::Recognised) -> itda_prep::Fill<'_> {
+    itda_prep::Fill {
+        template: found.definition().template,
+        software: &found.title,
+        base_url: &found.base,
+    }
+}
+
+/// A page, fetched as itda.
+pub struct Probed {
+    /// The page when the answer was HTML, even when it is not enough to
+    /// draft from: a sign-in page or an app shell still says what software
+    /// made it.
+    pub page: Option<Page>,
+    /// `Err` says why the page is not enough, with what the gate saw when
+    /// the page refused itda.
+    pub outcome: Result<(), (Fallback, Option<Refused>)>,
+}
+
+impl Probed {
+    fn not_enough(why: Fallback, refused: Option<Refused>) -> Self {
+        Self {
+            page: None,
+            outcome: Err((why, refused)),
+        }
+    }
+}
+
+/// Fetch the page as itda.
+pub async fn probe(ctx: &Context, url: &str) -> AppResult<Probed> {
     let request = itda_net::Request {
         limit: 8 * 1024 * 1024,
         ..itda_net::Request::read(url)
@@ -406,18 +507,18 @@ pub async fn probe(
                 "blocked_by_site" | "site_rate_limited"
             ) =>
         {
-            return Ok(Err((Fallback::Blocked, None)));
+            return Ok(Probed::not_enough(Fallback::Blocked, None));
         }
         Err(error) => return Err(error),
     };
     if let Some(refused) = refusal(url, &response) {
-        return Ok(Err((refused.fallback(), Some(refused))));
+        return Ok(Probed::not_enough(refused.fallback(), Some(refused)));
     }
     if matches!(response.status, 401 | 403) {
-        return Ok(Err((Fallback::SignIn, None)));
+        return Ok(Probed::not_enough(Fallback::SignIn, None));
     }
     if !response.successful() {
-        return Ok(Err((Fallback::Blocked, None)));
+        return Ok(Probed::not_enough(Fallback::Blocked, None));
     }
     if !response.header("content-type").contains("html") {
         return Err(usage(
@@ -430,16 +531,21 @@ pub async fn probe(
         .iter()
         .any(|form| form.password)
         && evidence::infer_extraction(&html, &response.url).is_none();
-    if evidence::script_shell(&html) {
-        return Ok(Err((Fallback::Scripted, None)));
-    }
-    if signed_in_form && response.url.to_lowercase().contains("login") {
-        return Ok(Err((Fallback::SignIn, None)));
-    }
-    Ok(Ok(Page {
+    let page = Page {
         url: response.url.clone(),
         html,
-    }))
+    };
+    let outcome = if evidence::script_shell(&page.html) {
+        Err((Fallback::Scripted, None))
+    } else if signed_in_form && response.url.to_lowercase().contains("login") {
+        Err((Fallback::SignIn, None))
+    } else {
+        Ok(())
+    };
+    Ok(Probed {
+        page: Some(page),
+        outcome,
+    })
 }
 
 /// What the page offers, counted.
@@ -466,14 +572,24 @@ pub fn summarize(page: &Page) -> PageSummary {
 }
 
 /// Draft from one page: ask the GraphQL endpoints it names, read the API
-/// description it publishes, then draft from all of it.
+/// description it publishes, then draft from all of it; with `software`
+/// recognised, its template comes first and the page's reads join it.
 pub async fn draft_page(
     ctx: &Context,
     page: &Page,
     options: &mut Options,
+    software: Option<&software::Recognised>,
     report: &mut (dyn FnMut(Progress<'_>) + Send),
 ) -> AppResult<Draft> {
-    draft_pages(ctx, std::slice::from_ref(page), &[], options, report).await
+    draft_pages(
+        ctx,
+        std::slice::from_ref(page),
+        &[],
+        options,
+        software,
+        report,
+    )
+    .await
 }
 
 /// Draft from pages: ask the GraphQL endpoints they name (and `endpoints`,
@@ -484,6 +600,7 @@ pub async fn draft_pages(
     pages: &[Page],
     endpoints: &[String],
     options: &mut Options,
+    software: Option<&software::Recognised>,
     report: &mut (dyn FnMut(Progress<'_>) + Send),
 ) -> AppResult<Draft> {
     let mut endpoints: Vec<String> = endpoints.to_vec();
@@ -494,7 +611,12 @@ pub async fn draft_pages(
     }
     options.schemas = introspect(ctx, &endpoints, report).await;
     let description = description::find(&ctx.net, pages).await;
-    let draft = itda_prep::from_pages_and_description(pages, description.as_ref(), options)?;
+    let draft = match software {
+        Some(found) => {
+            itda_prep::from_template(&fill(found), pages, description.as_ref(), options)?
+        }
+        None => itda_prep::from_pages_and_description(pages, description.as_ref(), options)?,
+    };
     if let Some(described) = &draft.described {
         report(Progress::Described(described));
     }

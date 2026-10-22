@@ -1,0 +1,247 @@
+# Redmine, through its REST API (JSON). `itda setup` fills base_url with the
+# instance it recognised, including a sub-directory such as /redmine.
+spec_version: 1
+site:
+  name: redmine
+  title: Redmine
+  base_url: https://redmine.example
+auth:
+  # Public projects can be read without an account. Private ones and
+  # changes need your API key, shown under "My account" once the
+  # administrator has enabled the REST API:
+  #   echo "$REDMINE_API_KEY" | itda login redmine
+  # https://www.redmine.org/projects/redmine/wiki/Rest_api
+  - name: key
+    kind: header
+    header: X-Redmine-API-Key
+    value_from: store:redmine/api-key
+models:
+  project:
+    id: {path: id, type: int}
+    identifier: {path: identifier}
+    name: {path: name}
+    description: {path: description}
+    status: {path: status, type: int}
+    is_public: {path: is_public, type: bool}
+    parent: {path: parent.name}
+    created_on: {path: created_on}
+    updated_on: {path: updated_on}
+  issue:
+    id: {path: id, type: int}
+    subject: {path: subject}
+    project: {path: project.name}
+    tracker: {path: tracker.name}
+    status: {path: status.name}
+    priority: {path: priority.name}
+    author: {path: author.name}
+    assigned_to: {path: assigned_to.name}
+    done_ratio: {path: done_ratio, type: int}
+    created_on: {path: created_on}
+    updated_on: {path: updated_on}
+    description: {path: description}
+  wiki_page:
+    title: {path: title}
+    version: {path: version, type: int}
+    author: {path: author.name}
+    created_on: {path: created_on}
+    updated_on: {path: updated_on}
+    text: {path: text}
+  time_entry:
+    id: {path: id, type: int}
+    project: {path: project.name}
+    issue: {path: issue.id, type: int}
+    user: {path: user.name}
+    activity: {path: activity.name}
+    hours: {path: hours, type: float}
+    spent_on: {path: spent_on}
+    comments: {path: comments}
+  news:
+    id: {path: id, type: int}
+    project: {path: project.name}
+    title: {path: title}
+    summary: {path: summary}
+    author: {path: author.name}
+    created_on: {path: created_on}
+    description: {path: description}
+  version:
+    id: {path: id, type: int}
+    name: {path: name}
+    status: {path: status}
+    due_date: {path: due_date}
+    description: {path: description}
+    created_on: {path: created_on}
+  issue_status:
+    id: {path: id, type: int}
+    name: {path: name}
+    is_closed: {path: is_closed, type: bool}
+operations:
+  - name: projects
+    desc: List the projects you can see
+    method: GET
+    path: /projects.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Projects
+    query:
+      limit: {type: int, default: 25}
+      offset: {type: int, default: 0}
+    model: project
+    response:
+      format: json
+      extract_pointer: /projects
+  - name: project
+    desc: Show one project by id or identifier
+    method: GET
+    path: /projects/{project}.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Projects
+    params:
+      project: {type: string}
+    model: project
+    response:
+      format: json
+      extract_pointer: /project
+      required_pointers: [/id, /name]
+  - name: issues
+    desc: List open issues, most recently updated first; filter by project, status (open, closed, *) or assignee
+    method: GET
+    path: /issues.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Issues
+    query:
+      project_id: {type: string}
+      status_id: {type: string, default: open}
+      assigned_to_id: {type: string}
+      sort: {type: string, default: "updated_on:desc"}
+      limit: {type: int, default: 25}
+      offset: {type: int, default: 0}
+    model: issue
+    response:
+      format: json
+      extract_pointer: /issues
+  - name: issue
+    desc: Read one issue with its description and journal
+    method: GET
+    path: /issues/{id}.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Issues
+    params:
+      id: {type: int}
+    query:
+      include: {type: string, default: journals}
+    model: issue
+    response:
+      format: json
+      extract_pointer: /issue
+      required_pointers: [/id, /subject]
+  - name: wiki-pages
+    desc: List a project's wiki pages
+    method: GET
+    path: /projects/{project}/wiki/index.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_WikiPages
+    params:
+      project: {type: string}
+    model: wiki_page
+    response:
+      format: json
+      extract_pointer: /wiki_pages
+  - name: wiki-page
+    desc: Read one wiki page by title
+    method: GET
+    path: /projects/{project}/wiki/{title}.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_WikiPages
+    params:
+      project: {type: string}
+      title: {type: string}
+    model: wiki_page
+    response:
+      format: json
+      extract_pointer: /wiki_page
+      required_pointers: [/title, /text]
+  - name: time-entries
+    desc: List time entries, newest first; filter by project, user or a date range (from, to as YYYY-MM-DD)
+    method: GET
+    path: /time_entries.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_TimeEntries
+    query:
+      project_id: {type: string}
+      user_id: {type: string}
+      from: {type: string}
+      to: {type: string}
+      limit: {type: int, default: 25}
+    model: time_entry
+    response:
+      format: json
+      extract_pointer: /time_entries
+  - name: news
+    desc: List the latest news across projects
+    method: GET
+    path: /news.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_News
+    query:
+      limit: {type: int, default: 25}
+    model: news
+    response:
+      format: json
+      extract_pointer: /news
+  - name: versions
+    desc: List a project's versions (milestones)
+    method: GET
+    path: /projects/{project}/versions.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Versions
+    params:
+      project: {type: string}
+    model: version
+    response:
+      format: json
+      extract_pointer: /versions
+  - name: issue-statuses
+    desc: List the issue statuses and which of them count as closed
+    method: GET
+    path: /issue_statuses.json
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_IssueStatuses
+    model: issue_status
+    response:
+      format: json
+      extract_pointer: /issue_statuses
+  - name: me
+    desc: Show the account the API key belongs to
+    method: GET
+    path: /users/current.json
+    auth: key
+    effect: read
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Users
+    response:
+      format: json
+      extract_pointer: /user
+      required_pointers: [/id, /login]
+  - name: create-issue
+    desc: Create an issue in a project
+    method: POST
+    path: /issues.json
+    auth: key
+    effect: write
+    evidence: https://www.redmine.org/projects/redmine/wiki/Rest_Issues
+    body:
+      json:
+        project_id: {type: string, required: true}
+        subject: {type: string, required: true}
+        description: {type: string}
+        tracker_id: {type: int}
+        priority_id: {type: int}
+      json_template:
+        issue:
+          project_id: "{{project_id}}"
+          subject: "{{subject}}"
+          description: "{{description}}"
+          tracker_id: "{{tracker_id}}"
+          priority_id: "{{priority_id}}"
+    model: issue
+    response:
+      format: json
+      extract_pointer: /issue

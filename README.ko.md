@@ -95,6 +95,14 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 말합니다). 그냥 `itda`만 치면 주소를 물어보고, 스크립트에서는 `itda setup <주소>`에
 옵션을 줍니다.
 
+잘 알려진 소프트웨어로 돌아가는 사이트는 알아봅니다. 페이지가 GitLab, Jira,
+Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea(Forgejo 포함)라고
+말하고 그 소프트웨어의 API에 보낸 요청 하나가 이를 확인하면, 에이전트는
+미리 만들어 둔 템플릿([`sites/software/`](sites/software/))으로 그 소프트웨어의
+진짜 API를 받고, 로그인도 그 소프트웨어 방식으로 하며, 페이지가 보여주는
+것도 함께 들어갑니다. `itda setup --as jira`는 템플릿을 강제하고,
+`--no-template`은 페이지를 다른 사이트처럼 읽습니다.
+
 에이전트가 한번 연결되면 그냥 말로 시켜도 됩니다. "news.ycombinator.com
 세팅해 줘"라고 하면 에이전트가 `itda_setup`을 부르고, 같은 방식으로 페이지를
 살펴 초안을 만들고 실제로 불러본 뒤, 그 사이트의 액션이 같은 대화 안에서

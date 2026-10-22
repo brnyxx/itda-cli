@@ -20,6 +20,16 @@ pub fn t(key: &str) -> &'static str {
             "이 페이지는 로그인 없이 열립니다.",
         ),
         ("found", "Found: {what}.", "찾은 것: {what}."),
+        (
+            "recognised",
+            "This looks like {software}. Using its API at {base}.",
+            "{software}로 보입니다. {base}의 API를 씁니다.",
+        ),
+        (
+            "template_unconfirmed",
+            "Using the {software} template at {base} as asked; its API did not answer there yet.",
+            "요청대로 {software} 템플릿을 {base}에 씁니다. 그 주소의 API는 아직 응답하지 않았습니다.",
+        ),
         ("found_list", "a list of {n} records", "목록 {n}건"),
         ("found_form", "a form", "폼 1개"),
         ("found_forms", "{n} forms", "폼 {n}개"),

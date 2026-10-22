@@ -1,0 +1,258 @@
+# WordPress, through its REST API (wp/v2). `itda setup` fills base_url with
+# the API root the site advertises in <link rel="https://api.w.org/">.
+spec_version: 1
+site:
+  name: wordpress
+  title: WordPress
+  base_url: https://blog.example/wp-json
+auth:
+  # Published posts, pages and comments can be read without an account.
+  # Changes use an application password, created under Users > Profile, sent
+  # as basic auth with your username:
+  #   echo "$(printf '%s:%s' you "$APP_PASSWORD" | base64)" | itda login wordpress
+  # https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/
+  - name: app-password
+    kind: header
+    header: Authorization
+    prefix: "Basic "
+    value_from: store:wordpress/api-key
+models:
+  post:
+    id: {path: id, type: int}
+    date: {path: date}
+    modified: {path: modified}
+    slug: {path: slug}
+    status: {path: status}
+    title: {path: title.rendered}
+    excerpt: {path: excerpt.rendered}
+    author: {path: author, type: int}
+    categories: {path: categories}
+    tags: {path: tags}
+    link: {path: link}
+  page:
+    id: {path: id, type: int}
+    date: {path: date}
+    modified: {path: modified}
+    slug: {path: slug}
+    status: {path: status}
+    title: {path: title.rendered}
+    parent: {path: parent, type: int}
+    menu_order: {path: menu_order, type: int}
+    link: {path: link}
+  term:
+    id: {path: id, type: int}
+    name: {path: name}
+    slug: {path: slug}
+    count: {path: count, type: int}
+    parent: {path: parent, type: int}
+    description: {path: description}
+    link: {path: link}
+  comment:
+    id: {path: id, type: int}
+    post: {path: post, type: int}
+    parent: {path: parent, type: int}
+    author_name: {path: author_name}
+    date: {path: date}
+    status: {path: status}
+    content: {path: content.rendered}
+    link: {path: link}
+  user:
+    id: {path: id, type: int}
+    name: {path: name}
+    slug: {path: slug}
+    description: {path: description}
+    url: {path: url}
+    link: {path: link}
+  media:
+    id: {path: id, type: int}
+    date: {path: date}
+    title: {path: title.rendered}
+    media_type: {path: media_type}
+    mime_type: {path: mime_type}
+    alt_text: {path: alt_text}
+    source_url: {path: source_url}
+    link: {path: link}
+  search_result:
+    id: {path: id}
+    title: {path: title}
+    type: {path: type}
+    subtype: {path: subtype}
+    url: {path: url}
+operations:
+  - name: site-info
+    desc: Show the site's name, description and address
+    method: GET
+    path: /
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/using-the-rest-api/discovery/
+    response:
+      format: json
+      required_pointers: [/name, /namespaces]
+  - name: posts
+    desc: List published posts, newest first; search filters by text, categories by id
+    method: GET
+    path: /wp/v2/posts
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/posts/
+    query:
+      search: {type: string}
+      categories: {type: string}
+      tags: {type: string}
+      per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+      orderby: {type: string, default: date}
+      order: {type: string, default: desc}
+    model: post
+    response:
+      format: json
+  - name: post
+    desc: Read one post by id, with its content
+    method: GET
+    path: /wp/v2/posts/{id}
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/posts/
+    params:
+      id: {type: int}
+    response:
+      format: json
+      required_pointers: [/id, /title/rendered, /content/rendered]
+  - name: pages
+    desc: List published pages; search filters by text, parent by id
+    method: GET
+    path: /wp/v2/pages
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/pages/
+    query:
+      search: {type: string}
+      parent: {type: int}
+      per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+      orderby: {type: string, default: menu_order}
+      order: {type: string, default: asc}
+    model: page
+    response:
+      format: json
+  - name: page
+    desc: Read one page by id, with its content
+    method: GET
+    path: /wp/v2/pages/{id}
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/pages/
+    params:
+      id: {type: int}
+    response:
+      format: json
+      required_pointers: [/id, /title/rendered, /content/rendered]
+  - name: categories
+    desc: List the categories with how many posts each has
+    method: GET
+    path: /wp/v2/categories
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/categories/
+    query:
+      search: {type: string}
+      per_page: {type: int, default: 50}
+      hide_empty: {type: bool, default: true}
+    model: term
+    response:
+      format: json
+  - name: tags
+    desc: List the tags with how many posts each has
+    method: GET
+    path: /wp/v2/tags
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/tags/
+    query:
+      search: {type: string}
+      per_page: {type: int, default: 50}
+      hide_empty: {type: bool, default: true}
+    model: term
+    response:
+      format: json
+  - name: comments
+    desc: List approved comments, newest first; post narrows them to one post
+    method: GET
+    path: /wp/v2/comments
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/comments/
+    query:
+      post: {type: int}
+      search: {type: string}
+      per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+    model: comment
+    response:
+      format: json
+  - name: authors
+    desc: List the users who have published something
+    method: GET
+    path: /wp/v2/users
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/users/
+    query:
+      search: {type: string}
+      per_page: {type: int, default: 20}
+    model: user
+    response:
+      format: json
+  - name: media
+    desc: List media items; media_type is image, video, audio or application
+    method: GET
+    path: /wp/v2/media
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/media/
+    query:
+      search: {type: string}
+      media_type: {type: string}
+      per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+    model: media
+    response:
+      format: json
+  - name: search
+    desc: Search posts and pages by text; subtype narrows to post or page
+    method: GET
+    path: /wp/v2/search
+    effect: read
+    evidence: https://developer.wordpress.org/rest-api/reference/search-results/
+    query:
+      search: {type: string, required: true}
+      subtype: {type: string, default: any}
+      per_page: {type: int, default: 10}
+      page: {type: int, default: 1}
+    model: search_result
+    response:
+      format: json
+  - name: create-post
+    desc: Create a post, as a draft unless status says otherwise
+    method: POST
+    path: /wp/v2/posts
+    auth: app-password
+    effect: write
+    evidence: https://developer.wordpress.org/rest-api/reference/posts/
+    body:
+      json:
+        title: {type: string, required: true}
+        content: {type: string, required: true}
+        status: {type: string, default: draft}
+        excerpt: {type: string}
+    model: post
+    response:
+      format: json
+      required_pointers: [/id]
+  - name: create-comment
+    desc: Comment on a post, or reply to a comment with parent
+    method: POST
+    path: /wp/v2/comments
+    auth: app-password
+    effect: write
+    evidence: https://developer.wordpress.org/rest-api/reference/comments/
+    body:
+      json:
+        post: {type: int, required: true}
+        content: {type: string, required: true}
+        parent: {type: int}
+    model: comment
+    response:
+      format: json
+      required_pointers: [/id]

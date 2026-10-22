@@ -1,0 +1,206 @@
+# Jira, through its REST API 2 (Data Center and Cloud). `itda setup` fills
+# base_url with the baseUrl the instance reports, context path included.
+spec_version: 1
+site:
+  name: jira
+  title: Jira
+  base_url: https://jira.example
+auth:
+  # Public projects can be read without an account. Changes and your own
+  # filters need one. Paste the whole Authorization header value:
+  # Data Center, a personal access token as a bearer token
+  # (https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html):
+  #   echo "Bearer $JIRA_TOKEN" | itda login jira
+  # Cloud, your email and an API token, base64 encoded, as basic auth
+  # (https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/):
+  #   echo "Basic $(printf '%s:%s' you@example.com "$JIRA_API_TOKEN" | base64)" | itda login jira
+  - name: account
+    kind: header
+    header: Authorization
+    value_from: store:jira/api-key
+models:
+  project:
+    key: {path: key}
+    name: {path: name}
+    id: {path: id}
+    type: {path: projectTypeKey}
+    lead: {path: lead.displayName}
+    description: {path: description}
+  issue:
+    key: {path: key}
+    summary: {path: fields.summary}
+    status: {path: fields.status.name}
+    type: {path: fields.issuetype.name}
+    priority: {path: fields.priority.name}
+    assignee: {path: fields.assignee.displayName}
+    reporter: {path: fields.reporter.displayName}
+    created: {path: fields.created}
+    updated: {path: fields.updated}
+    description: {path: fields.description}
+  comment:
+    id: {path: id}
+    author: {path: author.displayName}
+    created: {path: created}
+    body: {path: body}
+  named:
+    id: {path: id}
+    name: {path: name}
+    description: {path: description}
+operations:
+  - name: server-info
+    desc: Show the Jira version, deployment type and title
+    method: GET
+    path: /rest/api/2/serverInfo
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/serverInfo-getServerInfo
+    response:
+      format: json
+      required_pointers: [/baseUrl, /version]
+  - name: projects
+    desc: List the projects you can see
+    method: GET
+    path: /rest/api/2/project
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/project-getAllProjects
+    model: project
+    response:
+      format: json
+  - name: project
+    desc: Show one project by key or id
+    method: GET
+    path: /rest/api/2/project/{project}
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/project-getProject
+    params:
+      project: {type: string}
+    model: project
+    response:
+      format: json
+      required_pointers: [/key, /name]
+  - name: search-issues
+    desc: Search issues with JQL (for example "project = ABC AND status = Open ORDER BY updated DESC")
+    method: GET
+    path: /rest/api/2/search
+    effect: read
+    # Jira Cloud is removing GET /rest/api/2/search in favour of
+    # /rest/api/2/search/jql (https://developer.atlassian.com/changelog/#CHANGE-2046);
+    # change the path when this read stops matching there.
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/search-search
+    query:
+      jql: {type: string, default: "ORDER BY updated DESC"}
+      maxResults: {type: int, default: 20}
+      fields: {type: string, default: "summary,status,issuetype,priority,assignee,reporter,created,updated"}
+    model: issue
+    response:
+      format: json
+      extract_pointer: /issues
+  - name: issue
+    desc: Read one issue by key with its description
+    method: GET
+    path: /rest/api/2/issue/{issue}
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/issue-getIssue
+    params:
+      issue: {type: string}
+    query:
+      fields: {type: string, default: "summary,description,status,issuetype,priority,assignee,reporter,created,updated"}
+    model: issue
+    response:
+      format: json
+      required_pointers: [/key, /fields]
+  - name: issue-comments
+    desc: Read the comments on an issue, oldest first
+    method: GET
+    path: /rest/api/2/issue/{issue}/comment
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/issue-getComments
+    params:
+      issue: {type: string}
+    query:
+      maxResults: {type: int, default: 50}
+    model: comment
+    response:
+      format: json
+      extract_pointer: /comments
+  - name: priorities
+    desc: List the issue priorities
+    method: GET
+    path: /rest/api/2/priority
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/priority-getPriorities
+    model: named
+    response:
+      format: json
+  - name: statuses
+    desc: List the issue statuses
+    method: GET
+    path: /rest/api/2/status
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/status-getStatuses
+    model: named
+    response:
+      format: json
+  - name: issue-types
+    desc: List the issue types
+    method: GET
+    path: /rest/api/2/issuetype
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/issuetype-getIssueAllTypes
+    model: named
+    response:
+      format: json
+  - name: myself
+    desc: Show the signed-in account
+    method: GET
+    path: /rest/api/2/myself
+    auth: account
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/myself-getUser
+    response:
+      format: json
+      required_pointers: [/displayName]
+  - name: favourite-filters
+    desc: List the signed-in account's favourite filters
+    method: GET
+    path: /rest/api/2/filter/favourite
+    auth: account
+    effect: read
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/filter-getFavouriteFilters
+    model: named
+    response:
+      format: json
+  - name: create-issue
+    desc: Create an issue in a project
+    method: POST
+    path: /rest/api/2/issue
+    auth: account
+    effect: write
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/issue-createIssue
+    body:
+      json:
+        project: {type: string, required: true}
+        summary: {type: string, required: true}
+        issue_type: {type: string, default: Task}
+        description: {type: string}
+      json_template:
+        fields:
+          project: {key: "{{project}}"}
+          summary: "{{summary}}"
+          issuetype: {name: "{{issue_type}}"}
+          description: "{{description}}"
+    response:
+      format: json
+      required_pointers: [/key]
+  - name: comment-issue
+    desc: Add a comment to an issue
+    method: POST
+    path: /rest/api/2/issue/{issue}/comment
+    auth: account
+    effect: write
+    evidence: https://docs.atlassian.com/software/jira/docs/api/REST/9.17.0/#api/2/issue-addComment
+    params:
+      issue: {type: string}
+    body:
+      json:
+        body: {type: string, required: true}
+    model: comment

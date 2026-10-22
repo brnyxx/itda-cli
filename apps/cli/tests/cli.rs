@@ -1548,3 +1548,270 @@ async fn refresh_drafts_a_changed_site_again_and_keeps_what_was_edited_by_hand()
     assert!(said.contains("No sources are known"), "{said}");
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A WordPress look-alike: the page advertises its API root, the root
+/// answers the way WordPress does, and two reads of the template answer.
+async fn serve_wordpress(api_answers: bool) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let page = format!(
+        "<html><head><title>My Blog</title>
+         <link rel='https://api.w.org/' href='{base}/wp-json/' />
+         <meta name='generator' content='WordPress 6.6' /></head>
+         <body class='home blog'><h1>My Blog</h1>
+         <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+         <tr><td>2</td><td><a href='/p/2'>Second</a></td></tr>
+         <tr><td>1</td><td><a href='/p/1'>First</a></td></tr></table></body></html>"
+    );
+    let mut router =
+        Router::new().route("/", get(move || async move { axum::response::Html(page) }));
+    if api_answers {
+        router = router
+            .route(
+                "/wp-json/",
+                get(|| async {
+                    axum::Json(json!({
+                        "name": "My Blog", "description": "notes", "url": "http://blog.test",
+                        "namespaces": ["oembed/1.0", "wp/v2"], "routes": {}
+                    }))
+                }),
+            )
+            .route(
+                "/wp-json/wp/v2/posts",
+                get(|| async {
+                    axum::Json(json!([{
+                        "id": 7, "date": "2026-10-01T10:00:00", "modified": "2026-10-02T10:00:00",
+                        "slug": "hello", "status": "publish", "link": "http://blog.test/hello",
+                        "title": {"rendered": "Hello"}, "excerpt": {"rendered": "<p>Hi</p>"},
+                        "author": 1, "categories": [1], "tags": []
+                    }]))
+                }),
+            )
+            .route(
+                "/wp-json/wp/v2/categories",
+                get(|| async {
+                    axum::Json(json!([{"id": 1, "count": 1, "name": "News", "slug": "news", "parent": 0, "description": "", "link": "http://blog.test/c/news"}]))
+                }),
+            );
+    }
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_site_running_known_software_gets_its_template() {
+    let home = home();
+    let base = serve_wordpress(true).await;
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/"),
+            "--name",
+            "blog",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "This looks like WordPress. Using its API at {base}/wp-json."
+        )),
+        "{said}"
+    );
+    let spec = std::fs::read_to_string(home.join("specs/blog/spec.yaml")).unwrap();
+    assert!(
+        spec.starts_with(
+            "# Drafted by `itda setup` from the WordPress template and a page of 127.0.0.1."
+        ),
+        "{spec}"
+    );
+    assert!(
+        spec.contains(&format!("base_url: {base}/wp-json")),
+        "{spec}"
+    );
+    assert!(spec.contains("name: posts"), "{spec}");
+    assert!(spec.contains("name: categories"), "{spec}");
+    assert!(spec.contains("name: create-post"), "{spec}");
+    assert!(spec.contains("store:blog/api-key"), "{spec}");
+    assert!(
+        !spec.contains("name: tags") && !spec.contains("name: comments"),
+        "reads the fixture does not answer are removed: {spec}"
+    );
+    // The page's own table joins the template under the page's address.
+    assert!(spec.contains("html"), "{spec}");
+    assert!(said.contains("2 records"), "{said}");
+    let posts = itda(&home, &["call", "blog.posts", "--json"], &[]).await;
+    assert_eq!(stdout_json(&posts)["data"][0]["title"], "Hello");
+    let checked = itda(&home, &["check", "blog", "--json"], &[]).await;
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    assert_eq!(stdout_json(&checked)["verdict"], "ok");
+    // The sources name the template, and a refresh fills it again.
+    let sources: Value =
+        serde_json::from_slice(&std::fs::read(home.join("specs/blog/sources.json")).unwrap())
+            .unwrap();
+    assert_eq!(sources["template"], "wordpress", "{sources}");
+    assert_eq!(sources["base_url"], format!("{base}/wp-json"), "{sources}");
+    let refreshed = itda(&home, &["refresh", "blog", "-y"], &[("ITDA_LANG", "en")]).await;
+    let said = String::from_utf8_lossy(&refreshed.stderr);
+    assert!(refreshed.status.success(), "{said}");
+    assert!(said.contains("its template"), "{said}");
+    assert!(
+        said.contains(&format!(
+            "This looks like WordPress. Using its API at {base}/wp-json."
+        )),
+        "{said}"
+    );
+    let spec = std::fs::read_to_string(home.join("specs/blog/spec.yaml")).unwrap();
+    assert!(
+        spec.contains("name: posts") && spec.contains("name: create-post"),
+        "{spec}"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_fingerprint_the_api_does_not_confirm_falls_back_to_the_page() {
+    let home = home();
+    let base = serve_wordpress(false).await;
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/"),
+            "--name",
+            "blog",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(!said.contains("This looks like"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/blog/spec.yaml")).unwrap();
+    assert!(!spec.contains("wp/v2"), "{spec}");
+    assert!(spec.contains("html"), "{spec}");
+
+    // --no-template reads the page like any other even when the API answers.
+    let base = serve_wordpress(true).await;
+    let plain = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/"),
+            "--name",
+            "plain",
+            "--no-record",
+            "--no-template",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    assert!(
+        plain.status.success(),
+        "{}",
+        String::from_utf8_lossy(&plain.stderr)
+    );
+    let spec = std::fs::read_to_string(home.join("specs/plain/spec.yaml")).unwrap();
+    assert!(!spec.contains("wp/v2"), "{spec}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_template_can_be_forced_by_name() {
+    let home = home();
+    let router = Router::new()
+        .route(
+            "/explore/repos",
+            get(|| async { axum::response::Html("<html><head><title>Repos</title></head><body><h1>Repositories</h1></body></html>") }),
+        )
+        .route(
+            "/api/v1/version",
+            get(|| async { axum::Json(json!({"version": "1.0.0-dev+gitea-1.22.0"})) }),
+        )
+        .route(
+            "/api/v1/repos/search",
+            get(|| async {
+                axum::Json(json!({"ok": true, "data": [{"id": 1, "full_name": "org/repo", "description": "", "default_branch": "main", "private": false, "fork": false, "stars_count": 3, "forks_count": 0, "open_issues_count": 1, "updated_at": "2026-10-01T00:00:00Z", "html_url": "http://git.test/org/repo"}]}))
+            }),
+        )
+        .route(
+            "/api/v1/orgs",
+            get(|| async { axum::Json(json!([{"id": 1, "name": "org", "full_name": "The Org", "description": "", "website": "", "visibility": "public"}])) }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/explore/repos"),
+            "--as",
+            "gitea",
+            "--name",
+            "forge",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "ko")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "Forgejo로 보입니다. {base}/api/v1의 API를 씁니다."
+        )),
+        "{said}"
+    );
+    let spec = std::fs::read_to_string(home.join("specs/forge/spec.yaml")).unwrap();
+    assert!(spec.contains("name: search-repos"), "{spec}");
+    assert!(spec.contains("name: orgs"), "{spec}");
+    assert!(spec.contains("name: create-issue"), "{spec}");
+    let repos = itda(&home, &["call", "forge.search-repos", "--json"], &[]).await;
+    assert_eq!(stdout_json(&repos)["data"][0]["full_name"], "org/repo");
+
+    let unknown = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/explore/repos"),
+            "--as",
+            "phabricator",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[],
+    )
+    .await;
+    assert_eq!(unknown.status.code(), Some(2), "{unknown:?}");
+    assert!(
+        String::from_utf8_lossy(&unknown.stderr).contains("gitlab, jira, confluence"),
+        "{}",
+        String::from_utf8_lossy(&unknown.stderr)
+    );
+    std::fs::remove_dir_all(home).ok();
+}

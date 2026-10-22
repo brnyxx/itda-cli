@@ -40,6 +40,14 @@ apps it finds on your computer after one more Enter. From then on, ask your
 agent for things on that site. `itda setup <address>` does the same from a
 script; `itda setup --help` lists the flags.
 
+A site that runs software itda knows (GitLab, Jira, Confluence, Redmine,
+Discourse, MediaWiki, WordPress, Gitea or Forgejo) is recognised from its
+page and confirmed with one request to that software's own API. itda then
+says "This looks like GitLab. Using its API at <base>." and the agent gets
+the software's real reads and changes from a ready-made template, with the
+page's own lists and forms joining them. `--as <software>` forces a template
+when the page does not say; `--no-template` skips them.
+
 ## From inside your agent
 
 Once itda is connected (`itda mcp install <client>`, or the question at the
@@ -105,7 +113,7 @@ moment. A site definition can ask for more room with `defaults.interval`.
 
 | Command | What it does |
 |---|---|
-| `itda setup <url> [--name id] [--record\|--no-record] [--client name\|none] [--yes]` | One go: look at the page or record you using the site, name the actions in plain words (`ITDA_LANG=ko` for Korean), try every read, keep what works, connect an agent |
+| `itda setup <url> [--name id] [--record\|--no-record] [--as software\|--no-template] [--client name\|none] [--yes]` | One go: look at the page or record you using the site, name the actions in plain words (`ITDA_LANG=ko` for Korean), try every read, keep what works, connect an agent. Known software (GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea) gets its API from a template; `--as` forces one, `--no-template` skips them |
 | `itda draft page <url>… [--name id] [--base-url url] [--include text] [--install] [--force]` | Draft a site definition from the pages you use: tables, lists, embedded data, forms and feeds, plus the reads of the API description the site publishes |
 | `itda record <url> [--name id] [--install] [--save file.har]` | Use a site in your own browser while itda records what its pages ask for, then draft a definition from that |
 | `itda draft openapi <file> [--install]` · `itda draft har <file> [--install]` | Draft one from an API description or a saved browser recording |

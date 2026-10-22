@@ -104,6 +104,13 @@ fn line(change: &refresh::Change, width: usize) -> String {
 fn say(progress: Progress<'_>) {
     match progress {
         Progress::Looking { host } => eprintln!("    {}", tf("looking", &[("host", host)])),
+        Progress::Recognised(found) => eprintln!(
+            "    {}",
+            tf(
+                "recognised",
+                &[("software", &found.title), ("base", &found.base)]
+            )
+        ),
         Progress::SchemaAsked { url } => {
             eprintln!("    {}", tf("asked_schema", &[("url", url)]));
         }

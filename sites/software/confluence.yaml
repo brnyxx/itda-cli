@@ -1,0 +1,203 @@
+# Confluence, through its REST API (Data Center; Cloud at <site>/wiki).
+# `itda setup` fills base_url with the instance's base URL, context path
+# included.
+spec_version: 1
+site:
+  name: confluence
+  title: Confluence
+  base_url: https://confluence.example
+auth:
+  # Public spaces can be read without an account; changes need one. Paste the
+  # whole Authorization header value:
+  # Data Center, a personal access token as a bearer token
+  # (https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html):
+  #   echo "Bearer $CONFLUENCE_TOKEN" | itda login confluence
+  # Cloud, your email and an API token, base64 encoded, as basic auth
+  # (https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/):
+  #   echo "Basic $(printf '%s:%s' you@example.com "$API_TOKEN" | base64)" | itda login confluence
+  - name: account
+    kind: header
+    header: Authorization
+    value_from: store:confluence/api-key
+models:
+  space:
+    key: {path: key}
+    name: {path: name}
+    type: {path: type}
+    status: {path: status}
+    url: {path: _links.webui}
+  content:
+    id: {path: id}
+    title: {path: title}
+    type: {path: type}
+    status: {path: status}
+    space: {path: space.key}
+    version: {path: version.number, type: int}
+    updated_at: {path: version.when}
+    updated_by: {path: version.by.displayName}
+    url: {path: _links.webui}
+    body: {path: body.storage.value}
+  search_result:
+    id: {path: content.id}
+    title: {path: title}
+    type: {path: content.type}
+    excerpt: {path: excerpt}
+    last_modified: {path: lastModified}
+    url: {path: url}
+  label:
+    id: {path: id}
+    name: {path: name}
+    prefix: {path: prefix}
+operations:
+  - name: spaces
+    desc: List spaces; type is global or personal
+    method: GET
+    path: /rest/api/space
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/space-spaces
+    query:
+      type: {type: string}
+      limit: {type: int, default: 25}
+      start: {type: int, default: 0}
+    model: space
+    response:
+      format: json
+      extract_pointer: /results
+  - name: space
+    desc: Show one space by key
+    method: GET
+    path: /rest/api/space/{space}
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/space-space
+    params:
+      space: {type: string}
+    model: space
+    response:
+      format: json
+      required_pointers: [/key, /name]
+  - name: pages
+    desc: List pages, in one space when a space key is given, optionally by exact title
+    method: GET
+    path: /rest/api/content
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content-getContent
+    query:
+      type: {type: string, default: page}
+      spaceKey: {type: string}
+      title: {type: string}
+      expand: {type: string, default: "space,version"}
+      limit: {type: int, default: 25}
+      start: {type: int, default: 0}
+    model: content
+    response:
+      format: json
+      extract_pointer: /results
+  - name: blog-posts
+    desc: List blog posts, in one space when a space key is given
+    method: GET
+    path: /rest/api/content
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content-getContent
+    query:
+      type: {type: string, default: blogpost}
+      spaceKey: {type: string}
+      expand: {type: string, default: "space,version"}
+      limit: {type: int, default: 25}
+    model: content
+    response:
+      format: json
+      extract_pointer: /results
+  - name: page
+    desc: Read one page or blog post by id, with its body in storage format
+    method: GET
+    path: /rest/api/content/{id}
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content-getContentById
+    params:
+      id: {type: string}
+    query:
+      expand: {type: string, default: "body.storage,space,version,ancestors"}
+    model: content
+    response:
+      format: json
+      required_pointers: [/id, /title]
+  - name: child-pages
+    desc: List the pages directly under a page
+    method: GET
+    path: /rest/api/content/{id}/child/page
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content/{id}/child-childrenOfType
+    params:
+      id: {type: string}
+    query:
+      expand: {type: string, default: "space,version"}
+      limit: {type: int, default: 25}
+    model: content
+    response:
+      format: json
+      extract_pointer: /results
+  - name: comments
+    desc: Read the comments on a page
+    method: GET
+    path: /rest/api/content/{id}/child/comment
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content/{id}/child-childrenOfType
+    params:
+      id: {type: string}
+    query:
+      expand: {type: string, default: "body.storage,version"}
+      limit: {type: int, default: 25}
+    model: content
+    response:
+      format: json
+      extract_pointer: /results
+  - name: labels
+    desc: List the labels on a page
+    method: GET
+    path: /rest/api/content/{id}/label
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content/{id}/label-labels
+    params:
+      id: {type: string}
+    model: label
+    response:
+      format: json
+      extract_pointer: /results
+  - name: search
+    desc: Search with CQL (for example "type = page AND text ~ 'release notes' ORDER BY lastmodified DESC")
+    method: GET
+    path: /rest/api/search
+    effect: read
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/search-search
+    query:
+      cql: {type: string, default: "type = page ORDER BY lastmodified DESC"}
+      limit: {type: int, default: 25}
+      start: {type: int, default: 0}
+    model: search_result
+    response:
+      format: json
+      extract_pointer: /results
+  - name: create-page
+    desc: Create a page at the top of a space
+    method: POST
+    path: /rest/api/content
+    auth: account
+    effect: write
+    evidence: https://docs.atlassian.com/ConfluenceServer/rest/8.9.0/#api/content-createContent
+    body:
+      json:
+        space: {type: string, required: true}
+        title: {type: string, required: true}
+        body: {type: string, required: true}
+      json_template:
+        type: page
+        title: "{{title}}"
+        space: {key: "{{space}}"}
+        body:
+          storage:
+            value: "{{body}}"
+            representation: storage
+    model: content
+    response:
+      format: json
+      required_pointers: [/id]

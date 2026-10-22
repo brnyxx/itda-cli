@@ -31,6 +31,19 @@ with only the repositories and permissions agents should have, then:
 echo "$GITHUB_TOKEN" | itda login github
 ```
 
+## Software templates
+
+[`software/`](software/) holds a definition per kind of software, not per
+site: GitLab (REST v4), Jira (REST 2, Data Center and Cloud), Confluence
+(REST), Redmine (REST, JSON), Discourse (the `.json` form of its pages),
+MediaWiki (`api.php`), WordPress (`wp-json/wp/v2`) and Gitea with Forgejo
+(`api/v1`). Each has the reads an agent needs most, up to three changes, models
+for the records and that software's own way of signing in, with the
+documentation of every operation in `evidence`. `itda setup <url>` picks one
+when the page says it runs that software and one request to the software's
+API confirms it; `itda setup --as <name>` forces one. Their `base_url` is a
+placeholder the setup fills in, so `itda add` does not take them.
+
 ## Adding a site
 
 A good shared definition reads public data or uses the site's official API,
