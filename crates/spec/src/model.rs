@@ -93,6 +93,23 @@ pub struct AuthStrategy {
     /// Exact credential destination; legacy definitions use the site's base origin.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub origin: String,
+    /// The site's own sign-in form, for `itda login <site>` without a
+    /// browser: a `browser` credential signed in by posting it as itda.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login: Option<LoginForm>,
+}
+
+/// Where a site's sign-in form is and what its user and password fields are
+/// called. The form's action and hidden fields are read from the page each
+/// time, so a one-time token in it is always fresh.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoginForm {
+    /// The page with the form, relative to the site.
+    pub path: String,
+    /// The name of the field the user name goes in.
+    pub user: String,
+    /// The name of the password field.
+    pub password: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -371,6 +388,7 @@ pub fn parse(data: &[u8]) -> AppResult<Spec> {
             prefix: String::new(),
             value_from: String::new(),
             origin: String::new(),
+            login: None,
         });
     }
     Ok(s)

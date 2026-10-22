@@ -24,6 +24,11 @@ pub fn t(key: &str) -> &'static str {
             "The page opens without signing in.",
             "이 페이지는 로그인 없이 열립니다.",
         ),
+        (
+            "fetched_signed",
+            "The page opens with the sign-in.",
+            "로그인하니 이 페이지가 열립니다.",
+        ),
         ("found", "Found: {what}.", "찾은 것: {what}."),
         (
             "recognised",
@@ -342,6 +347,58 @@ pub fn t(key: &str) -> &'static str {
             "refresh_written",
             "Updated '{site}'. Checking it...",
             "'{site}'를 갱신했습니다. 확인하는 중...",
+        ),
+        (
+            "ask_sign_in",
+            "Sign in to {host} here, with your user name and password? itda fills in the site's own sign-in form, as itself, and keeps the session sealed under the data directory. [Y/n] ",
+            "{host}에 여기서 아이디와 비밀번호로 로그인할까요? itda가 사이트의 로그인 폼을 itda 이름으로 보내고, 세션은 데이터 폴더에 봉인해 보관합니다. [Y/n] ",
+        ),
+        ("ask_user", "User name for {site}: ", "{site} 아이디: "),
+        (
+            "ask_password",
+            "Password for {user} on {site} (sent once to the site's own sign-in form, never saved): ",
+            "{site}의 {user} 비밀번호 (사이트 로그인 폼에 한 번만 보내고 저장하지 않습니다): ",
+        ),
+        ("no_user", "No user name was given", "아이디가 없습니다"),
+        (
+            "no_user_fix",
+            "Pass --user <name>, and the password as the first line of stdin.",
+            "--user <아이디>를 주고, 비밀번호는 stdin 첫 줄로 넘기세요.",
+        ),
+        (
+            "no_password",
+            "No password was given",
+            "비밀번호가 없습니다",
+        ),
+        (
+            "no_password_fix",
+            "Type it after the question, or pipe it on stdin, for example from your password manager.",
+            "질문 뒤에 입력하거나, 비밀번호 관리자 등에서 stdin으로 넘기세요.",
+        ),
+        (
+            "signed_in",
+            "{host} accepted the sign-in ({n} cookies).",
+            "{host}가 로그인을 받아들였습니다 (쿠키 {n}개).",
+        ),
+        (
+            "session_kept",
+            "Kept the session as {site}/{account}, sealed under the data directory with a key in the system keyring. Agents only see the account id; when it expires, `itda login {site}` signs in again.",
+            "세션을 {site}/{account}로 데이터 폴더에 봉인해 보관했습니다 (키는 시스템 키링에). 에이전트는 계정 id만 봅니다. 만료되면 `itda login {site}`로 다시 로그인하세요.",
+        ),
+        (
+            "session_saved",
+            "Signed in. The session for {site}/{account} ({n} cookies) is sealed under the data directory with a key in the system keyring; agents only see the account id.",
+            "로그인했습니다. {site}/{account} 세션(쿠키 {n}개)은 데이터 폴더에 봉인돼 있고(키는 시스템 키링에), 에이전트는 계정 id만 봅니다.",
+        ),
+        (
+            "cookie_missing",
+            "{site} accepted the sign-in, but the {name} cookie its definition names did not appear",
+            "{site}가 로그인을 받아들였지만 정의가 말한 {name} 쿠키가 오지 않았습니다",
+        ),
+        (
+            "cookie_missing_fix",
+            "Check value_from in the definition's auth entry, or remove it.",
+            "정의의 auth 항목 value_from을 확인하거나 지우세요.",
         ),
         (
             "nothing_works",

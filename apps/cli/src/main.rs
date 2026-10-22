@@ -78,21 +78,26 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
         rest: Vec<String>,
     },
-    /// Sign a site account in: store an API key read from stdin, or with
-    /// --browser sign in in your own browser and keep that site's session
+    /// Sign a site account in: through the site's own sign-in form with your
+    /// user name and password (the password read from stdin), by storing an
+    /// API key read from stdin, or with --browser in your own browser
     Login {
         site: String,
         #[arg(long, default_value = itda_runtime::DEFAULT_ACCOUNT)]
         account: String,
-        /// Sign in in a browser window instead of pasting a secret
+        /// Sign in in a browser window instead of typing a password here
         #[arg(long)]
         browser: bool,
         /// The page to open for --browser; defaults to the site's address
         #[arg(long, requires = "browser")]
         url: Option<String>,
-        /// The secret name the site definition refers to (store:<site>/<name>)
-        #[arg(long, default_value = "api-key")]
-        secret: String,
+        /// The user name for the site's sign-in form; asked for when left out
+        #[arg(long, conflicts_with_all = ["browser", "secret"])]
+        user: Option<String>,
+        /// Store an API key under this secret name instead (store:<site>/<name>);
+        /// api-key when the site has no sign-in form
+        #[arg(long)]
+        secret: Option<String>,
         /// A label to recognise the account by
         #[arg(long, default_value = "")]
         label: String,
@@ -164,6 +169,10 @@ enum Command {
         /// Answer yes to every question, including replacing an installed site
         #[arg(long, short = 'y')]
         yes: bool,
+        /// Sign in with this user name when the page needs one; the password
+        /// is asked for, or read from stdin without a terminal
+        #[arg(long)]
+        user: Option<String>,
     },
     /// Use a site in your own browser while itda records the requests, then
     /// draft a site definition from them. Nothing is written to disk unless
@@ -375,10 +384,18 @@ fn main() -> ExitCode {
         Command::Login {
             site,
             account,
+            user,
             secret,
             label,
             ..
-        } => block_on(login(&home, &site, &account, &secret, &label)),
+        } => block_on(login(
+            &home,
+            &site,
+            &account,
+            user.as_deref(),
+            secret.as_deref(),
+            &label,
+        )),
         Command::Accounts { site, json } => block_on(accounts(&home, site.as_deref(), json)),
         Command::Logout { site, account } => block_on(logout(&home, &site, &account)),
         Command::Resume { site, account } => block_on(resume(&home, &site, account.as_deref())),
@@ -403,6 +420,7 @@ fn main() -> ExitCode {
                     include,
                     lang: lang(),
                     schemas: Vec::new(),
+                    session: None,
                 },
                 install,
                 force,
@@ -423,6 +441,7 @@ fn main() -> ExitCode {
                     include,
                     lang: lang(),
                     schemas: Vec::new(),
+                    session: None,
                 },
                 install,
                 force,
@@ -443,6 +462,7 @@ fn main() -> ExitCode {
                     include,
                     lang: lang(),
                     schemas: Vec::new(),
+                    session: None,
                 },
                 install,
                 force,
@@ -458,11 +478,13 @@ fn main() -> ExitCode {
             watch_only,
             client,
             yes,
+            user,
         } => block_on(setup::run(
             &home,
             setup::Flags {
                 url,
                 name,
+                user,
                 record: if record {
                     Some(true)
                 } else if no_record {
@@ -497,6 +519,7 @@ fn main() -> ExitCode {
                 include,
                 lang: lang(),
                 schemas: Vec::new(),
+                session: None,
             },
             install,
             force,
@@ -624,6 +647,7 @@ fn first_command(typed: &str) -> Option<First> {
         no_template: false,
         watch_only: false,
         client: None,
+        user: None,
         yes: false,
     }))
 }
@@ -1076,10 +1100,24 @@ async fn login(
     home: &Path,
     site: &str,
     account: &str,
-    secret: &str,
+    user: Option<&str>,
+    secret: Option<&str>,
     label: &str,
 ) -> AppResult<ExitCode> {
-    sites::load(home, site)?;
+    let spec = sites::load(home, site)?;
+    let form = spec
+        .auth
+        .iter()
+        .find(|auth| auth.kind == "browser" && auth.login.is_some())
+        .and_then(|auth| {
+            auth.login
+                .clone()
+                .map(|login| (auth.value_from.clone(), login))
+        });
+    if let (None, Some((value_from, login))) = (secret, form) {
+        return login_form(home, &spec, account, user, label, &value_from, &login).await;
+    }
+    let secret = secret.unwrap_or("api-key");
     let stdin = std::io::stdin();
     if stdin.is_terminal() {
         eprintln!("Paste the {secret} for {site}/{account} and press Enter:");
@@ -1106,6 +1144,62 @@ async fn login(
         .invalidate(Some(site), Some(account))
         .await?;
     eprintln!("Saved {secret} for {site}/{account}.");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Sign in through the site's own form: the user name from `--user` or a
+/// question, the password from the next line of stdin, both sent once to
+/// the form as itda. The session is kept in the system keyring.
+async fn login_form(
+    home: &Path,
+    spec: &itda_spec::Spec,
+    account: &str,
+    user: Option<&str>,
+    label: &str,
+    value_from: &str,
+    login: &itda_spec::LoginForm,
+) -> AppResult<ExitCode> {
+    use text::{t, tf};
+    let site = &spec.site.name;
+    itda_setup::credentials::writable()?;
+    let credentials = setup::ask_credentials(site, user)?;
+    let scope = itda_types::url::validate_url(spec.site.source_url())?;
+    let page = format!("{}{}", scope.origin().ascii_serialization(), login.path);
+    let ctx = open(home)?.context(home);
+    let signed = itda_setup::login::form(
+        &ctx.net,
+        &scope,
+        &page,
+        Some((&login.user, &login.password)),
+        &credentials,
+        spec.defaults.interval(),
+    )
+    .await?;
+    if let Some(required) = value_from.strip_prefix("cookie:")
+        && !signed
+            .session
+            .cookies
+            .split(';')
+            .any(|pair| pair.trim().starts_with(&format!("{required}=")))
+    {
+        return Err(usage(
+            tf("cookie_missing", &[("name", required), ("site", site)]),
+            t("cookie_missing_fix"),
+        ));
+    }
+    let count = signed.session.count;
+    itda_setup::login::keep(&ctx, site, account, label, signed.session).await?;
+    eprintln!(
+        "{}",
+        tf(
+            "session_saved",
+            &[
+                ("site", site),
+                ("account", account),
+                ("n", &count.to_string())
+            ]
+        )
+    );
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1287,7 +1381,7 @@ fn refusal_words(refused: &itda_setup::Refused) -> AppError {
     use text::{t, tf};
     let host = refused.host.clone();
     let (msg, fix) = match &refused.kind {
-        Refusal::SignInRedirect { path } => (
+        Refusal::SignInRedirect { path, .. } => (
             tf("redirect_signin", &[("host", &host), ("path", path)]),
             t("redirect_signin_fix"),
         ),
@@ -1488,6 +1582,13 @@ async fn keep_credentials(
 }
 
 fn say_credential_kept(name: &str, site: &str, account: &str) {
+    if name == itda_runtime::SESSION_SECRET {
+        eprintln!(
+            "{}",
+            text::tf("session_kept", &[("site", site), ("account", account)])
+        );
+        return;
+    }
     eprintln!(
         "Saved {name} for {site}/{account}. Tokens expire; record again or use `itda login {site}` when calls answer auth_required."
     );

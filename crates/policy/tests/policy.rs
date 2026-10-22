@@ -504,3 +504,40 @@ fn pagination_is_for_reads_and_may_name_a_page_token() {
         error.msg
     );
 }
+
+#[test]
+fn a_sign_in_form_belongs_to_a_browser_credential_on_the_site() {
+    let with = |kind: &str, path: &str, user: &str, password: &str| {
+        spec_from(
+            json!({"spec_version":1,"site":{"name":"board","base_url":"https://board.example"},
+            "auth":[{"name":"session","kind":kind,"value_from":"cookie:SID",
+                     "login":{"path":path,"user":user,"password":password}}],
+            "operations":[{"name":"list","method":"GET","path":"/list","auth":"session","effect":"read","evidence":"doc"}]}),
+        )
+    };
+    validate_spec(&with("browser", "/login", "user_name", "password")).unwrap();
+    validate_spec(&with(
+        "browser",
+        "/index.php?title=Special:UserLogin",
+        "wpName",
+        "wpPassword",
+    ))
+    .unwrap();
+    for (kind, path, user, password) in [
+        ("header", "/login", "user", "password"),
+        ("browser", "login", "user", "password"),
+        ("browser", "//evil.example/login", "user", "password"),
+        ("browser", "/login#x", "user", "password"),
+        ("browser", "/login", "", "password"),
+        ("browser", "/login", "same", "same"),
+        ("browser", "/login", "a&b", "password"),
+    ] {
+        let problems = spec_problems(&with(kind, path, user, password));
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.field.starts_with("auth.session.login")),
+            "{kind} {path} {user} {password}: {problems:?}"
+        );
+    }
+}

@@ -60,6 +60,72 @@ pub fn registrable_domain(host: &str) -> Option<String> {
     psl::domain_str(&host).map(str::to_owned)
 }
 
+/// Whether an address looks like a sign-in page: a path segment such as
+/// `login`, `signin` or `sso`, or a `title=Special:UserLogin` query.
+pub fn looks_like_sign_in(url: &url::Url) -> bool {
+    let word = |segment: &str| {
+        matches!(
+            segment.to_ascii_lowercase().as_str(),
+            "login"
+                | "signin"
+                | "sign-in"
+                | "sign_in"
+                | "sso"
+                | "oauth"
+                | "authenticate"
+                | "special:userlogin"
+                | "wp-login.php"
+        )
+    };
+    url.path().split('/').any(word)
+        || url
+            .query_pairs()
+            .any(|(key, value)| key == "title" && word(&value))
+}
+
+/// A sign-in page's address as a definition keeps it: without the fragment,
+/// the "where to go back to" parameters (`redirect_to`, `returnto`,
+/// `back_url`, `next`...) and credential-named ones (`reauth`, tokens), so
+/// the page can be fetched again later, as itself.
+pub fn sign_in_page(url: &url::Url) -> url::Url {
+    let mut page = url.clone();
+    page.set_fragment(None);
+    let kept: Vec<(String, String)> = url
+        .query_pairs()
+        .filter(|(key, _)| {
+            let key = key.to_ascii_lowercase();
+            !util::secret_field(&key)
+                && !matches!(
+                    key.as_str(),
+                    "redirect_to"
+                        | "redirect"
+                        | "redirect_uri"
+                        | "redirect_url"
+                        | "returnto"
+                        | "returntoquery"
+                        | "return_to"
+                        | "return_url"
+                        | "return"
+                        | "back_url"
+                        | "backurl"
+                        | "next"
+                        | "continue"
+                        | "referer"
+                        | "ref"
+                )
+        })
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    page.set_query(None);
+    if !kept.is_empty() {
+        let mut query = page.query_pairs_mut();
+        for (key, value) in &kept {
+            query.append_pair(key, value);
+        }
+    }
+    page
+}
+
 /// True when two URLs share the exact origin, or the same registrable domain
 /// with the same scheme and port.
 pub fn same_site_origin(a: &url::Url, b: &url::Url) -> bool {
@@ -105,6 +171,32 @@ mod tests {
 
     fn u(raw: &str) -> url::Url {
         url::Url::parse(raw).unwrap()
+    }
+
+    #[test]
+    fn sign_in_pages_are_recognised_and_kept_without_their_return_address() {
+        assert!(looks_like_sign_in(&u(
+            "https://a.test/user/login?redirect_to=%2F"
+        )));
+        assert!(looks_like_sign_in(&u("https://a.test/wp-login.php")));
+        assert!(looks_like_sign_in(&u(
+            "https://a.test/index.php?title=Special:UserLogin&returnto=Main"
+        )));
+        assert!(!looks_like_sign_in(&u("https://a.test/issues")));
+        assert_eq!(
+            sign_in_page(&u(
+                "https://a.test/wp-login.php?redirect_to=https%3A%2F%2Fa.test%2Fwp-admin%2F&reauth=1"
+            ))
+            .as_str(),
+            "https://a.test/wp-login.php"
+        );
+        assert_eq!(
+            sign_in_page(&u(
+                "https://a.test/index.php?title=Special:UserLogin&returnto=Special%3AAllPages#x"
+            ))
+            .as_str(),
+            "https://a.test/index.php?title=Special%3AUserLogin"
+        );
     }
 
     #[test]

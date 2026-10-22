@@ -1,0 +1,57 @@
+# Redmine in the lab (http://127.0.0.1:8082): a private project, read and
+# written through the pages a person uses, with the session `itda login
+# redmine` keeps. Redmine's REST API ignores the session, so the pages are
+# the way in.
+spec_version: 1
+site:
+  name: redmine
+  title: Redmine (lab)
+  base_url: http://127.0.0.1:8082
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:_redmine_session
+    login:
+      path: /login
+      user: username
+      password: password
+operations:
+  - name: list-issues
+    desc: List the open issues of the Lab project
+    method: GET
+    path: /projects/lab/issues
+    auth: session
+    effect: read
+    evidence: GET /projects/lab/issues renders table.list.issues with one tr.issue per issue; the project is private
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "table.list.issues"}
+      html:
+        items: "table.list.issues tr.issue"
+        fields:
+          id: {selector: "td.id a", required: true}
+          subject: {selector: "td.subject a", required: true}
+          status: {selector: "td.status"}
+          link: {selector: "td.subject a", attribute: href, absolute_url: true}
+        limit: 100
+  - name: create-issue
+    desc: Create an issue in the Lab project
+    method: POST
+    path: /projects/lab/issues
+    auth: session
+    effect: write
+    evidence: the new issue form on /projects/lab/issues/new posts authenticity_token and issue[...] fields to /projects/lab/issues and answers with a redirect to the issue
+    preflight:
+      - name: form
+        path: /projects/lab/issues/new
+        extract:
+          token: css:input[name="authenticity_token"]@value
+    body:
+      form:
+        "issue[subject]": {type: string, required: true}
+        "issue[description]": {type: string}
+        "issue[tracker_id]": {type: int, default: 1}
+        "issue[status_id]": {type: int, default: 1}
+        "issue[priority_id]": {type: int, default: 2}
+        authenticity_token: {type: string, default: "{{step.form.token}}"}

@@ -410,6 +410,40 @@ fn check_response(response: &itda_spec::ResponseExpectation, id: &str, out: &mut
     }
 }
 
+/// A sign-in form belongs to a `browser` credential, sits on a plain path of
+/// the site and names its user and password fields.
+fn check_login(browser: bool, login: &itda_spec::LoginForm, field: &str, out: &mut Problems) {
+    let field = format!("{field}.login");
+    if !browser {
+        out.add(
+            "data_invalid",
+            field.clone(),
+            "a sign-in form belongs to a credential of kind browser",
+        );
+    }
+    if !login.path.starts_with('/')
+        || login.path.starts_with("//")
+        || login.path.contains(['\\', '\r', '\n', '#'])
+        || login.path.len() > 2048
+    {
+        out.add(
+            "data_invalid",
+            format!("{field}.path"),
+            "must be a relative path on the site, with at most a query",
+        );
+    }
+    let plain = |name: &str| {
+        !name.is_empty() && name.len() <= 80 && !name.contains(['\r', '\n', '&', '=', '<', '>'])
+    };
+    if !plain(&login.user) || !plain(&login.password) || login.user == login.password {
+        out.add(
+            "data_invalid",
+            field,
+            "must name the form's user and password fields",
+        );
+    }
+}
+
 fn check_auth(sp: &Spec, out: &mut Problems) {
     let mut credential_origins = std::collections::BTreeMap::new();
     for auth in &sp.auth {
@@ -464,6 +498,9 @@ fn check_auth(sp: &Spec, out: &mut Problems) {
                 format!("{field}.value_from"),
                 "header credentials must come from this site's own store",
             );
+        }
+        if let Some(login) = &auth.login {
+            check_login(auth.kind == "browser", login, &field, out);
         }
     }
 }

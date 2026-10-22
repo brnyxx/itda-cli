@@ -1,0 +1,73 @@
+# WordPress in the lab (http://127.0.0.1:8083): private posts, read and
+# written through the REST API with the session `itda login wordpress`
+# keeps. WordPress accepts a session on its REST API only together with a
+# nonce, which it hands out at admin-ajax.php?action=rest-nonce; a preflight
+# step reads it right before each call. The lab's WordPress has plain
+# permalinks, so the API is reached as /?rest_route=... rather than /wp-json/.
+spec_version: 1
+site:
+  name: wordpress
+  title: WordPress (lab)
+  base_url: http://127.0.0.1:8083
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:wordpress_logged_in_5a2749aad16dd3fe97c780e100563385
+    login:
+      path: /wp-login.php
+      user: log
+      password: pwd
+operations:
+  - name: list-private-posts
+    desc: List the private posts
+    method: GET
+    path: /
+    auth: session
+    effect: read
+    evidence: GET /?rest_route=/wp/v2/posts&status=private answers a JSON list for a signed-in editor with a valid X-WP-Nonce
+    preflight:
+      - name: nonce
+        path: /wp-admin/admin-ajax.php?action=rest-nonce
+        extract:
+          value: css:body
+    headers:
+      X-WP-Nonce: "{{step.nonce.value}}"
+    query:
+      rest_route: {type: string, default: /wp/v2/posts}
+      status: {type: string, default: private}
+      per_page: {type: int, default: 20}
+    response:
+      format: json
+      required_pointers: [/0/id, /0/title/rendered]
+    model: post
+  - name: create-post
+    desc: Publish a post
+    method: POST
+    path: /
+    auth: session
+    effect: write
+    evidence: POST /?rest_route=/wp/v2/posts with X-WP-Nonce creates a post and answers 201 with it
+    query:
+      rest_route: {type: string, default: /wp/v2/posts}
+    preflight:
+      - name: nonce
+        path: /wp-admin/admin-ajax.php?action=rest-nonce
+        extract:
+          value: css:body
+    headers:
+      X-WP-Nonce: "{{step.nonce.value}}"
+    body:
+      json:
+        title: {type: string, required: true}
+        content: {type: string}
+        status: {type: string, default: private}
+    response:
+      format: json
+      required_pointers: [/id]
+    model: post
+models:
+  post:
+    id: {path: id, type: int}
+    title: {path: title.rendered}
+    status: {path: status}
+    link: {path: link}

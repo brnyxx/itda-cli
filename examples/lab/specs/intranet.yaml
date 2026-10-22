@@ -1,0 +1,78 @@
+# The legacy intranet in the lab (http://127.0.0.1:8085, intranet/server.py):
+# a notice board behind a sign-in form, read and written through its pages
+# with the session `itda login intranet` keeps. This is what `itda setup
+# http://127.0.0.1:8085/notices --user lab` drafts, reviewed: the search read
+# got a response check and the write form a name that says what it does.
+spec_version: 1
+site:
+  name: intranet
+  title: Legacy intranet (lab)
+  base_url: http://127.0.0.1:8085
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:INTRANET_SESSION
+    login:
+      path: /login
+      user: username
+      password: password
+operations:
+  - name: list-notices
+    desc: List the notices, newest first, ten per page
+    method: GET
+    path: /notices
+    auth: session
+    effect: read
+    evidence: GET /notices?page=N renders table#notices with one tr.notice per notice; anonymous readers are sent to /login
+    query:
+      page: {type: int, default: 1}
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+      html:
+        items: "tr.notice"
+        fields:
+          id: {selector: td.id, required: true}
+          title: {selector: td.title a, required: true}
+          link: {selector: td.title a, attribute: href, absolute_url: true}
+          author: {selector: td.author}
+          date: {selector: td.date}
+        limit: 50
+  - name: search-notices
+    desc: Search notices by title
+    method: GET
+    path: /search
+    auth: session
+    effect: read
+    evidence: the search form on /notices sends GET /search?q=..., which renders the same table
+    query:
+      q: {type: string, required: true}
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+      html:
+        items: "tr.notice"
+        fields:
+          id: {selector: td.id, required: true}
+          title: {selector: td.title a, required: true}
+          link: {selector: td.title a, attribute: href, absolute_url: true}
+        limit: 50
+  - name: post-notice
+    desc: Post a notice
+    method: POST
+    path: /notices
+    auth: session
+    effect: write
+    evidence: the write form on /notices/new posts _csrf, title and body to /notices and answers with a redirect to the notice
+    preflight:
+      - name: form
+        path: /notices/new
+        extract:
+          csrf: css:input[name="_csrf"]@value
+    body:
+      form:
+        title: {type: string, required: true}
+        body: {type: string}
+        _csrf: {type: string, default: "{{step.form.csrf}}"}

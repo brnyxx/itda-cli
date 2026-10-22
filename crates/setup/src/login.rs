@@ -1,11 +1,13 @@
-//! Browser sign-in: the person signs in to a site in their own browser, and
-//! itda keeps that site's session cookies. Nothing here reads a terminal; the
-//! caller says when the person is done.
+//! Sign-in: the person signs in to a site in their own browser, or types
+//! their user name and password for itda to send through the site's own
+//! sign-in form, and itda keeps that site's session cookies. Nothing here
+//! reads a terminal; the caller asks the person.
 use crate::Context;
-use itda_spec::Spec;
+use itda_net::{Network, Request, Response};
+use itda_spec::{LoginForm, Spec};
 use itda_types::{
-    error::{AppResult, usage},
-    url::validate_url,
+    error::{AppError, AppResult, usage},
+    url::{same_site_origin, validate_url},
 };
 use itda_vault::Secret;
 use std::{sync::mpsc, time::Duration};
@@ -136,4 +138,275 @@ pub async fn keep(
     // a new look.
     ctx.approvals.invalidate(Some(site), Some(account)).await?;
     crate::resume(ctx, site, Some(account)).await
+}
+
+/// What the person typed for the site's own sign-in form.
+pub struct Credentials {
+    pub user: String,
+    pub password: Secret,
+}
+
+/// A sign-in through the site's own form: the session, the cookie that
+/// appeared with it (the one a definition can name as proof of the sign-in),
+/// and the form as a definition describes it, so `itda login` can sign in
+/// again the same way.
+pub struct Signed {
+    pub session: Session,
+    pub cookie: Option<String>,
+    pub form: LoginForm,
+}
+
+/// Sign in through the site's own form, as itda: read the page at `page`
+/// (on `scope`'s site), fill the user and password fields of its sign-in
+/// form, send it once with the hidden fields the page gave, and keep the
+/// cookies the site answered with. `fields` names the user and password
+/// fields when a definition already knows them. A wrong password is
+/// reported, never retried; the password goes to the form's own action and
+/// nowhere else, and nothing is paused on the site.
+pub async fn form(
+    net: &Network,
+    scope: &url::Url,
+    page: &str,
+    fields: Option<(&str, &str)>,
+    credentials: &Credentials,
+    interval: Option<Duration>,
+) -> AppResult<Signed> {
+    let page = validate_url(page)?;
+    if !same_site_origin(scope, &page) {
+        return Err(usage(
+            "The sign-in page is on another site",
+            format!("Use a page on {}.", scope.origin().ascii_serialization()),
+        ));
+    }
+    let host = page.host_str().unwrap_or_default().to_owned();
+    let mut request = Request::read(page.as_str());
+    request.interval = interval;
+    let form_page = net.fetch(request).await?;
+    if !form_page.successful() {
+        return Err(itda_runtime::refusal(&form_page, false));
+    }
+    let html = String::from_utf8_lossy(&form_page.bytes);
+    let (user_field, password_field) = fields.map_or((None, None), |(u, p)| (Some(u), Some(p)));
+    let form = itda_html::evidence::sign_in_form(&html, &form_page.url, user_field, password_field)
+        .ok_or_else(|| {
+            usage(
+                format!("No sign-in form was found on {}", form_page.url),
+                "Give the address of the page with the user name and password fields.",
+            )
+        })?;
+    let action = validate_url(&form.action)?;
+    if !same_site_origin(scope, &action) {
+        return Err(usage(
+            format!("The sign-in form on {host} sends the password to another site"),
+            format!(
+                "itda only signs in on {}; use the site's own sign-in page.",
+                scope.origin().ascii_serialization()
+            ),
+        ));
+    }
+    let body = {
+        let mut body = url::form_urlencoded::Serializer::new(String::new());
+        for (name, value) in &form.fields {
+            body.append_pair(name, value);
+        }
+        body.append_pair(&form.user, &credentials.user);
+        body.append_pair(&form.password, credentials.password.expose());
+        body.finish()
+    };
+    let before = set_cookies(&form_page);
+
+    let mut request = Request::read(action.as_str());
+    request.method = "POST".into();
+    request.read_only = false;
+    request.follow_redirects = false;
+    request.interval = interval;
+    request.body = Some(body.into_bytes());
+    request.headers.push((
+        "content-type".into(),
+        "application/x-www-form-urlencoded".into(),
+    ));
+    if !before.is_empty() {
+        request.headers.push(("cookie".into(), header(&before)));
+    }
+    let answer = match net.fetch(request).await {
+        Ok(answer) => answer,
+        Err(error) if error.public_code == "timeout" || error.public_code == "request_failed" => {
+            let mut error = error;
+            error.remedy = "Check the site and your connection, then run the command again.".into();
+            return Err(error);
+        }
+        Err(error) => return Err(error),
+    };
+    if answer.defense != "none" {
+        return Err(itda_runtime::refusal(&answer, false));
+    }
+    if !matches!(answer.status, 301 | 302 | 303 | 307 | 308) {
+        let mut error = AppError::api("auth_required", 401);
+        error.msg = if answer.status == 200 {
+            format!("{host} did not accept the user name or password")
+        } else {
+            format!("{host} answered the sign-in with HTTP {}", answer.status)
+        };
+        error.remedy = "Check them and run the command again.".into();
+        return Err(error);
+    }
+    let after = set_cookies(&answer);
+    let jar = merge(before, &after);
+    if jar.is_empty() {
+        return Err(usage(
+            format!("{host} accepted the sign-in but set no cookie"),
+            "The site keeps its session some other way; sign in with --browser instead.",
+        ));
+    }
+    let cookie = proof(&after);
+    let form = LoginForm {
+        path: match page.query() {
+            Some(query) => format!("{}?{query}", page.path()),
+            None => page.path().to_owned(),
+        },
+        user: form.user,
+        password: form.password,
+    };
+    Ok(Signed {
+        session: Session {
+            count: jar.len(),
+            cookies: header(&jar),
+        },
+        cookie,
+        form,
+    })
+}
+
+/// A cookie as a `Set-Cookie` header gave it: its name, its value, and
+/// whether the header deletes it (`Max-Age=0`).
+struct SetCookie {
+    name: String,
+    value: String,
+    deleted: bool,
+}
+
+fn set_cookies(response: &Response) -> Vec<SetCookie> {
+    response
+        .headers
+        .iter()
+        .filter(|(key, _)| key.eq_ignore_ascii_case("set-cookie"))
+        .filter_map(|(_, value)| {
+            let mut parts = value.split(';');
+            let (name, value) = parts.next()?.trim().split_once('=')?;
+            let name = name.trim();
+            if name.is_empty() || name.contains([' ', ',']) {
+                return None;
+            }
+            let deleted = parts.any(|attribute| {
+                let attribute = attribute.trim().to_ascii_lowercase();
+                attribute
+                    .strip_prefix("max-age=")
+                    .is_some_and(|age| age.trim().parse::<i64>().is_ok_and(|age| age <= 0))
+            });
+            Some(SetCookie {
+                name: name.to_owned(),
+                value: value.trim().to_owned(),
+                deleted,
+            })
+        })
+        .collect()
+}
+
+/// The cookies after the sign-in: what the form page set, then what the
+/// answer set, later ones replacing earlier ones of the same name, deleted
+/// ones dropped.
+fn merge(before: Vec<SetCookie>, after: &[SetCookie]) -> Vec<SetCookie> {
+    let mut jar: Vec<SetCookie> = Vec::new();
+    for cookie in before.into_iter().chain(after.iter().map(|c| SetCookie {
+        name: c.name.clone(),
+        value: c.value.clone(),
+        deleted: c.deleted,
+    })) {
+        jar.retain(|kept| kept.name != cookie.name);
+        if !cookie.deleted {
+            jar.push(cookie);
+        }
+    }
+    jar
+}
+
+fn header(jar: &[SetCookie]) -> String {
+    jar.iter()
+        .map(|c| format!("{}={}", c.name, c.value))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// The cookie that shows the sign-in, among those the answer set: one named
+/// for a signed-in user or a session, else the first.
+fn proof(after: &[SetCookie]) -> Option<String> {
+    let kept: Vec<&SetCookie> = after.iter().filter(|c| !c.deleted).collect();
+    let named = |words: &[&str]| {
+        kept.iter()
+            .find(|c| {
+                let name = c.name.to_ascii_lowercase();
+                words.iter().any(|word| name.contains(word))
+            })
+            .map(|c| c.name.clone())
+    };
+    named(&["logged"])
+        .or_else(|| named(&["userid", "user_id"]))
+        .or_else(|| named(&["session", "sess", "sid"]))
+        .or_else(|| kept.first().map(|c| c.name.clone()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SetCookie, merge, proof, set_cookies};
+    use itda_net::Response;
+
+    fn response(set: &[&str]) -> Response {
+        Response {
+            url: "https://site.example/login".into(),
+            status: 303,
+            headers: set
+                .iter()
+                .map(|value| ("set-cookie".to_owned(), (*value).to_owned()))
+                .collect(),
+            bytes: Vec::new(),
+            duration_ms: 1,
+            defense: "none".into(),
+        }
+    }
+
+    #[test]
+    fn cookies_from_both_answers_are_merged_and_deleted_ones_dropped() {
+        let before = set_cookies(&response(&[
+            "_csrf=abc; Path=/; HttpOnly",
+            "old=gone; Max-Age=0",
+            "sid=first; Path=/",
+        ]));
+        let after = set_cookies(&response(&["sid=second; Path=/; HttpOnly", "lang=en"]));
+        let jar = merge(before, &after);
+        let names: Vec<&str> = jar.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["_csrf", "sid", "lang"]);
+        assert_eq!(super::header(&jar), "_csrf=abc; sid=second; lang=en");
+    }
+
+    #[test]
+    fn the_proof_cookie_prefers_a_signed_in_name() {
+        let cookie = |name: &str| SetCookie {
+            name: name.into(),
+            value: "v".into(),
+            deleted: false,
+        };
+        assert_eq!(
+            proof(&[cookie("wordpress_test"), cookie("wordpress_logged_in_ab")]).as_deref(),
+            Some("wordpress_logged_in_ab")
+        );
+        assert_eq!(
+            proof(&[cookie("my_wiki_session"), cookie("my_wikiUserID")]).as_deref(),
+            Some("my_wikiUserID")
+        );
+        assert_eq!(
+            proof(&[cookie("lang"), cookie("i_like_gitea")]).as_deref(),
+            Some("lang")
+        );
+        assert_eq!(proof(&[]), None);
+    }
 }

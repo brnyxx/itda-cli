@@ -36,6 +36,17 @@ pub struct Options {
     /// What the GraphQL endpoints the pages or calls named answered the
     /// introspection query with, fetched by the caller. Each becomes reads.
     pub schemas: Vec<graphql::Schema>,
+    /// The pages were fetched signed in through the site's own form: every
+    /// action needs that session, and the definition says how to sign in.
+    pub session: Option<SessionAuth>,
+}
+
+/// A sign-in the pages were read with: the cookie that shows it (empty when
+/// none could be told) and the form that gave it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionAuth {
+    pub cookie: String,
+    pub login: itda_spec::LoginForm,
 }
 
 /// The schemas' reads, after what the source itself gave. They share one
@@ -281,6 +292,7 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
             include: options.include.clone(),
             lang: options.lang.clone(),
             schemas: Vec::new(),
+            session: None,
         };
         parts.merge(page::page_parts(&pages, &page_options)?);
     }
@@ -400,6 +412,7 @@ pub fn from_template(
             include: options.include.clone(),
             lang: options.lang.clone(),
             schemas: options.schemas.clone(),
+            session: options.session.clone(),
         };
         let (mut found, from_description) =
             page::page_parts_with_description(pages, description, &page_options)?;

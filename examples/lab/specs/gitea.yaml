@@ -1,0 +1,51 @@
+# Gitea in the lab (http://127.0.0.1:8081): a private repository, read and
+# written through the pages a person uses, with the session `itda login
+# gitea` keeps.
+spec_version: 1
+site:
+  name: gitea
+  title: Gitea (lab)
+  base_url: http://127.0.0.1:8081
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:i_like_gitea
+    login:
+      path: /user/login
+      user: user_name
+      password: password
+operations:
+  - name: list-issues
+    desc: List the open issues of the lab/intranet repository
+    method: GET
+    path: /lab/intranet/issues
+    auth: session
+    effect: read
+    evidence: GET /lab/intranet/issues renders one .flex-item per issue inside #issue-list; the repository is private
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "#issue-list"}
+      html:
+        items: "#issue-list .flex-item"
+        fields:
+          title: {selector: "a.issue-title", required: true}
+          link: {selector: "a.issue-title", attribute: href, absolute_url: true}
+        limit: 50
+  - name: create-issue
+    desc: Open an issue in the lab/intranet repository
+    method: POST
+    path: /lab/intranet/issues/new
+    auth: session
+    effect: write
+    evidence: the new issue form on /lab/intranet/issues/new posts _csrf, title and content to the same path and answers with a redirect to the issue
+    preflight:
+      - name: form
+        path: /lab/intranet/issues/new
+        extract:
+          csrf: css:input[name="_csrf"]@value
+    body:
+      form:
+        title: {type: string, required: true}
+        content: {type: string}
+        _csrf: {type: string, default: "{{step.form.csrf}}"}
