@@ -8,7 +8,9 @@ pub mod cursors;
 pub mod validate;
 
 pub use approvals::{Approval, Approvals, ExecutionRequest, ReviewInput};
-pub use classify::{dangerous_intent, operation_effect, safe_read_url};
+pub use classify::{
+    Rendered, dangerous_intent, operation_effect, rendered_request_effect, safe_read_url,
+};
 pub use cursors::Cursors;
 pub use itda_spec::Effect;
 pub use validate::{Problem, overrides_method, spec_problems, validate_spec};

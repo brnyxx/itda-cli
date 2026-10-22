@@ -5,11 +5,14 @@
 //! paced network, verify the response contract, shape the data and redact
 //! secrets.
 //!
-//! Reads run directly. A change runs only with an approval the user granted
-//! for exactly this request: the first call records the request and returns
-//! `approval_required` with an id, the user reviews and grants it outside the
-//! agent (`itda approve`), and a second call with that id uses it up before
-//! anything is sent. Without an approval store, changes are refused.
+//! Reads run directly, after the request built from the template is read
+//! once more: a read whose rendered address or body asks for a change goes
+//! the way of a change, with the reason, and one whose effect cannot be told
+//! is refused (`effect_unknown`). A change runs only with an approval the
+//! user granted for exactly this request: the first call records the request
+//! and returns `approval_required` with an id, the user reviews and grants it
+//! outside the agent (`itda approve`), and a second call with that id uses it
+//! up before anything is sent. Without an approval store, changes are refused.
 //! A `browser` credential is the cookie jar the user's own sign-in left
 //! behind (`itda login --browser`); it is sent only to the same site.
 //! Preflight steps read per-visit values such as a CSRF token from the same
@@ -26,7 +29,7 @@ mod preflight;
 use itda_net::{Network, Request};
 use itda_policy::{
     Approvals, Cursors, Effect, ExecutionRequest, ReviewInput, operation_effect, overrides_method,
-    safe_read_url, validate_spec,
+    rendered_request_effect, safe_read_url, validate_spec,
 };
 use itda_spec::{Operation, Spec, interpolate_template_str};
 use itda_types::{
@@ -125,9 +128,14 @@ impl Runtime {
     }
 
     pub async fn call(&self, spec: &Spec, call: Call) -> AppResult<Envelope> {
-        let result = self.run(spec, &call).await;
+        let mut reclassified = None;
+        let result = self.run(spec, &call, &mut reclassified).await;
         if let Some(log) = &self.audit {
             let mut event = self.event(spec, &call, "call");
+            if let Some(reason) = reclassified {
+                event.effect = Effect::Write.as_str().into();
+                event.reclassified = reason.into();
+            }
             match &result {
                 Ok(envelope) => {
                     event.outcome = "ok".into();
@@ -167,7 +175,15 @@ impl Runtime {
         }
     }
 
-    async fn run(&self, spec: &Spec, call: &Call) -> AppResult<Envelope> {
+    /// `reclassified` is set when a declared read was treated as a change
+    /// because of what the rendered request said, so the caller's audit
+    /// record says the same.
+    async fn run(
+        &self,
+        spec: &Spec,
+        call: &Call,
+        reclassified: &mut Option<&'static str>,
+    ) -> AppResult<Envelope> {
         validate_spec(spec)?;
         let op = spec.op(&call.action)?;
         check_inputs(op, &call.args)?;
@@ -200,11 +216,6 @@ impl Runtime {
                 "Send a flatter document.",
             ));
         }
-        let approvals = match (effect, &self.approvals) {
-            (Effect::Read, _) => None,
-            (_, Some(approvals)) => Some(approvals),
-            (_, None) => return Err(AppError::api("writes_disabled", 403)),
-        };
         if !matches!(op.transport.as_str(), "" | "http") {
             return Err(usage(
                 format!("{} needs a browser", op.name),
@@ -293,6 +304,42 @@ impl Runtime {
             }
         }
 
+        // The request is read once more as it will be sent. A declared read
+        // whose rendered address or body asks for a change is a change, and
+        // goes to the user for approval with the reason; one whose effect
+        // cannot be told is not sent. Nothing declared a change gets looser.
+        let form = op.body.as_ref().is_some_and(|body| !body.form.is_empty());
+        let effect = match effect {
+            Effect::Read => {
+                let rendered = rendered_request_effect(&validate_url(&url)?, body.as_deref(), form);
+                match rendered.effect {
+                    Effect::Read => Effect::Read,
+                    Effect::Write => {
+                        *reclassified = Some(rendered.reason);
+                        Effect::Write
+                    }
+                    Effect::Unknown => {
+                        let mut error = AppError::api("effect_unknown", 409);
+                        error.msg = format!(
+                            "{}.{} is declared a read, but itda cannot tell what the request it built does: {}",
+                            spec.site.name, op.name, rendered.reason
+                        );
+                        error.remedy = format!(
+                            "{}. Declare the action's effect as write, or give the read its GraphQL document, then review the site definition. itda sent nothing.",
+                            capitalised(rendered.reason)
+                        );
+                        return Err(error);
+                    }
+                }
+            }
+            declared => declared,
+        };
+        let approvals = match (effect, &self.approvals) {
+            (Effect::Read, _) => None,
+            (_, Some(approvals)) => Some(approvals),
+            (_, None) => return Err(AppError::api("writes_disabled", 403)),
+        };
+
         let mut request = Request::read(url.clone());
         request.method = if op.method.is_empty() {
             "GET".into()
@@ -316,22 +363,38 @@ impl Runtime {
             };
             match &call.approval {
                 None => {
+                    let mut inputs = review_inputs(op, &request.method, &url, &call.args);
+                    if let Some(reason) = *reclassified {
+                        inputs.push(ReviewInput {
+                            label: "reclassified".into(),
+                            value: reason.into(),
+                        });
+                    }
                     let review = approvals
                         .request_approval(
                             execution,
                             title(&spec.site.title, &spec.site.name),
                             op.name.clone(),
                             request.account_id.clone(),
-                            review_inputs(op, &request.method, &url, &call.args),
+                            inputs,
                         )
                         .await?;
                     let mut error = AppError::api("approval_required", 409)
                         .with("approval", review.id.clone())
                         .with("expires_at", review.expires_at.clone());
-                    error.msg = format!(
-                        "{}.{} changes the site and waits for the user's approval {}",
-                        spec.site.name, op.name, review.id
-                    );
+                    error.msg = match *reclassified {
+                        Some(reason) => {
+                            error = error.with("reclassified", reason);
+                            format!(
+                                "{}.{} is declared a read, but the request built from its inputs changes the site ({reason}); it waits for the user's approval {}",
+                                spec.site.name, op.name, review.id
+                            )
+                        }
+                        None => format!(
+                            "{}.{} changes the site and waits for the user's approval {}",
+                            spec.site.name, op.name, review.id
+                        ),
+                    };
                     error.remedy = format!(
                         "Ask the user to run `itda approve {}`, then call again with approval {}.",
                         review.id, review.id
@@ -343,6 +406,10 @@ impl Runtime {
             if let Some(log) = &self.audit {
                 let mut event = self.event(spec, call, "change_started");
                 event.outcome = "sending".into();
+                if let Some(reason) = *reclassified {
+                    event.effect = Effect::Write.as_str().into();
+                    event.reclassified = reason.into();
+                }
                 log.append(event)?;
             }
             // A change is sent once: no retries and no redirects.
@@ -413,7 +480,11 @@ impl Runtime {
                         );
                     }
                 }
-                if operation_effect(op, &effective) != Effect::Read || !safe_read_url(&final_url) {
+                if operation_effect(op, &effective) != Effect::Read
+                    || !safe_read_url(&final_url)
+                    || rendered_request_effect(&final_url, request.body.as_deref(), form).effect
+                        != Effect::Read
+                {
                     let mut error = AppError::api("effect_changed", 409);
                     error.msg = format!(
                         "{}.{} is a read, but the request built after preflight would change the site",
@@ -692,6 +763,15 @@ fn review_inputs(
         value: shown(value),
     }));
     inputs
+}
+
+/// A reason as the start of a sentence.
+fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
 }
 
 /// At most this many characters of one input value are shown in a review.

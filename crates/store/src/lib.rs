@@ -15,6 +15,13 @@ use tokio::sync::oneshot;
 
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 
+/// The file SQLite keeps beside the database: `itda.db-wal`, `itda.db-shm`.
+fn sibling(path: &Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_owned();
+    name.push(suffix);
+    path.with_file_name(name)
+}
+
 /// A handle to the database thread. Cheap to clone; the thread stops when the
 /// last handle is dropped.
 #[derive(Clone)]
@@ -30,23 +37,33 @@ pub struct Migration {
 }
 
 impl Store {
-    /// Open (or create) the database at `path` in a private directory.
+    /// Open (or create) the database at `path` in a private directory. The
+    /// file itself is private to the user too (0600 on Unix), and so are the
+    /// write-ahead log and shared-memory files SQLite keeps beside it: they
+    /// take the database file's mode when SQLite creates them, and ones
+    /// left behind by an earlier run are tightened here.
     pub fn open(path: &Path) -> AppResult<Self> {
         if let Some(parent) = path.parent() {
             util::private_dir(parent)?;
         }
         let path = path.to_owned();
-        Self::start(move || Connection::open(path))
+        Self::start(move || {
+            let conn = Connection::open(&path)?;
+            for file in [path.clone(), sibling(&path, "-wal"), sibling(&path, "-shm")] {
+                if file.exists() {
+                    util::private_file(&file)?;
+                }
+            }
+            Ok(conn)
+        })
     }
 
     /// A database that lives only as long as the handle. For tests.
     pub fn in_memory() -> AppResult<Self> {
-        Self::start(Connection::open_in_memory)
+        Self::start(|| Ok(Connection::open_in_memory()?))
     }
 
-    fn start(
-        open: impl FnOnce() -> rusqlite::Result<Connection> + Send + 'static,
-    ) -> AppResult<Self> {
+    fn start(open: impl FnOnce() -> AppResult<Connection> + Send + 'static) -> AppResult<Self> {
         let (jobs, inbox) = mpsc::channel::<Job>();
         let (ready_tx, ready_rx) = mpsc::channel::<AppResult<()>>();
         thread::Builder::new()
@@ -66,7 +83,7 @@ impl Store {
                         conn
                     }
                     Err(error) => {
-                        let _ = ready_tx.send(Err(error.into()));
+                        let _ = ready_tx.send(Err(error));
                         return;
                     }
                 };

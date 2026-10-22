@@ -42,6 +42,18 @@ pub fn private_dir(path: &Path) -> AppResult<()> {
     }
     Ok(())
 }
+/// Make an existing file readable and writable by its owner only. On
+/// Windows the private directory's ACL covers it and nothing is done.
+pub fn private_file(path: &Path) -> AppResult<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
 pub fn atomic_file(path: &Path, data: &[u8]) -> AppResult<()> {
     let parent = path
         .parent()

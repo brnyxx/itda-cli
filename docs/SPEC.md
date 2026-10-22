@@ -393,10 +393,26 @@ approves that exact request with `itda approve`.
 When the checks disagree with your `effect: read`, itda treats the action as a
 write. Rename the action or path rather than fighting the classifier: a
 `GET /logout` really is a change. itda refuses headers and inputs that ask the
-site to use another method (`X-HTTP-Method-Override`, `X-Method-Override`,
-`X-HTTP-Method`, `_method`). It sends the reviewed method. itda refuses
-`transport` other than `http` and `auth` kinds other than `none`, `header` and
-`browser`; it sends plain HTTP requests as itself.
+site to use another method or address (`X-HTTP-Method-Override`,
+`X-Method-Override`, `X-HTTP-Method`, `_method`, `X-Original-URL`,
+`X-Rewrite-URL`). It sends the reviewed method to the reviewed address. itda
+refuses `transport` other than `http` and `auth` kinds other than `none`,
+`header` and `browser`; it sends plain HTTP requests as itself.
+
+Those checks look at what the definition declares. Just before sending, itda
+reads the request it built once more: every query key and body field, the
+value of a field such as `action` or `mode`, and any GraphQL document in
+`query` (the body, or the address of a `GET`). A read whose rendered request
+asks for a change, for example a `json_template` whose literal body is a
+mutation or carries `{"op": "delete"}` deep inside, is reclassified as a
+change: the call returns `approval_required` with `reclassified` naming the
+reason (`body names a mutation`, `body asks for a change`, `address names a
+mutation`, ...), the review shows the same line, and the user decides as for
+any change. A read whose effect itda cannot tell, such as a GraphQL endpoint
+sent no document, or a document it cannot read, stops with `effect_unknown`
+(exit 2) and a remedy; nothing is sent. A declared write never gets looser
+this way. A search whose text happens to contain a change word stays a read:
+only keys, intent fields and GraphQL documents are read.
 
 ## `response`
 
