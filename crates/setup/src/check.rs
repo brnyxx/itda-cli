@@ -133,7 +133,7 @@ impl Verdict {
         Some(match status {
             "auth_required" => Self::SignedOut,
             "response_mismatch" | "not_found" => Self::SiteChanged,
-            "blocked_by_site" | "site_rate_limited" => Self::Blocked,
+            "blocked_by_site" | "site_rate_limited" | "rate_limited" => Self::Blocked,
             "timeout" | "request_failed" => Self::Unreachable,
             _ => return None,
         })
@@ -180,8 +180,9 @@ impl Verdict {
                 format!("the site refused; check it in your browser, then itda resume {site}")
             }
             Self::SiteChanged => {
-                "the site changed; set it up again with itda setup <url> before an agent uses it"
-                    .into()
+                format!(
+                    "the site changed; run itda refresh {site} to draft it again from the same sources"
+                )
             }
             Self::SignedOut => format!("sign in again with itda login {site}"),
         }
@@ -312,6 +313,20 @@ mod tests {
     }
 
     #[test]
+    fn a_site_that_rate_limits_every_read_is_blocked() {
+        let outcomes = [outcome("a", "rate_limited"), outcome("a", "rate_limited")];
+        assert_eq!(Verdict::of(&outcomes), Verdict::Blocked);
+        let per_site = verdicts(&outcomes);
+        assert_eq!(per_site[0].verdict, Verdict::Blocked);
+        assert!(
+            per_site[0].hint.contains("itda resume a"),
+            "{}",
+            per_site[0].hint
+        );
+        assert_eq!(exit_status(&outcomes), "blocked_by_site");
+    }
+
+    #[test]
     fn each_site_gets_its_own_verdict_and_other_failures_still_exit() {
         let outcomes = [
             outcome("a", "ok"),
@@ -326,7 +341,7 @@ mod tests {
             .collect();
         assert_eq!(summary, [("a", "ok"), ("b", "site_changed"), ("c", "ok")]);
         assert!(
-            per_site[1].hint.contains("itda setup"),
+            per_site[1].hint.contains("itda refresh b"),
             "{}",
             per_site[1].hint
         );

@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use itda_prep::{Options, from_har};
+use itda_prep::{Options, from_har, redacted_recording};
 
 fn recording() -> Vec<u8> {
     std::fs::read(format!(
@@ -259,4 +259,71 @@ fn graphql_operations_become_one_action_each() {
         itda_spec::Effect::Write
     );
     assert!(create.body.as_ref().unwrap().json["title"].required);
+}
+
+#[test]
+fn the_redacted_copy_keeps_names_and_shapes_and_drafts_the_same() {
+    let original = recording();
+    let redacted = redacted_recording(&original).unwrap();
+    let text = String::from_utf8(redacted.clone()).unwrap();
+    for value in ["S3CR3T-TOKEN-VALUE", "SESSION-COOKIE-VALUE", "CSRF-VALUE"] {
+        assert!(!text.contains(value), "{value} kept:\n{text}");
+    }
+    assert!(text.contains("Bearer <redacted>"), "{text}");
+    assert!(text.contains("SID=<redacted>"), "{text}");
+    assert!(text.contains(r#"\"csrf_token\":\"<redacted>\""#), "{text}");
+    assert!(
+        !text.contains(r#""cookies":null"#),
+        "no field was added:\n{text}"
+    );
+    assert!(text.contains("_csrf=%3Credacted%3E"), "{text}");
+    // Values that are not credentials stay, so types are still inferred.
+    assert!(text.contains("page=2"), "{text}");
+    let same = from_har(&redacted, &Options::default()).unwrap();
+    let before = from_har(&original, &Options::default()).unwrap();
+    assert_eq!(same.yaml, before.yaml);
+    assert_eq!(same.notes, before.notes);
+}
+
+#[test]
+fn a_sign_in_call_loses_its_answer_in_the_redacted_copy() {
+    let har = serde_json::json!({"log": {"entries": [
+        {
+            "request": {"method": "POST", "url": "https://a.example/login", "headers": [],
+                "postData": {"mimeType": "application/x-www-form-urlencoded", "text": "user=kim&password=PW-VALUE"}},
+            "response": {"status": 200, "headers": [{"name": "Set-Cookie", "value": "SID=NEW-VALUE; Path=/"}],
+                "content": {"mimeType": "text/html", "text": "<html>welcome kim, your token is TOK-VALUE</html>"}}
+        },
+        {
+            "request": {"method": "POST", "url": "https://a.example/api/session", "headers": [],
+                "postData": {"mimeType": "application/json", "text": "{\"email\": \"kim@a.example\", \"passwd\": \"PW2\", \"nested\": {\"api_key\": \"NK\"}}"}},
+            "response": {"status": 200, "headers": [], "content": {"mimeType": "application/json", "text": "{\"token\": \"TOK2\"}"}}
+        },
+        {
+            "request": {"method": "GET", "url": "https://a.example/api/items", "headers": [{"name": "X-Session-Id", "value": "S-VALUE"}]},
+            "response": {"status": 200, "headers": [], "content": {"mimeType": "application/json", "text": "{\"items\": [1]}"}}
+        }
+    ]}});
+    let text = String::from_utf8(redacted_recording(har.to_string().as_bytes()).unwrap()).unwrap();
+    for value in [
+        "PW-VALUE",
+        "TOK-VALUE",
+        "NEW-VALUE",
+        "PW2",
+        "NK",
+        "TOK2",
+        "S-VALUE",
+    ] {
+        assert!(!text.contains(value), "{value} kept:\n{text}");
+    }
+    assert!(
+        text.contains("kim%40a.example") || text.contains("kim@a.example"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\\\"items\\\": [1]"),
+        "the read's answer stays:\n{text}"
+    );
+    assert!(text.contains("SID=<redacted>"), "{text}");
+    assert!(redacted_recording(b"not json").is_err());
 }

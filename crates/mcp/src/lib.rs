@@ -83,6 +83,9 @@ ask the user to check the site first. \
 When an action that used to work fails, call itda_check with the site before you retry \
 or ask for a new definition: its verdict says whether they are signed out, the site changed, \
 it is blocked, or it is unreachable (itda check <site> does the same in a terminal). \
+When the verdict is site_changed, call itda_manage with action refresh and the site: itda drafts \
+it again from the same sources, the user confirms what changes in a form, and the site is \
+checked again (itda refresh <site> in a terminal). \
 If a site is not set up, call itda_setup with the address of a page on it: the site's actions \
 become tools in this session. If a read says to sign in, call itda_login with the site: the user \
 signs in in their own browser and you only ever see the account id. itda_sites lists what is set \
@@ -104,6 +107,8 @@ mod tests {
             "never call it again",
             "itda_check",
             "itda check <site>",
+            "action refresh",
+            "itda refresh <site>",
             "itda_setup",
             "itda setup <url>",
             "itda_login",

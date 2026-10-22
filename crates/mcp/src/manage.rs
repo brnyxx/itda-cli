@@ -70,10 +70,10 @@ pub(crate) fn tools() -> Vec<Tool> {
         .with_annotations(read_only.clone()),
         Tool::new(
             "itda_manage",
-            "Manage itda without a terminal. remove: forget a site (the user confirms in a form; its accounts stay). resume: lift the pause after a site blocked itda (the user confirms, after checking the site in a browser). approvals: the changes waiting for the user's decision. audit: the last entries of the audit log, for one site or all.",
+            "Manage itda without a terminal. refresh: when itda_check says site_changed, draft the site again from the sources it was set up from, show the user what would change (actions added, removed, changed; the ones they edited by hand are kept, as are the sign-in and the site's name) in a form they confirm, write it and check the site. remove: forget a site (the user confirms in a form; its accounts stay). resume: lift the pause after a site blocked itda (the user confirms, after checking the site in a browser). approvals: the changes waiting for the user's decision. audit: the last entries of the audit log, for one site or all.",
             schema(json!({"type": "object", "properties": {
-                "action": {"type": "string", "enum": ["remove", "resume", "approvals", "audit"]},
-                "site": {"type": "string", "description": "Needed by remove and resume; narrows audit."},
+                "action": {"type": "string", "enum": ["refresh", "remove", "resume", "approvals", "audit"]},
+                "site": {"type": "string", "description": "Needed by refresh, remove and resume; narrows audit."},
                 "account": {"type": "string", "description": "resume: only this account's pause."},
                 "last": {"type": "integer", "description": "audit: how many entries, 20 unless given, 200 at most."}
             }, "required": ["action"], "additionalProperties": false})),
@@ -236,6 +236,77 @@ impl Server {
     ) -> CallToolResult {
         let action = text(arguments, "action").unwrap_or_default();
         match action {
+            "refresh" => {
+                let Some(site) = text(arguments, "site") else {
+                    return failure(&usage("site is required", "Name the site to refresh."));
+                };
+                let plan = match itda_setup::refresh::plan(ctx, site, &mut |_| {}).await {
+                    Ok(plan) => plan,
+                    Err(error) => return failure(&error),
+                };
+                let before = check::verdicts(&plan.outcomes);
+                let changes = match serde_json::to_value(&plan.changes) {
+                    Ok(changes) => changes,
+                    Err(_) => return failure(&AppError::api("internal", 500)),
+                };
+                if !plan.changes_anything() {
+                    return structured(json!({
+                        "status": "ok",
+                        "site": site,
+                        "written": false,
+                        "changes": changes,
+                        "before": before,
+                        "verdict": before.first().map(|v| v.verdict),
+                        "hint": before.first().map(|v| v.hint.clone()),
+                        "note": "The sources draft the same actions; the definition was left as it is.",
+                        "untrusted": true,
+                    }));
+                }
+                let mut message = format!(
+                    "Refresh '{site}'? itda drafted it again from the same sources. The sign-in, the site's name and the actions you edited by hand are kept. This would change:"
+                );
+                for change in &plan.changes {
+                    message.push_str("\n- ");
+                    message.push_str(&change_words(change));
+                }
+                match confirmed(caller, message, "Refresh this site").await {
+                    Confirmed::Yes => {}
+                    Confirmed::No => return failure(&declined("refresh", site)),
+                    Confirmed::Unanswered => {
+                        return failure(&unanswered(format!("itda refresh {site}")));
+                    }
+                    Confirmed::CannotAsk => {
+                        return failure(&needs_terminal(format!("itda refresh {site}")));
+                    }
+                }
+                if let Err(error) = itda_setup::refresh::apply(&ctx.home, &plan) {
+                    return failure(&error);
+                }
+                if let Err(error) = self.reload(ctx) {
+                    return failure(&error);
+                }
+                self.tools_changed(caller).await;
+                let outcomes =
+                    check::run(&ctx.runtime, std::slice::from_ref(&plan.spec), None).await;
+                let verdicts = check::verdicts(&outcomes);
+                if let Err(error) = check::remember(&ctx.home, &verdicts) {
+                    return failure(&error);
+                }
+                structured(json!({
+                    "status": "ok",
+                    "site": site,
+                    "written": true,
+                    "changes": changes,
+                    "before": before,
+                    "verdict": verdicts.first().map(|v| v.verdict),
+                    "hint": verdicts.first().map(|v| v.hint.clone()),
+                    "actions": actions(&plan.spec),
+                    "results": outcomes,
+                    "notes": plan.notes,
+                    "problems": plan.problems,
+                    "untrusted": true,
+                }))
+            }
             "remove" => {
                 let Some(site) = text(arguments, "site") else {
                     return failure(&usage("site is required", "Name the site to remove."));
@@ -332,7 +403,7 @@ impl Server {
             }
             other => failure(&usage(
                 format!("Unknown action: {other}"),
-                "Use remove, resume, approvals or audit.",
+                "Use refresh, remove, resume, approvals or audit.",
             )),
         }
     }
@@ -531,6 +602,19 @@ fn needs_terminal(command: String) -> AppError {
         "This client cannot show the user a form to confirm it",
         format!("Ask the user to run `{command}` in a terminal."),
     )
+}
+
+/// One line of a refresh's diff, for the form the person confirms.
+fn change_words(change: &itda_setup::refresh::Change) -> String {
+    use itda_setup::refresh::Change;
+    match change {
+        Change::Added { name, desc } => format!("{name}: added ({desc})"),
+        Change::Removed { name, why } => {
+            format!("{name}: removed; it no longer drafts and its read failed with {why}")
+        }
+        Change::Changed { name, fields } => format!("{name}: changed ({})", fields.join(", ")),
+        Change::Edited { name } => format!("{name}: kept as you edited it"),
+    }
 }
 
 /// What the gate saw when the page refused itda, in words.

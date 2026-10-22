@@ -4,6 +4,7 @@
 mod feedback;
 mod install;
 mod output;
+mod refresh;
 mod setup;
 mod text;
 
@@ -191,10 +192,22 @@ enum Command {
     Check {
         /// Only this site
         site: Option<String>,
+        /// Every installed site, one verdict line each
+        #[arg(long, conflicts_with = "site")]
+        all: bool,
         #[arg(long)]
         account: Option<String>,
         #[arg(long)]
         json: bool,
+    },
+    /// Draft a site again from the sources it was set up from, show what
+    /// would change, and keep what you decided: the sign-in, the defaults,
+    /// the name and every action you edited by hand. Then checks the site
+    Refresh {
+        site: String,
+        /// Write the changes without asking
+        #[arg(long, short = 'y')]
+        yes: bool,
     },
     /// Serve installed actions to an AI agent over MCP (stdio)
     Mcp {
@@ -461,9 +474,11 @@ fn main() -> ExitCode {
         Command::Feedback { no_open } => Ok(feedback(&home, no_open)),
         Command::Check {
             site,
+            all,
             account,
             json,
-        } => block_on(check(&home, site.as_deref(), account.as_deref(), json)),
+        } => block_on(check(&home, site.as_deref(), all, account.as_deref(), json)),
+        Command::Refresh { site, yes } => block_on(refresh::run(&home, &site, yes)),
         Command::Mcp {
             command:
                 Some(McpCommand::Install {
@@ -813,6 +828,7 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
 async fn check(
     home: &Path,
     only: Option<&str>,
+    all: bool,
     account: Option<&str>,
     as_json: bool,
 ) -> AppResult<ExitCode> {
@@ -837,13 +853,32 @@ async fn check(
                 "results": outcomes,
             })
         );
+    } else if all {
+        let width = verdicts.iter().map(|v| v.site.len()).max().unwrap_or(0);
+        for site in &verdicts {
+            println!(
+                "{:<width$}  {}: {}",
+                site.site,
+                site.verdict.as_str(),
+                site.hint
+            );
+        }
     } else {
+        say_check(&outcomes, &verdicts);
+    }
+    Ok(ExitCode::from(output::exit_code(status)))
+}
+
+/// What `itda check` prints: one line per action, a verdict per site and a
+/// count at the end.
+pub(crate) fn say_check(outcomes: &[check::Outcome], verdicts: &[check::SiteVerdict]) {
+    {
         let width = outcomes
             .iter()
             .map(|o| o.site.len() + o.action.len() + 1)
             .max()
             .unwrap_or(0);
-        for site in &verdicts {
+        for site in verdicts {
             for o in outcomes.iter().filter(|o| o.site == site.site) {
                 let time = o
                     .duration_ms
@@ -866,7 +901,6 @@ async fn check(
             count("skipped")
         );
     }
-    Ok(ExitCode::from(output::exit_code(status)))
 }
 
 async fn login(
@@ -1011,11 +1045,17 @@ async fn draft_har(
         options.schemas = itda_setup::introspect::schemas(&open(home)?.net, &endpoints).await;
         say_schemas(&options.schemas);
     }
+    let draft = itda_prep::from_recording(&text, &options, "`itda draft har`")?;
+    let sources = itda_setup::refresh::Sources::of_pages(&[], &draft, &options);
     publish(
         home,
-        itda_prep::from_recording(&text, &options, "`itda draft har`")?,
+        draft,
         install,
         force,
+        Origin {
+            sources,
+            recording: Some(text),
+        },
     )
 }
 
@@ -1030,7 +1070,21 @@ fn draft(
     force: bool,
 ) -> AppResult<ExitCode> {
     let text = std::fs::read(file)?;
-    publish(home, from(&text, &options)?, install, force)
+    let draft = from(&text, &options)?;
+    let sources = itda_setup::refresh::Sources {
+        description: Some(file.display().to_string()),
+        ..itda_setup::refresh::Sources::of_pages(&[], &draft, &options)
+    };
+    publish(
+        home,
+        draft,
+        install,
+        force,
+        Origin {
+            sources,
+            recording: None,
+        },
+    )
 }
 
 /// What the gate already knows about a page that refused itda, as the error
@@ -1143,7 +1197,17 @@ async fn draft_page(
     if let Some(described) = &draft.described {
         eprintln!("{}", text::described(described));
     }
-    publish(home, draft, install, force)
+    let sources = itda_setup::refresh::Sources::of_pages(urls, &draft, &options);
+    publish(
+        home,
+        draft,
+        install,
+        force,
+        Origin {
+            sources,
+            recording: None,
+        },
+    )
 }
 
 /// Record the site in the person's own browser and draft from the recording,
@@ -1180,7 +1244,19 @@ async fn record(
     }
     let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
     let site = draft.site.clone();
-    let code = publish(home, draft, install, force)?;
+    // Without --save the recording is gone once this returns, so a refresh
+    // reads the pages it held again; with it, the copy under the site is
+    // what a refresh drafts from.
+    let base_url = itda_spec::parse(draft.yaml.as_bytes())
+        .map(|spec| spec.site.base_url)
+        .unwrap_or_default();
+    let pages = itda_prep::pages_in_recording(&har, &base_url);
+    let sources = itda_setup::refresh::Sources::of_pages(&pages, &draft, &options);
+    let origin = Origin {
+        sources,
+        recording: save.map(|_| har.clone()),
+    };
+    let code = publish(home, draft, install, force, origin)?;
     if !install {
         return Ok(code);
     }
@@ -1253,11 +1329,20 @@ fn say_schemas(schemas: &[itda_prep::graphql::Schema]) {
 }
 
 /// Print the draft, or install it, and list what to review on stderr.
+/// Where a draft came from, kept next to it when it is installed so `itda
+/// refresh` can draft it again; the recording, when the person kept one,
+/// goes under the site.
+struct Origin {
+    sources: itda_setup::refresh::Sources,
+    recording: Option<Vec<u8>>,
+}
+
 fn publish(
     home: &Path,
     draft: itda_prep::Draft,
     install: bool,
     force: bool,
+    origin: Origin,
 ) -> AppResult<ExitCode> {
     for note in &draft.notes {
         eprintln!("note: {note}");
@@ -1284,6 +1369,18 @@ fn publish(
         ));
     }
     itda_types::util::atomic_file(&path, draft.yaml.as_bytes())?;
+    let Origin {
+        mut sources,
+        recording,
+    } = origin;
+    if let Some(har) = recording {
+        sources.recording = Some(itda_setup::refresh::keep_recording(
+            home,
+            &draft.site,
+            &har,
+        )?);
+    }
+    itda_setup::refresh::remember(home, &draft.site, sources)?;
     eprintln!(
         "Installed at {}. Review it, then try `itda ls {}`.",
         path.display(),
