@@ -1,14 +1,16 @@
-// The hero's sky: a field of points drifting through a slow current, with
-// threads forming between the ones that come close. A website on the left,
-// an agent on the right, and what passes between them: itda. The cursor is
-// a hand in the field; points lean toward it and the threads follow.
+// The sky behind the whole page: liquid chrome with the striped reflections
+// of a turn-of-the-century render, a wire grid running off to the horizon,
+// and a field of points drifting through a slow current with threads forming
+// between the ones that come close. A website on the left, an agent on the
+// right, and what passes between them: itda. The cursor is a hand in the
+// field; points lean toward it and the threads follow. Scrolling pushes the
+// grid and tilts the camera.
 //
-// three.js from cdnjs, drawn at half resolution, paused when the hero is off
-// screen or the tab is hidden, one still frame under reduced motion, and
-// nothing at all (the CSS glow stays) when WebGL is unavailable.
+// three.js from cdnjs, drawn at reduced resolution, paused when the tab is
+// hidden, one still frame under reduced motion, and nothing at all (the CSS
+// glow stays) when WebGL is unavailable.
 (() => {
-  const hero = document.querySelector(".hero");
-  if (!hero || !window.THREE || !window.WebGLRenderingContext) return;
+  if (!window.THREE || !window.WebGLRenderingContext) return;
   const T = window.THREE;
   let renderer;
   try {
@@ -19,15 +21,22 @@
   const canvas = renderer.domElement;
   canvas.className = "sky";
   canvas.setAttribute("aria-hidden", "true");
-  hero.prepend(canvas);
+  document.body.prepend(canvas);
   renderer.setClearColor(0x000000, 0);
 
-
-  // Behind the field: slow liquid chrome in the brand blues, the sky itself.
+  // Behind everything: liquid chrome. The folded noise field is read like a
+  // reflection map, so the highlights come as sharp stripes that slide over
+  // the surface, split a little by colour, with a holographic rainbow in the
+  // crests. Dark overall so the copy stays readable.
   const liquid = new T.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    uniforms: { u_time: { value: 0 }, u_mouse: { value: new T.Vector2(0.5, 0.5) }, u_aspect: { value: 1 } },
+    uniforms: {
+      u_time: { value: 0 },
+      u_mouse: { value: new T.Vector2(0.5, 0.5) },
+      u_aspect: { value: 1 },
+      u_scroll: { value: 0 },
+    },
     vertexShader: `
       varying vec2 v_uv;
       void main() { v_uv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -37,6 +46,7 @@
       uniform float u_time;
       uniform vec2 u_mouse;
       uniform float u_aspect;
+      uniform float u_scroll;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p) {
         vec2 i = floor(p), f = fract(p);
@@ -50,32 +60,46 @@
         for (int i = 0; i < 5; i++) { v += a * noise(p); p = r * p * 2.0 + 10.0; a *= 0.5; }
         return v;
       }
+      float stripe(float f, float t) { return pow(0.5 + 0.5 * sin(f * 26.0 - t * 1.8), 7.0); }
+      vec3 holo(float h) { return 0.5 + 0.5 * cos(6.2831 * (h + vec3(0.0, 0.33, 0.67))); }
       void main() {
         vec2 uv = v_uv;
-        vec2 q = vec2(uv.x * u_aspect, uv.y);
+        vec2 q = vec2(uv.x * u_aspect, uv.y + u_scroll);
         float t = u_time * 0.045;
         vec2 m = (u_mouse - 0.5) * 0.35;
-        vec2 w1 = vec2(fbm(q * 1.6 + t + m), fbm(q * 1.6 - t * 0.7 + 3.1));
-        vec2 w2 = vec2(fbm(q * 2.2 + 2.0 * w1 + vec2(1.7, 9.2) + 0.3 * t),
-                       fbm(q * 2.2 + 2.0 * w1 + vec2(8.3, 2.8) - 0.2 * t));
-        float f = fbm(q * 2.0 + 2.4 * w2);
-        float crest = smoothstep(0.52, 0.74, f) * (1.0 - smoothstep(0.74, 0.92, f));
-        float sheen = pow(crest, 2.2);
+        vec2 w1 = vec2(fbm(q * 1.4 + t + m), fbm(q * 1.4 - t * 0.7 + 3.1));
+        vec2 w2 = vec2(fbm(q * 2.0 + 2.0 * w1 + vec2(1.7, 9.2) + 0.3 * t),
+                       fbm(q * 2.0 + 2.0 * w1 + vec2(8.3, 2.8) - 0.2 * t));
+        float f = fbm(q * 1.8 + 2.4 * w2);
+
+        // The body of the metal: dark steel lifted toward blue where the field crests.
         vec3 ink = vec3(0.043, 0.051, 0.071);
+        vec3 steel = vec3(0.16, 0.19, 0.27);
         vec3 blue = vec3(0.184, 0.357, 0.918);
-        vec3 lilac = vec3(0.431, 0.545, 1.0);
-        vec3 cyan = vec3(0.45, 0.93, 1.0);
-        vec3 rose = vec3(1.0, 0.48, 0.71);
-        vec3 col = mix(ink, blue * 0.5, smoothstep(0.25, 0.75, f));
-        col = mix(col, lilac * 0.85, sheen * 0.9);
-        float irid = 0.5 + 0.5 * sin(6.2831 * (w2.x - w2.y) + t * 2.0);
-        col += sheen * mix(cyan, rose, irid) * 0.35;
-        float shade = smoothstep(0.0, 0.85, length((uv - vec2(0.12, 0.72)) * vec2(1.2, 1.0)));
-        col *= mix(0.2, 1.0, shade);
+        vec3 col = mix(ink, steel, smoothstep(0.3, 0.8, f));
+        col = mix(col, blue * 0.55, smoothstep(0.55, 0.85, f) * 0.7);
+
+        // Chrome stripes, read off the field like a reflection map, each
+        // colour channel a hair apart so the edges split like a bad lens.
+        float sr = stripe(f + 0.006, t), sg = stripe(f, t), sb = stripe(f - 0.006, t);
+        vec3 chrome = vec3(0.86, 0.9, 1.0);
+        col += chrome * vec3(sr, sg, sb) * 0.42;
+
+        // Holographic rainbow in the crests: oil on chrome, year 2000.
+        float h = w2.x - w2.y + t * 0.3;
+        col += holo(h) * sg * 0.34;
+        col += holo(h + 0.5) * smoothstep(0.62, 0.78, f) * 0.09;
+
+        // Keep the left column dark so the headline stays readable.
+        float shade = smoothstep(0.0, 0.9, length((uv - vec2(0.1, 0.7)) * vec2(1.25, 1.0)));
+        col *= mix(0.28, 0.82, shade);
+
+        // Screen feel: visible scanlines and grain.
         float line = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.1416);
-        col *= 0.95 + 0.05 * line;
-        col += (hash(gl_FragCoord.xy + fract(u_time)) - 0.5) * 0.02;
-        float alpha = smoothstep(0.0, 0.28, uv.y) * 0.9;
+        col *= 0.86 + 0.14 * line;
+        col += (hash(gl_FragCoord.xy + fract(u_time)) - 0.5) * 0.035;
+
+        float alpha = 0.92;
         gl_FragColor = vec4(col * alpha, alpha);
       }`,
   });
@@ -86,9 +110,36 @@
   skyScene.add(sky);
 
   const scene = new T.Scene();
-  scene.fog = new T.FogExp2(0x0b0d12, 0.055);
-  const camera = new T.PerspectiveCamera(42, 1, 0.1, 100);
+  scene.fog = new T.FogExp2(0x0b0d12, 0.05);
+  const camera = new T.PerspectiveCamera(42, 1, 0.1, 120);
   camera.position.set(0, 0, 16);
+
+  // The floor: a wire grid running off to the horizon under the field,
+  // sliding toward the camera. Cyan near, magenta far, as on the old demos.
+  const GRID = 32, GW = 60, GD = 70;
+  const gpos = new Float32Array((GRID + 1) * 2 * 2 * 3);
+  const gcol = new Float32Array((GRID + 1) * 2 * 2 * 3);
+  const near = new T.Color(0x73edff), far = new T.Color(0xff5fd0);
+  let g = 0;
+  for (let i = 0; i <= GRID; i++) {
+    const u = i / GRID;
+    const x = -GW / 2 + u * GW;
+    const z = -GD + u * GD;
+    // Lines along z (depth) and along x (across).
+    gpos.set([x, 0, -GD, x, 0, 0], g * 6);
+    gcol.set([far.r, far.g, far.b, near.r, near.g, near.b], g * 6);
+    g++;
+    const c = far.clone().lerp(near, u);
+    gpos.set([-GW / 2, 0, z, GW / 2, 0, z], g * 6);
+    gcol.set([c.r, c.g, c.b, c.r, c.g, c.b], g * 6);
+    g++;
+  }
+  const grid = new T.BufferGeometry();
+  grid.setAttribute("position", new T.BufferAttribute(gpos, 3));
+  grid.setAttribute("color", new T.BufferAttribute(gcol, 3));
+  const floor = new T.LineSegments(grid, new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.4, blending: T.AdditiveBlending, depthWrite: false }));
+  floor.position.set(0, -8.5, 6);
+  scene.add(floor);
 
   // Points live in a flat slab; two denser clusters stand for the website
   // and the agent, and the current between them carries the rest.
@@ -162,14 +213,14 @@
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const mouse = new T.Vector2(0, 0), target = new T.Vector2(0, 0);
   const hand = new T.Vector3(0, 0, 0);
-  let visible = true, frame = 0, last = 0;
+  let frame = 0, last = 0, scroll = 0;
   const start = performance.now();
 
   const noise = (x, y, t) =>
     Math.sin(x * 0.41 + t) * Math.cos(y * 0.37 - t * 0.7) + Math.sin((x + y) * 0.23 + t * 0.5) * 0.5;
 
   const resize = () => {
-    const w = hero.clientWidth, h = hero.clientHeight;
+    const w = window.innerWidth, h = window.innerHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 2) * 0.6;
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
@@ -181,12 +232,14 @@
   const step = (now) => {
     const t = still ? 30 : (now - start) / 1000;
     mouse.lerp(target, 0.05);
+    scroll += ((window.scrollY || 0) - scroll) * 0.08;
+    const s = Math.min(scroll / 1400, 1);
     // The hand in world space, on the z=0 plane.
     const half = Math.tan((camera.fov * Math.PI) / 360) * camera.position.z;
     hand.set(mouse.x * half * camera.aspect, mouse.y * half, 0);
     camera.position.x = mouse.x * 1.2;
-    camera.position.y = mouse.y * 0.8;
-    camera.lookAt(0, 0, 0);
+    camera.position.y = mouse.y * 0.8 - s * 2.5;
+    camera.lookAt(0, -s * 1.5, 0);
 
     const p = points.attributes.position.array;
     for (let i = 0; i < N; i++) {
@@ -253,9 +306,14 @@
     }
     spine.attributes.position.needsUpdate = true;
 
+    // The grid slides toward the camera, faster while scrolling.
+    const cell = GD / GRID;
+    floor.position.z = 6 + ((t * 0.9 + scroll * 0.01) % cell);
+
     liquid.uniforms.u_time.value = t;
     liquid.uniforms.u_mouse.value.set(mouse.x * 0.5 + 0.5, mouse.y * 0.5 + 0.5);
     liquid.uniforms.u_aspect.value = camera.aspect;
+    liquid.uniforms.u_scroll.value = scroll * 0.0004;
     renderer.autoClear = true;
     renderer.render(skyScene, skyCamera);
     renderer.autoClear = false;
@@ -264,27 +322,22 @@
 
   const loop = (now) => {
     frame = 0;
-    if (!visible) return;
+    if (document.hidden) return;
     if (now - last > 1000 / 45) { step(now); last = now; }
     frame = requestAnimationFrame(loop);
   };
 
-  hero.addEventListener("pointermove", (e) => {
-    const r = hero.getBoundingClientRect();
-    target.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+  window.addEventListener("pointermove", (e) => {
+    target.set((e.clientX / window.innerWidth) * 2 - 1, -((e.clientY / window.innerHeight) * 2 - 1));
   }, { passive: true });
-  hero.addEventListener("pointerleave", () => target.set(0, 0), { passive: true });
+  document.addEventListener("pointerleave", () => target.set(0, 0), { passive: true });
   window.addEventListener("resize", () => { resize(); if (still) step(performance.now()); }, { passive: true });
 
   resize();
   if (still) { step(performance.now()); return; }
-  new IntersectionObserver((entries) => {
-    visible = entries.some((e) => e.isIntersecting);
-    if (visible && !frame) frame = requestAnimationFrame(loop);
-  }).observe(hero);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { cancelAnimationFrame(frame); frame = 0; }
-    else if (visible && !frame) frame = requestAnimationFrame(loop);
+    else if (!frame) frame = requestAnimationFrame(loop);
   });
   frame = requestAnimationFrame(loop);
 })();

@@ -57,7 +57,7 @@ img { display: block; max-width: 100%; }
 html[lang="ko"] body { word-break: keep-all; }
 html[lang="ko"] h1 { font-size: clamp(36px, 4.6vw, 54px); letter-spacing: -.03em; line-height: 1.15; }
 html[lang="ko"] h2 { letter-spacing: -.02em; line-height: 1.25; }
-html[lang="ko"] :is(.chip, .term-bar em) { font-family: var(--sans); }
+html[lang="ko"] .term-bar em { font-family: var(--sans); }
 .nav-gh {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 7px 14px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--text);
@@ -66,9 +66,11 @@ html[lang="ko"] :is(.chip, .term-bar em) { font-family: var(--sans); }
 
 /* hero */
 .hero { position: relative; padding: 96px 0 72px; overflow: hidden; }
-/* The sky: sky.js draws liquid chrome and a field of threads behind the
-   hero, reacting to the cursor. Without WebGL only the glow remains. */
-.sky { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* The sky: sky.js draws liquid chrome, a wire grid and a field of threads
+   behind the whole page, reacting to the cursor and the scroll. Without
+   WebGL only the hero glow remains. */
+.sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+main, .footer { position: relative; z-index: 1; }
 .glow {
   position: absolute; width: 900px; height: 600px; left: 50%; top: -260px; transform: translateX(-30%);
   background: radial-gradient(closest-side, rgba(47, 91, 234, .38), rgba(110, 139, 255, .12) 55%, transparent);
@@ -76,15 +78,8 @@ html[lang="ko"] :is(.chip, .term-bar em) { font-family: var(--sans); }
 }
 .hero-grid { position: relative; display: grid; grid-template-columns: 1.02fr 1fr; gap: 56px; align-items: center; }
 .hero-grid > *, .split > * { min-width: 0; }
-.pill {
-  display: inline-flex; align-items: center; gap: 10px;
-  padding: 6px 14px 6px 10px; border-radius: 999px; font-size: 13px; color: var(--muted);
-  background: rgba(255,255,255,.04); border: 1px solid var(--line);
-}
-.pill:hover { color: var(--text); border-color: var(--line-2); }
-.pill-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(61,214,140,.15); }
 h1 {
-  margin: 22px 0 20px; font-size: clamp(36px, 4.4vw, 52px); line-height: 1.04;
+  margin: 0 0 20px; font-size: clamp(36px, 4.4vw, 52px); line-height: 1.04;
   letter-spacing: -.035em; font-weight: 700;
 }
 .accent { font-style: normal; color: var(--blue-hi); }
@@ -132,7 +127,7 @@ h1 {
 .btn-primary:hover { background: #3A66F5; }
 .btn-ghost { border: 1px solid var(--line-2); color: var(--text); background: rgba(255,255,255,.02); }
 .btn-ghost:hover { border-color: var(--faint); }
-.meta { margin: 20px 0 0; font-size: 13px; color: var(--faint); }
+.footer .meta { margin: 18px auto 0; font-size: 13px; color: var(--faint); }
 
 /* terminal */
 .hero-visual { position: relative; }
@@ -176,13 +171,6 @@ h1 {
 .term-body k { color: #B4C3FF; }
 .term-body s { color: #9FE3C1; text-decoration: none; }
 .term-body n { color: var(--pink); }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.chip {
-  font: 500 12px var(--mono); padding: 6px 10px; border-radius: 999px; border: 1px solid;
-}
-.chip.read { color: var(--green); border-color: rgba(61,214,140,.35); background: rgba(61,214,140,.06); }
-.chip.wait { color: var(--amber); border-color: rgba(245,176,65,.35); background: rgba(245,176,65,.06); }
-.chip.log { color: var(--blue-hi); border-color: rgba(110,139,255,.35); background: rgba(110,139,255,.06); }
 
 /* clients */
 .clients {
