@@ -108,6 +108,7 @@ fn merge_description(
         lang: options.lang.clone(),
         schemas: Vec::new(),
         session: None,
+        frames_to_sign_in: Vec::new(),
     };
     let mut api = match openapi_parts(&description.bytes, &api_options, Some(url)) {
         Ok(api) => api,
@@ -430,13 +431,22 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
                     frame.url
                 ));
             } else if !pages.iter().any(|p| p.url == frame.url) {
-                notes.push(format!(
-                    "{}: shows {} in a frame that was not read; `itda draft page` and `itda setup` follow a site's own frames.",
-                    url.path(),
-                    url::Url::parse(&frame.url)
-                        .map(|f| f.path().to_owned())
-                        .unwrap_or(frame.url)
-                ));
+                let shown = url::Url::parse(&frame.url)
+                    .map(|f| f.path().to_owned())
+                    .unwrap_or(frame.url);
+                if options.frames_to_sign_in.contains(&shown) {
+                    notes.push(format!(
+                        "{}: shows {} in a frame that answers with a sign-in and so was not read; `itda setup --user <name>` signs in and reads it.",
+                        url.path(),
+                        shown
+                    ));
+                } else {
+                    notes.push(format!(
+                        "{}: shows {} in a frame that was not read; `itda draft page` and `itda setup` follow a site's own frames.",
+                        url.path(),
+                        shown
+                    ));
+                }
             }
         }
     }

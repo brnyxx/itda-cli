@@ -443,6 +443,7 @@ pub async fn run(
         lang: ctx.lang.clone(),
         schemas: Vec::new(),
         session: None,
+        frames_to_sign_in: Vec::new(),
     };
 
     // 1. Look at the page, or decide to record.
@@ -499,10 +500,46 @@ pub async fn run(
                 // A shell whose content is in frames on its own origin is
                 // read through them; the frame pages are pages of the site.
                 let mut framed = frames::follow(&ctx.net, &page, None).await?;
+                options.frames_to_sign_in = framed.sign_in_paths();
                 let summary = summarize(&page).with_frames(&framed);
                 report(Progress::PageFetched(&summary));
                 if summary.sign_in_form && answers.record_anyway()? {
                     record = true;
+                } else if let Some(Refused {
+                    kind: Refusal::SignInRedirect { to, .. },
+                    ..
+                }) = &framed.sign_in
+                {
+                    // A frame of the shell answered with a redirect to a
+                    // sign-in: treat it as the top-level page would be,
+                    // signing in and reading the frame with the session.
+                    let to = to.clone();
+                    let need = SignInNeed {
+                        why: Fallback::SignIn,
+                        refused: framed.sign_in.take(),
+                        sign_in: Some(to.as_str()),
+                    };
+                    match sign_in_or_record(
+                        ctx,
+                        &url,
+                        need,
+                        recognised.as_ref(),
+                        &mut options,
+                        answers,
+                        report,
+                    )
+                    .await?
+                    {
+                        Drafted::Ready {
+                            draft: d,
+                            signed: s,
+                        } => {
+                            draft = Some(d);
+                            signed = s;
+                        }
+                        Drafted::Record => record = true,
+                        Drafted::Stopped(stopped) => return Ok(Finished::Stopped(stopped)),
+                    }
                 } else {
                     if recognised.is_none()
                         && request.watch
@@ -549,52 +586,31 @@ pub async fn run(
                     }
                 }
                 if draft.is_none() {
-                    if let Some(refused) = &refused {
-                        report(Progress::Refused(refused));
-                    }
-                    // The page needs a sign-in and the person is there to
-                    // type it: itda signs in through the site's own form
-                    // and reads the page as they see it.
-                    let credentials = match (why, &probed.sign_in) {
-                        (Fallback::SignIn, Some(_)) => answers.sign_in(&host)?,
-                        _ => None,
+                    let need = SignInNeed {
+                        why,
+                        refused,
+                        sign_in: probed.sign_in.as_deref(),
                     };
-                    if let (Some(credentials), Some(to)) = (credentials, &probed.sign_in) {
-                        let (page, session) =
-                            sign_in_as_itda(ctx, &url, to, &credentials, report).await?;
-                        let mut framed =
-                            frames::follow(&ctx.net, &page, Some(&session.session)).await?;
-                        let mut summary = summarize(&page).with_frames(&framed);
-                        summary.signed_in = true;
-                        report(Progress::PageFetched(&summary));
-                        options.session = Some(itda_prep::SessionAuth {
-                            cookie: session.cookie.clone().unwrap_or_default(),
-                            query: session.session.query.as_ref().map(|(key, _)| key.clone()),
-                            login: session.form.clone(),
-                        });
-                        signed = Some(session);
-                        let pages = with_frames(page, &mut framed);
-                        draft = Some(
-                            draft_pages(
-                                ctx,
-                                &pages,
-                                &[],
-                                &mut options,
-                                recognised.as_ref(),
-                                report,
-                            )
-                            .await?,
-                        );
-                    } else if let Some(found) = &recognised {
-                        // A page that is not enough on its own still gets
-                        // the software's API when the software is known.
-                        draft = Some(itda_prep::from_template(&fill(found), &[], None, &options)?);
-                    } else {
-                        report(Progress::NeedsRecord(why));
-                        if !answers.record(why)? {
-                            return Ok(Finished::Stopped(Stopped::NoRecord { why, refused }));
+                    match sign_in_or_record(
+                        ctx,
+                        &url,
+                        need,
+                        recognised.as_ref(),
+                        &mut options,
+                        answers,
+                        report,
+                    )
+                    .await?
+                    {
+                        Drafted::Ready {
+                            draft: d,
+                            signed: s,
+                        } => {
+                            draft = Some(d);
+                            signed = s;
                         }
-                        record = true;
+                        Drafted::Record => record = true,
+                        Drafted::Stopped(stopped) => return Ok(Finished::Stopped(stopped)),
                     }
                 }
             }
@@ -934,6 +950,87 @@ async fn sign_in_as_itda(
             format!("{host} accepted the sign-in, but still does not show the page"),
             "Check the address in a browser, signed in, and try again.",
         )),
+    }
+}
+
+/// A page that is not enough on its own needs a sign-in, or could not be read
+/// for another reason: what the gate saw, and the sign-in page to use. The
+/// sign-in may have been found on the top-level page or in one of its frames.
+struct SignInNeed<'a> {
+    why: Fallback,
+    refused: Option<Refused>,
+    sign_in: Option<&'a str>,
+}
+
+/// What the sign-in-or-record tail decided: a draft, with the kept session
+/// when a sign-in gave one; that the person chose to record; or that they
+/// declined and setup stops.
+enum Drafted {
+    Ready {
+        draft: Draft,
+        signed: Option<login::Signed>,
+    },
+    Record,
+    Stopped(Stopped),
+}
+
+/// The one path a page that is not enough on its own takes: sign in through
+/// the site's own form and draft the page as the person sees it, fall back to
+/// the software's template when the software is known, or record. Shared by
+/// a sign-in found on the top-level page and one found in a frame.
+async fn sign_in_or_record(
+    ctx: &Context,
+    url: &url::Url,
+    need: SignInNeed<'_>,
+    recognised: Option<&software::Recognised>,
+    options: &mut Options,
+    answers: &mut (dyn Answers + Send),
+    report: &mut (dyn FnMut(Progress<'_>) + Send),
+) -> AppResult<Drafted> {
+    let host = url.host_str().unwrap_or_default().to_owned();
+    if let Some(refused) = &need.refused {
+        report(Progress::Refused(refused));
+    }
+    // The page needs a sign-in and the person is there to type it: itda signs
+    // in through the site's own form and reads the page as they see it.
+    let credentials = match (need.why, need.sign_in) {
+        (Fallback::SignIn, Some(_)) => answers.sign_in(&host)?,
+        _ => None,
+    };
+    if let (Some(credentials), Some(to)) = (credentials, need.sign_in) {
+        let (page, session) = sign_in_as_itda(ctx, url, to, &credentials, report).await?;
+        let mut framed = frames::follow(&ctx.net, &page, Some(&session.session)).await?;
+        let mut summary = summarize(&page).with_frames(&framed);
+        summary.signed_in = true;
+        report(Progress::PageFetched(&summary));
+        options.session = Some(itda_prep::SessionAuth {
+            cookie: session.cookie.clone().unwrap_or_default(),
+            query: session.session.query.as_ref().map(|(key, _)| key.clone()),
+            login: session.form.clone(),
+        });
+        let pages = with_frames(page, &mut framed);
+        let draft = draft_pages(ctx, &pages, &[], options, recognised, report).await?;
+        Ok(Drafted::Ready {
+            draft,
+            signed: Some(session),
+        })
+    } else if let Some(found) = recognised {
+        // A page that is not enough on its own still gets the software's API
+        // when the software is known.
+        let draft = itda_prep::from_template(&fill(found), &[], None, options)?;
+        Ok(Drafted::Ready {
+            draft,
+            signed: None,
+        })
+    } else {
+        report(Progress::NeedsRecord(need.why));
+        if !answers.record(need.why)? {
+            return Ok(Drafted::Stopped(Stopped::NoRecord {
+                why: need.why,
+                refused: need.refused,
+            }));
+        }
+        Ok(Drafted::Record)
     }
 }
 

@@ -478,6 +478,21 @@ fn first_read(home: &Path, site: &str) -> Option<String> {
         .and_then(|a| a["name"].as_str().map(str::to_owned))
 }
 
+/// Every read action's name on an installed site, in listed order.
+fn all_reads(home: &Path, site: &str) -> Vec<String> {
+    let listed = json(&itda(home, &["ls", site, "--json"]));
+    listed[0]["actions"]
+        .as_array()
+        .map(|actions| {
+            actions
+                .iter()
+                .filter(|a| a["effect"] == "read")
+                .filter_map(|a| a["name"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[test]
 fn framed_from_the_reviewed_definition_to_an_approved_change() {
     if lab_is_on() {
@@ -485,16 +500,13 @@ fn framed_from_the_reviewed_definition_to_an_approved_change() {
     }
 }
 
-// Frame following (b35a612) reaches a shell's own frames, but the framed
+// Frame following (b35a612) reaches a shell's own frames, and the framed
 // board sits behind a sign-in: `itda setup http://127.0.0.1:8086/` follows
-// the `/frame/board` iframe, which answers 303 to `/frame/login`. itda will
-// not follow a redirect to a sign-in page (it is a credential path), so the
-// frame is noted-but-not-read and setup never signs in from a shell whose
-// frame wants a login; it still drafts only the shell's `<h1>`. Signing in
-// from a frame's login redirect is orchestration in `setup::run`, not inside
-// the frames code, so it is left for a follow-up.
+// the `/frame/board` iframe, which answers 303 to `/frame/login`. itda now
+// reads that redirect as the top-level page's would be, signs in through the
+// form with `--user`, and reads the board inside the frame with the session,
+// instead of drafting only the shell's `<h1>`.
 #[test]
-#[ignore = "setup does not sign in from a shell frame that redirects to a login"]
 fn framed_setup_from_the_shell_reaches_the_board() {
     if !lab_is_on() {
         return;
@@ -517,13 +529,20 @@ fn framed_setup_from_the_shell_reaches_the_board() {
         PASSWORD,
     );
     assert!(setup.status.success(), "{}", text(&setup));
-    let read = first_read(&home, "framed").expect("a drafted read");
-    let called = json(&itda(&home, &["call", &format!("framed.{read}"), "--json"]));
-    assert!(
+    // The drafted reads are the shell, the board frame and the list frame;
+    // which one is drafted first is not fixed, so the board is reached when
+    // any read returns records.
+    let reads = all_reads(&home, "framed");
+    assert!(!reads.is_empty(), "a drafted read");
+    let reached = reads.iter().any(|read| {
+        let called = json(&itda(&home, &["call", &format!("framed.{read}"), "--json"]));
         called["data"]["items"]
             .as_array()
-            .is_some_and(|a| !a.is_empty()),
-        "setup from the shell should reach the framed board: {called}"
+            .is_some_and(|a| !a.is_empty())
+    });
+    assert!(
+        reached,
+        "setup from the shell should reach the framed board through one of {reads:?}"
     );
     let _ = itda(&home, &["logout", "framed"]);
     forget_master_key(&home);
