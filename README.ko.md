@@ -45,9 +45,10 @@ Claude Desktop를 열면 itda가 보입니다.
 </details>
 
 그다음 에이전트에게 말하면 됩니다: *"news-ycombinator에서 Hacker News 목록 읽어줘"*.
-로그인이 필요한 사이트는 대신 내 브라우저가 열립니다. 평소처럼 로그인하고
-쓰는 동안 itda가 지켜볼 뿐이고, 내가 입력한 값은 내 컴퓨터 밖으로 나가지
-않습니다.
+로그인 폼이 있는 사이트는 대신 아이디와 비밀번호를 물어봅니다. itda가
+사이트의 로그인 폼을 itda 이름으로 한 번 보내고, 세션은 내 컴퓨터에만
+보관합니다. 그걸로 안 되는 사이트(SSO, 일회용 코드)는 내 브라우저가
+열리고, 평소처럼 로그인하고 쓰는 동안 itda가 지켜볼 뿐입니다.
 
 <p align="center"><img src="assets/flow.ko.svg" alt="브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다." width="860"></p>
 
@@ -141,17 +142,33 @@ itda call example.get-board --page 2 --json
 itda check example                                     # 페이지가 아직 정의와 맞는가?
 ```
 
-로그인이 필요한 사이트는 쓰는 모습을 녹화합니다. itda가 내 브라우저를 새
-창으로 열고, 내가 로그인하고 검색하고 글을 올리는 동안 페이지가 서버에
-요청하는 것만 지켜봅니다. 클릭이나 입력은 절대 하지 않습니다.
+로그인 폼이 있는 사이트는 `itda setup`에 페이지와 아이디를 주면 됩니다.
+비밀번호를 물어본 뒤 사이트의 로그인 폼을 itda 이름으로 한 번 보내고,
+세션을 시스템 키링에 보관하고, 로그인한 상태로 보이는 페이지에서 초안을
+만듭니다. 정의가 폼을 기억하므로 세션이 만료되면 `itda login board`로 다시
+로그인합니다:
+
+```sh
+itda setup https://intranet.example/board --name board --user me   # 비밀번호를 물어봄
+itda call board.list-notices --json                 # 읽기는 바로 실행
+itda call board.create-notice --title "서버 점검 안내"   # 변경은 내 승인을 기다림
+itda login board --user me                          # 세션이 만료되면
+```
+
+SSO나 일회용 코드 뒤에 있는 사이트는 대신 쓰는 모습을 녹화합니다. itda가 내
+브라우저를 새 창으로 열고, 내가 로그인하고 검색하고 글을 올리는 동안
+페이지가 서버에 요청하는 것만 지켜봅니다. 클릭이나 입력은 절대 하지
+않습니다:
 
 ```sh
 itda record https://intranet.example/board --name board --install   # 끝나면 Enter
                                                     # 녹화에 쓴 세션/토큰을 보관할지 물어봄, y면 끝
-itda call board.list-notices --json                 # 읽기는 바로 실행
-itda call board.create-notice --title "서버 점검 안내"   # 변경은 내 승인을 기다림
 itda mcp install claude-desktop                     # 에이전트가 호출하게 연결
 ```
+
+`examples/lab`은 Gitea, Redmine, WordPress, MediaWiki와 작은 레거시
+인트라넷을 로그인 뒤에 띄우고, 테스트가 각각을 세팅부터 승인된 변경까지
+끝까지 밟습니다.
 
 녹화는 메모리에만 있고, 초안에는 호출의 모양만 들어갑니다. 헤더, 쿠키, 내가
 입력한 값은 들어가지 않습니다. 브라우저 개발자 도구에서 저장한 HAR 파일도
@@ -182,7 +199,8 @@ itda add spec.yaml / remove <site>       # 사이트 설치·삭제 (URL이나 g
 itda ls                                  # 설치된 사이트와 액션
 itda describe <site>                     # 액션마다 입력과 복사해 쓸 명령
 itda call <site>.<action> --input value  # 하나 실행, 에이전트용은 --json
-echo "$KEY" | itda login <site>          # API 키를 OS 키링에 저장
+itda login <site> --user me              # 사이트의 로그인 폼으로 로그인 (비밀번호는 stdin 또는 질문)
+echo "$KEY" | itda login <site> --secret api-key   # 또는 API 키를 OS 키링에 저장
 itda login <site> --browser              # 또는 내 브라우저로 한 번 로그인 (세션은 데이터 폴더에 봉인)
 itda accounts / logout <site>            # 저장된 로그인 보기·삭제
 itda approvals / approve <id> / reject <id>

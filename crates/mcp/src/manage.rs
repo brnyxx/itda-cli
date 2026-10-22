@@ -94,6 +94,14 @@ impl Answers for Fixed {
         Ok(false)
     }
 
+    /// A password never comes through an agent.
+    fn sign_in(
+        &mut self,
+        _host: &str,
+    ) -> itda_types::error::AppResult<Option<itda_setup::login::Credentials>> {
+        Ok(None)
+    }
+
     fn record(&mut self, _why: Fallback) -> itda_types::error::AppResult<bool> {
         Ok(false)
     }
@@ -733,7 +741,7 @@ fn refusal_words(refused: &itda_setup::Refused) -> String {
             format!("{host} limits how often it is read and refused itda for now")
         }
         Refusal::Other { status } => format!("{host} refused itda (HTTP {status})"),
-        Refusal::SignInRedirect { path } => {
+        Refusal::SignInRedirect { path, .. } => {
             format!("{host} sends itda to a sign-in page instead of showing {path}")
         }
     }

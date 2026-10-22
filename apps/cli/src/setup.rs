@@ -25,6 +25,9 @@ pub struct Flags {
     pub watch_only: bool,
     pub client: Option<String>,
     pub yes: bool,
+    /// Sign in as this user when the page needs it; the password is read
+    /// from stdin.
+    pub user: Option<String>,
 }
 
 /// The questions, asked in the terminal.
@@ -32,6 +35,7 @@ struct Terminal {
     record: Option<bool>,
     watch_only: bool,
     yes: bool,
+    user: Option<String>,
 }
 
 impl Answers for Terminal {
@@ -40,6 +44,18 @@ impl Answers for Terminal {
             return Ok(false);
         }
         ask(t("ask_record_anyway"), false)
+    }
+
+    fn sign_in(&mut self, host: &str) -> AppResult<Option<itda_setup::login::Credentials>> {
+        if self.user.is_none() {
+            if !std::io::stdin().is_terminal() {
+                return Ok(None);
+            }
+            if !ask(&tf("ask_sign_in", &[("host", host)]), true)? {
+                return Ok(None);
+            }
+        }
+        ask_credentials(host, self.user.as_deref()).map(Some)
     }
 
     fn record(&mut self, why: Fallback) -> AppResult<bool> {
@@ -83,6 +99,7 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
         record: flags.record,
         watch_only: flags.watch_only,
         yes: flags.yes,
+        user: flags.user.clone(),
     };
     let mut width = 12;
     let finished = itda_setup::run(
@@ -166,7 +183,14 @@ fn say(progress: Progress<'_>, width: &mut usize) {
             );
         }
         Progress::PageFetched(summary) => {
-            eprintln!("    {}", t("fetched_page"));
+            eprintln!(
+                "    {}",
+                t(if summary.signed_in {
+                    "fetched_signed"
+                } else {
+                    "fetched_page"
+                })
+            );
             eprintln!("    {}", tf("found", &[("what", &describe_page(summary))]));
         }
         Progress::SchemaAsked { url } => {
@@ -176,6 +200,10 @@ fn say(progress: Progress<'_>, width: &mut usize) {
             eprintln!("    {}", crate::text::described(described));
         }
         Progress::Refused(refused) => eprintln!("    {}", crate::refusal_words(refused).msg),
+        Progress::SignedIn { host, cookies } => eprintln!(
+            "    {}",
+            tf("signed_in", &[("host", host), ("n", &cookies.to_string())])
+        ),
         Progress::Watching { host } => eprintln!("    {}", tf("watching", &[("host", host)])),
         Progress::Watched { calls, reads } => {
             let calls = calls.to_string();
@@ -371,6 +399,48 @@ pub(crate) fn ask(question: &str, default: bool) -> AppResult<bool> {
         "" => default,
         "y" | "yes" | "ㅇ" | "네" | "예" => true,
         _ => false,
+    })
+}
+
+/// The user name (`user`, or asked for) and the password, read as one line
+/// from stdin, for a site's own sign-in form. Without a terminal the user
+/// name must be given and the password is the first line of stdin.
+pub(crate) fn ask_credentials(
+    site: &str,
+    user: Option<&str>,
+) -> AppResult<itda_setup::login::Credentials> {
+    let stdin = std::io::stdin();
+    let terminal = stdin.is_terminal();
+    let user = match user {
+        Some(user) => user.trim().to_owned(),
+        None if terminal => {
+            eprint!("    {}", tf("ask_user", &[("site", site)]));
+            std::io::stderr().flush()?;
+            let mut line = String::new();
+            stdin.lock().read_line(&mut line)?;
+            line.trim().to_owned()
+        }
+        None => String::new(),
+    };
+    if user.is_empty() {
+        return Err(usage(t("no_user"), t("no_user_fix")));
+    }
+    if terminal {
+        eprint!(
+            "    {}",
+            tf("ask_password", &[("site", site), ("user", &user)])
+        );
+        std::io::stderr().flush()?;
+    }
+    let mut password = String::new();
+    stdin.lock().read_line(&mut password)?;
+    let password = password.trim_end_matches(['\r', '\n']);
+    if password.is_empty() {
+        return Err(usage(t("no_password"), t("no_password_fix")));
+    }
+    Ok(itda_setup::login::Credentials {
+        user,
+        password: itda_vault::Secret::new(password),
     })
 }
 

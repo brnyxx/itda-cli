@@ -1564,6 +1564,7 @@ dependencies = [
 name = "itda-setup"
 version = "0.4.0"
 dependencies = [
+ "axum",
  "itda-browser",
  "itda-html",
  "itda-net",
@@ -1571,6 +1572,7 @@ dependencies = [
  "itda-prep",
  "itda-runtime",
  "itda-spec",
+ "itda-store",
  "itda-types",
  "itda-vault",
  "serde",

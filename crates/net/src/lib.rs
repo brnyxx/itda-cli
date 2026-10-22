@@ -314,19 +314,19 @@ impl Network {
                     .iter()
                     .find(|(key, _)| key == "location")
                     .map(|(_, value)| value);
-                if let Some(location) = location {
-                    let next = target
-                        .join(location)
-                        .map_err(|_| AppError::api("bad_url", 400))?;
-                    validate_url(next.as_str())?;
-                    if next.origin() == initial.origin()
-                        && itda_policy::safe_read_url(&next)
-                        && redirects < 4
-                    {
-                        target = next;
-                        redirects += 1;
-                        continue;
-                    }
+                // A redirect itda will not follow (another origin, an address
+                // it refuses, such as one with a credential-named query, or
+                // too many) is answered as the redirect it is, not an error.
+                if let Some(location) = location
+                    && let Ok(next) = target.join(location)
+                    && validate_url(next.as_str()).is_ok()
+                    && next.origin() == initial.origin()
+                    && itda_policy::safe_read_url(&next)
+                    && redirects < 4
+                {
+                    target = next;
+                    redirects += 1;
+                    continue;
                 }
             }
             // A site that asks for a short wait (Retry-After of ten seconds or

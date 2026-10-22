@@ -38,7 +38,9 @@ Type `itda`, paste the address of a site you use, and press Enter. itda looks
 at the page; when the page is drawn by scripts and shows itda only a title,
 it opens your browser on it for a few seconds, watches what the page loads by
 itself and drafts from those calls (nothing is clicked or typed, and the
-window closes on its own); when the page needs a sign-in, it asks to open your
+window closes on its own); when the page needs a sign-in, it asks for your
+user name and password and signs in through the site's own form, as itself
+(`--user <name>` from a script, the password on stdin), or asks to open your
 browser and watch while you use the site. It then shows what agents will be
 able to do, tries every read, and connects the agent apps it finds on your
 computer after one more Enter. From then on, ask your agent for things on
@@ -131,7 +133,8 @@ moment. A site definition can ask for more room with `defaults.interval`.
 | `itda ls [site] [--json]` | Installed sites and their actions |
 | `itda describe <site>[.<action>] [--json]` | Each action with its inputs and an example command to copy |
 | `itda call <site>.<action> [--input value]… [--account id] [--approval id] [--json]` | Run one action |
-| `itda login <site> [--account id] [--secret name]` | Store a secret read from stdin |
+| `itda login <site> [--user name] [--account id]` | Sign in through the site's own form (the definition names it): the password comes from a prompt, or from stdin; the session is kept in the keyring |
+| `itda login <site> --secret <name> [--account id]` | Store a secret read from stdin, such as an API key, under that name |
 | `itda login <site> --browser [--url page]` | Sign in in your own browser and keep that site's session |
 | `itda accounts [<site>] [--json]` | Signed-in accounts and their secret names, never the values |
 | `itda logout <site> [--account id]` | Remove an account and its saved secrets |

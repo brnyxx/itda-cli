@@ -771,3 +771,48 @@ fn links_that_count_records_declare_an_offset() {
     assert_eq!(pagination.input(), ("start", false));
     assert_eq!(list.query["start"].default, Some(0.into()));
 }
+
+#[test]
+fn pages_read_signed_in_keep_the_sign_in_and_need_the_session_everywhere() {
+    let draft = from_pages(
+        &[page(
+            "https://intranet.example.co.kr/board?page=1",
+            "board.html",
+        )],
+        &Options {
+            name: Some("board".into()),
+            session: Some(itda_prep::SessionAuth {
+                cookie: "JSESSIONID".into(),
+                login: itda_spec::LoginForm {
+                    path: "/login".into(),
+                    user: "user_id".into(),
+                    password: "pw".into(),
+                },
+            }),
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+    let session = spec.find_auth("session").unwrap();
+    assert_eq!(session.kind, "browser");
+    assert_eq!(session.value_from, "cookie:JSESSIONID");
+    let login = session.login.as_ref().unwrap();
+    assert_eq!(
+        (login.path.as_str(), login.user.as_str()),
+        ("/login", "user_id")
+    );
+    assert!(
+        spec.operations.iter().all(|op| op.auth == "session"),
+        "{}",
+        draft.yaml
+    );
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("`itda login board` signs in"))
+    );
+    assert!(!draft.notes.iter().any(|n| n.contains("--browser")));
+}

@@ -97,9 +97,11 @@ pub enum Refusal {
     Other {
         status: u16,
     },
-    /// The answer sends itda to a sign-in page instead of showing `path`.
+    /// The answer sends itda to the sign-in page `to` instead of showing
+    /// `path`.
     SignInRedirect {
         path: String,
+        to: String,
     },
 }
 
@@ -133,11 +135,11 @@ pub fn refusal(url: &str, response: &itda_net::Response) -> Option<Refused> {
         .and_then(|u| u.host_str().map(str::to_owned))
         .unwrap_or_else(|| url.to_owned());
     if matches!(response.status, 301 | 302 | 303 | 307 | 308)
-        && let Some(path) = signin_redirect(url, response)
+        && let Some((path, to)) = signin_redirect(url, response)
     {
         return Some(Refused {
             host,
-            kind: Refusal::SignInRedirect { path },
+            kind: Refusal::SignInRedirect { path, to },
             error: AppError::api("auth_required", 401),
         });
     }
@@ -160,23 +162,24 @@ pub fn refusal(url: &str, response: &itda_net::Response) -> Option<Refused> {
     Some(Refused { host, kind, error })
 }
 
-/// The page's path when its answer sends itda on to a sign-in page (a
-/// `Location` with a path segment such as `login`, `signin` or `sso`).
-fn signin_redirect(url: &str, response: &itda_net::Response) -> Option<String> {
+/// The page's path and the sign-in page's address when the answer sends itda
+/// on to a sign-in page (a `Location` with a path segment such as `login`,
+/// `signin` or `sso`).
+fn signin_redirect(url: &str, response: &itda_net::Response) -> Option<(String, String)> {
     let page = url::Url::parse(url).ok()?;
     let target = page.join(response.header("location")).ok()?;
-    signin_path(&target).then(|| page.path().to_owned())
+    signin_path(&target).then(|| {
+        (
+            page.path().to_owned(),
+            itda_types::url::sign_in_page(&target).to_string(),
+        )
+    })
 }
 
 /// Whether an address looks like a sign-in page: a path segment such as
 /// `login`, `signin` or `sso`.
 fn signin_path(url: &url::Url) -> bool {
-    url.path().split('/').any(|segment| {
-        matches!(
-            segment.to_ascii_lowercase().as_str(),
-            "login" | "signin" | "sign-in" | "sign_in" | "sso" | "oauth" | "authenticate"
-        )
-    })
+    itda_types::url::looks_like_sign_in(url)
 }
 
 /// The sign-in a watched page ran into, from its recording: the page's own
@@ -189,11 +192,11 @@ pub fn signin_in_recording(url: &str, har: &serde_json::Value) -> Option<Refused
         return None;
     }
     let entries = har["log"]["entries"].as_array()?;
-    let redirected = entries.iter().any(|entry| {
+    let redirected = entries.iter().find_map(|entry| {
         let status = entry["response"]["status"].as_u64().unwrap_or(0);
         let request = entry["request"]["url"].as_str().unwrap_or_default();
         if !matches!(status, 301 | 302 | 303 | 307 | 308) || request != page.as_str() {
-            return false;
+            return None;
         }
         entry["response"]["headers"]
             .as_array()
@@ -205,7 +208,7 @@ pub fn signin_in_recording(url: &str, har: &serde_json::Value) -> Option<Refused
                     .is_some_and(|n| n.eq_ignore_ascii_case("location"))
             })
             .filter_map(|h| page.join(h["value"].as_str()?).ok())
-            .any(|target| signin_path(&target))
+            .find(signin_path)
     });
     // The last page the browser showed on the site, not any page it
     // fetched: a public page may prefetch its own sign-in page.
@@ -222,11 +225,13 @@ pub fn signin_in_recording(url: &str, har: &serde_json::Value) -> Option<Refused
         })
         .filter_map(|entry| url::Url::parse(entry["request"]["url"].as_str()?).ok())
         .rfind(|u| u.host_str() == page.host_str())
-        .is_some_and(|last| signin_path(&last));
-    (redirected || opened).then(|| Refused {
+        .filter(signin_path);
+    let to = redirected.or(opened)?;
+    Some(Refused {
         host: page.host_str().unwrap_or_default().to_owned(),
         kind: Refusal::SignInRedirect {
             path: page.path().to_owned(),
+            to: itda_types::url::sign_in_page(&to).to_string(),
         },
         error: AppError::api("auth_required", 401),
     })
@@ -248,6 +253,8 @@ pub struct PageSummary {
     /// The page has a sign-in form as well: the site may need an account to
     /// be useful.
     pub sign_in_form: bool,
+    /// The page was read with the session the person just signed in with.
+    pub signed_in: bool,
 }
 
 impl PageSummary {
@@ -269,6 +276,10 @@ pub trait Answers {
     /// The page opens, but has a sign-in form: record in the browser instead
     /// of drafting from the page?
     fn record_anyway(&mut self) -> AppResult<bool>;
+    /// The page needs a sign-in: the person's user name and password for
+    /// the site's own sign-in form, which itda sends as itself. `None` when
+    /// nobody is there to type them, or the person would rather record.
+    fn sign_in(&mut self, host: &str) -> AppResult<Option<login::Credentials>>;
     /// The page could not be read as itself: open the browser and record?
     /// `false` stops without a definition.
     fn record(&mut self, why: Fallback) -> AppResult<bool>;
@@ -301,6 +312,11 @@ pub enum Progress<'a> {
     Described(&'a Described),
     /// The page refused itda; what the gate saw.
     Refused(&'a Refused),
+    /// The person's sign-in through the site's own form was accepted.
+    SignedIn {
+        host: &'a str,
+        cookies: usize,
+    },
     /// A browser window is opening on the page, to watch what it loads by
     /// itself; it closes on its own.
     Watching {
@@ -348,7 +364,8 @@ pub struct Done {
     pub outcomes: Vec<check::Outcome>,
     /// The actions removed because their read failed.
     pub removed: Vec<String>,
-    /// Whether a credential the recording used was kept.
+    /// Whether a credential the recording used, or the session the person
+    /// signed in with, was kept.
     pub kept_credentials: bool,
     /// The software the site was recognised as, when a template was used.
     pub recognised: Option<software::Recognised>,
@@ -398,6 +415,7 @@ pub async fn run(
         include: None,
         lang: ctx.lang.clone(),
         schemas: Vec::new(),
+        session: None,
     };
 
     // 1. Look at the page, or decide to record.
@@ -405,11 +423,13 @@ pub async fn run(
     let mut record = request.record;
     let mut draft = None;
     let mut recognised = None;
+    // The session the person signed in with, kept once the site is saved.
+    let mut signed: Option<login::Signed> = None;
     // The recording a watched load or the person left: its pages are the
     // site's pages for a refresh.
     let mut har = Vec::new();
     if !record {
-        let probed = probe(ctx, url.as_str()).await?;
+        let probed = probe(ctx, url.as_str(), None).await?;
         // The software the site runs decides first, from the page's HTML,
         // confirmed by one request to its own API.
         let html = probed.page.as_ref().map(|page| page.html.as_str());
@@ -485,9 +505,31 @@ pub async fn run(
                     if let Some(refused) = &refused {
                         report(Progress::Refused(refused));
                     }
-                    // A page that is not enough on its own still gets the
-                    // software's API when the software is known.
-                    if let Some(found) = &recognised {
+                    // The page needs a sign-in and the person is there to
+                    // type it: itda signs in through the site's own form
+                    // and reads the page as they see it.
+                    let credentials = match (why, &probed.sign_in) {
+                        (Fallback::SignIn, Some(_)) => answers.sign_in(&host)?,
+                        _ => None,
+                    };
+                    if let (Some(credentials), Some(to)) = (credentials, &probed.sign_in) {
+                        let (page, session) =
+                            sign_in_as_itda(ctx, &url, to, &credentials, report).await?;
+                        let mut summary = summarize(&page);
+                        summary.signed_in = true;
+                        report(Progress::PageFetched(&summary));
+                        options.session = Some(itda_prep::SessionAuth {
+                            cookie: session.cookie.clone().unwrap_or_default(),
+                            login: session.form.clone(),
+                        });
+                        signed = Some(session);
+                        draft = Some(
+                            draft_page(ctx, &page, &mut options, recognised.as_ref(), report)
+                                .await?,
+                        );
+                    } else if let Some(found) = &recognised {
+                        // A page that is not enough on its own still gets
+                        // the software's API when the software is known.
                         draft = Some(itda_prep::from_template(&fill(found), &[], None, &options)?);
                     } else {
                         report(Progress::NeedsRecord(why));
@@ -543,6 +585,18 @@ pub async fn run(
     if let Some(rec) = &recording {
         let spec = sites::load(&ctx.home, &site)?;
         kept_credentials = keep_credentials(ctx, &spec, rec, answers, report).await?;
+    }
+    if let Some(signed) = signed {
+        // The person signed in for this site; without the session its
+        // actions could not run, so it is kept as the default account.
+        let account = itda_runtime::DEFAULT_ACCOUNT;
+        login::keep(ctx, &site, account, "", signed.session).await?;
+        report(Progress::CredentialKept {
+            name: itda_runtime::SESSION_SECRET,
+            site: &site,
+            account,
+        });
+        kept_credentials = true;
     }
 
     // 4. Try every read; keep what works.
@@ -608,23 +662,32 @@ pub struct Probed {
     /// `Err` says why the page is not enough, with what the gate saw when
     /// the page refused itda.
     pub outcome: Result<(), (Fallback, Option<Refused>)>,
+    /// The sign-in page the answer pointed at, when the page needs one: the
+    /// redirect's target, the page's own sign-in form, or the sign-in link
+    /// on a "log in to see this" page.
+    pub sign_in: Option<String>,
 }
 
 impl Probed {
-    fn not_enough(why: Fallback, refused: Option<Refused>) -> Self {
+    fn not_enough(why: Fallback, refused: Option<Refused>, sign_in: Option<String>) -> Self {
         Self {
             page: None,
             outcome: Err((why, refused)),
+            sign_in,
         }
     }
 }
 
-/// Fetch the page as itda.
-pub async fn probe(ctx: &Context, url: &str) -> AppResult<Probed> {
-    let request = itda_net::Request {
+/// Fetch the page as itda, with the session `cookies` when the person has
+/// signed in.
+pub async fn probe(ctx: &Context, url: &str, cookies: Option<&str>) -> AppResult<Probed> {
+    let mut request = itda_net::Request {
         limit: 8 * 1024 * 1024,
         ..itda_net::Request::read(url)
     };
+    if let Some(cookies) = cookies {
+        request.headers.push(("cookie".into(), cookies.to_owned()));
+    }
     let response = match ctx.net.fetch(request).await {
         Ok(response) => response,
         Err(error)
@@ -633,18 +696,33 @@ pub async fn probe(ctx: &Context, url: &str) -> AppResult<Probed> {
                 "blocked_by_site" | "site_rate_limited"
             ) =>
         {
-            return Ok(Probed::not_enough(Fallback::Blocked, None));
+            return Ok(Probed::not_enough(Fallback::Blocked, None, None));
         }
         Err(error) => return Err(error),
     };
     if let Some(refused) = refusal(url, &response) {
-        return Ok(Probed::not_enough(refused.fallback(), Some(refused)));
+        let sign_in = match &refused.kind {
+            Refusal::SignInRedirect { to, .. } => Some(to.clone()),
+            _ => None,
+        };
+        return Ok(Probed::not_enough(
+            refused.fallback(),
+            Some(refused),
+            sign_in,
+        ));
     }
     if matches!(response.status, 401 | 403) {
-        return Ok(Probed::not_enough(Fallback::SignIn, None));
+        let sign_in = response
+            .header("content-type")
+            .contains("html")
+            .then(|| {
+                evidence::sign_in_link(&String::from_utf8_lossy(&response.bytes), &response.url)
+            })
+            .flatten();
+        return Ok(Probed::not_enough(Fallback::SignIn, None, sign_in));
     }
     if !response.successful() {
-        return Ok(Probed::not_enough(Fallback::Blocked, None));
+        return Ok(Probed::not_enough(Fallback::Blocked, None, None));
     }
     if !response.header("content-type").contains("html") {
         return Err(usage(
@@ -653,17 +731,32 @@ pub async fn probe(ctx: &Context, url: &str) -> AppResult<Probed> {
         ));
     }
     let html = String::from_utf8_lossy(&response.bytes).into_owned();
+    let no_records = evidence::infer_extraction(&html, &response.url).is_none();
     let signed_in_form = evidence::forms(&html, &response.url)
         .iter()
         .any(|form| form.password)
-        && evidence::infer_extraction(&html, &response.url).is_none();
+        && no_records;
     let page = Page {
         url: response.url.clone(),
         html,
     };
+    let mut sign_in = None;
     let outcome = if evidence::script_shell(&page.html) {
         Err((Fallback::Scripted, None))
     } else if signed_in_form && response.url.to_lowercase().contains("login") {
+        sign_in = url::Url::parse(&response.url)
+            .map(|url| itda_types::url::sign_in_page(&url).to_string())
+            .ok()
+            .or_else(|| Some(response.url.clone()));
+        Err((Fallback::SignIn, None))
+    } else if no_records
+        && !signed_in_form
+        && cookies.is_none()
+        && login_required_title(&page.html)
+        && let Some(link) = evidence::sign_in_link(&page.html, &response.url)
+    {
+        // A page that says "log in to see this" instead of redirecting.
+        sign_in = Some(link);
         Err((Fallback::SignIn, None))
     } else {
         Ok(())
@@ -671,7 +764,52 @@ pub async fn probe(ctx: &Context, url: &str) -> AppResult<Probed> {
     Ok(Probed {
         page: Some(page),
         outcome,
+        sign_in,
     })
+}
+
+/// Whether the page's title says a sign-in is needed ("Login required",
+/// "Please sign in", "로그인이 필요합니다").
+fn login_required_title(html: &str) -> bool {
+    let title = itda_html::title(html).to_lowercase();
+    ["login", "log in", "sign in", "sign-in", "로그인"]
+        .iter()
+        .any(|word| title.contains(word))
+}
+
+/// Sign in through the site's own form at `sign_in` as itda, then fetch the
+/// page the person asked for with the session. The session comes back with
+/// the page, to keep once the definition is saved.
+async fn sign_in_as_itda(
+    ctx: &Context,
+    url: &url::Url,
+    sign_in: &str,
+    credentials: &login::Credentials,
+    report: &mut (dyn FnMut(Progress<'_>) + Send),
+) -> AppResult<(Page, login::Signed)> {
+    // Where the session will be kept is checked before the password is sent.
+    credentials::writable()?;
+    let signed = login::form(&ctx.net, url, sign_in, None, credentials, None).await?;
+    report(Progress::SignedIn {
+        host: url.host_str().unwrap_or_default(),
+        cookies: signed.session.count,
+    });
+    let probed = probe(ctx, url.as_str(), Some(&signed.session.cookies)).await?;
+    let host = url.host_str().unwrap_or_default();
+    match probed.outcome {
+        Ok(()) => {
+            let page = probed.page.ok_or_else(|| AppError::api("internal", 500))?;
+            Ok((page, signed))
+        }
+        Err((Fallback::Scripted, _)) => Err(usage(
+            format!("{host} accepted the sign-in, but the page is drawn by scripts"),
+            "Record yourself using the site instead: itda record <url>.",
+        )),
+        Err(_) => Err(usage(
+            format!("{host} accepted the sign-in, but still does not show the page"),
+            "Check the address in a browser, signed in, and try again.",
+        )),
+    }
 }
 
 /// What the page offers, counted.

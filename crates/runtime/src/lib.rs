@@ -349,6 +349,10 @@ impl Runtime {
                 &destination,
             )
             .await?;
+            let preflight::Found {
+                values: found,
+                cookies,
+            } = found;
             let mut args = args.clone();
             args.extend(found.clone());
             let (url, body) = spec.build_request(op, &args)?;
@@ -357,6 +361,13 @@ impl Runtime {
             }
             request.url = url;
             request.body = body;
+            exposed.extend(
+                cookies
+                    .iter()
+                    .filter(|(_, value)| value.len() >= 8)
+                    .map(|(_, value)| value.clone()),
+            );
+            request.headers = preflight::with_cookies(request.headers, &cookies);
             request.headers.extend(
                 spec.defaults
                     .headers
@@ -434,7 +445,29 @@ impl Runtime {
             Err(error) => return Err(error),
         };
 
-        if !response.successful() {
+        // A site that answers a change with a redirect has applied it and
+        // points at the result (post, then redirect, then get); the redirect
+        // is reported, never followed. A redirect to a sign-in page is the
+        // site asking for one: the session is no longer accepted.
+        let redirected = !read
+            && response.defense == "none"
+            && matches!(response.status, 301 | 302 | 303 | 307 | 308);
+        let location = redirected
+            .then(|| {
+                validate_url(&response.url)
+                    .ok()
+                    .and_then(|from| from.join(response.header("location")).ok())
+            })
+            .flatten();
+        if location
+            .as_ref()
+            .is_some_and(itda_types::url::looks_like_sign_in)
+        {
+            return Err(
+                AppError::api("auth_required", 401).with("upstream_status", response.status)
+            );
+        }
+        if !response.successful() && !redirected {
             return Err(refusal(&response, account.is_some()));
         }
         // A GraphQL answer can carry errors behind a 2xx. For a change that
@@ -457,10 +490,16 @@ impl Runtime {
         }
         // The change has happened, so a reply that does not match the
         // contract is reported as missing data rather than a failure.
-        let mut data = match shape(spec, op, &response) {
-            Ok(data) => data,
-            Err(_) if !read => Value::Null,
-            Err(error) => return Err(error),
+        let mut data = if redirected {
+            serde_json::json!({
+                "location": location.map(|to| to.to_string()).unwrap_or_default()
+            })
+        } else {
+            match shape(spec, op, &response) {
+                Ok(data) => data,
+                Err(_) if !read => Value::Null,
+                Err(error) => return Err(error),
+            }
         };
         let mut next = None;
         if let (Some((pagination, binding)), Some(cursors)) = (&turning, &self.cursors)

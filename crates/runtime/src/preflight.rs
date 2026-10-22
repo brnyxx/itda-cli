@@ -13,10 +13,19 @@ use itda_types::{
 };
 use std::collections::BTreeMap;
 
-/// Run `op`'s steps in order and return the values they extracted, keyed
-/// `step.<step>.<name>`. Each step
-/// is a GET to the origin of `destination`, sent with `headers` (the
-/// action's own credential and default headers).
+/// What the steps found: the values they extracted, keyed
+/// `step.<step>.<name>`, and the cookies their answers set, which go along
+/// with the action the way a browser would send them (a Rails site, for
+/// one, keeps the token it hands out in a session cookie it rewrites on
+/// every answer). They are used for this one request and never kept.
+pub(crate) struct Found {
+    pub values: BTreeMap<String, String>,
+    pub cookies: Vec<(String, String)>,
+}
+
+/// Run `op`'s steps in order. Each step is a GET to the origin of
+/// `destination`, sent with `headers` (the action's own credential and
+/// default headers) and the cookies earlier steps set.
 pub(crate) async fn run(
     net: &Network,
     spec: &Spec,
@@ -25,8 +34,9 @@ pub(crate) async fn run(
     headers: &[(String, String)],
     account_id: &str,
     destination: &url::Url,
-) -> AppResult<BTreeMap<String, String>> {
+) -> AppResult<Found> {
     let mut found = BTreeMap::new();
+    let mut cookies: Vec<(String, String)> = Vec::new();
     for step in &op.preflight {
         let mut known = args.clone();
         known.extend(found.clone());
@@ -36,11 +46,14 @@ pub(crate) async fn run(
             return Err(AppError::api("unsafe_target", 400));
         }
         let mut request = Request::read(url);
-        request.headers = headers
-            .iter()
-            .filter(|(name, _)| !name.eq_ignore_ascii_case("content-type"))
-            .cloned()
-            .collect();
+        request.headers = with_cookies(
+            headers
+                .iter()
+                .filter(|(name, _)| !name.eq_ignore_ascii_case("content-type"))
+                .cloned()
+                .collect(),
+            &cookies,
+        );
         request.account_id = account_id.to_owned();
         request.interval = spec.defaults.interval();
         let response = net.fetch(request).await?;
@@ -48,6 +61,10 @@ pub(crate) async fn run(
             return Err(
                 AppError::api("response_mismatch", 502).with("preflight", step.name.clone())
             );
+        }
+        for (name, value) in set_cookies(&response) {
+            cookies.retain(|(kept, _)| *kept != name);
+            cookies.push((name, value));
         }
         for (name, source) in &step.extract {
             let value = extract(&response, source).ok_or_else(|| {
@@ -59,7 +76,63 @@ pub(crate) async fn run(
             found.insert(format!("step.{}.{name}", step.name), value);
         }
     }
-    Ok(found)
+    Ok(Found {
+        values: found,
+        cookies,
+    })
+}
+
+/// The cookies an answer set, by name, without the ones it deleted.
+fn set_cookies(response: &Response) -> Vec<(String, String)> {
+    response
+        .headers
+        .iter()
+        .filter(|(key, _)| key.eq_ignore_ascii_case("set-cookie"))
+        .filter_map(|(_, value)| {
+            let mut parts = value.split(';');
+            let (name, value) = parts.next()?.trim().split_once('=')?;
+            let deleted = parts.any(|attribute| {
+                attribute
+                    .trim()
+                    .to_ascii_lowercase()
+                    .strip_prefix("max-age=")
+                    .is_some_and(|age| age.trim().parse::<i64>().is_ok_and(|age| age <= 0))
+            });
+            (!name.trim().is_empty() && !deleted)
+                .then(|| (name.trim().to_owned(), value.trim().to_owned()))
+        })
+        .collect()
+}
+
+/// `headers` with `cookies` added to its `cookie` header, each replacing a
+/// cookie of the same name the session already sends.
+pub(crate) fn with_cookies(
+    mut headers: Vec<(String, String)>,
+    cookies: &[(String, String)],
+) -> Vec<(String, String)> {
+    if cookies.is_empty() {
+        return headers;
+    }
+    let mut jar: Vec<(String, String)> = headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("cookie"))
+        .flat_map(|(_, value)| value.split(';'))
+        .filter_map(|pair| pair.trim().split_once('='))
+        .map(|(name, value)| (name.trim().to_owned(), value.trim().to_owned()))
+        .collect();
+    for (name, value) in cookies {
+        jar.retain(|(kept, _)| kept != name);
+        jar.push((name.clone(), value.clone()));
+    }
+    headers.retain(|(name, _)| !name.eq_ignore_ascii_case("cookie"));
+    headers.push((
+        "cookie".into(),
+        jar.iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect::<Vec<_>>()
+            .join("; "),
+    ));
+    headers
 }
 
 fn step_url(

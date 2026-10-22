@@ -44,8 +44,10 @@ Done. Ask your agent for something on 'news-ycombinator', for example "use news-
 </details>
 
 Then ask your agent: *"use news-ycombinator to list what Hacker News shows"*.
-A site behind a sign-in opens in your own browser instead; you sign in and use
-it as usual while itda watches, and what you type never leaves your computer.
+A site behind a sign-in form asks for your user name and password instead:
+itda fills in the site's own form, as itself, and keeps the session on your
+computer. Where that is not enough (single sign-on, a one-time code), your own
+browser opens; you sign in and use the site as usual while itda watches.
 
 <p align="center"><img src="assets/flow.svg" alt="Record a website once in your browser, itda drafts commands from the recording, the agent calls them, and a change waits until a person approves it" width="860"></p>
 
@@ -144,17 +146,33 @@ itda call example.get-board --page 2 --json
 itda check example                                     # does the page still match?
 ```
 
-For a site behind a sign-in, record yourself using it. itda opens your own
-browser in a fresh window and watches what the pages ask the server for
-while you sign in, search and post a form; it never clicks or types:
+For a site behind a sign-in form, give `itda setup` the page and your user
+name. It sends the site's own form once, as itself, with the password you
+type, keeps the session in the system keyring and drafts from the page the
+way you see it signed in. The definition remembers the form, so
+`itda login board` signs in again when the session expires:
+
+```sh
+itda setup https://intranet.example/board --name board --user me   # asks for the password
+itda call board.list-notices --json                 # reads run right away
+itda call board.create-notice --title "Server maintenance"   # changes wait for your approval
+itda login board --user me                          # when the session expires
+```
+
+Behind single sign-on or a one-time code, record yourself using the site
+instead. itda opens your own browser in a fresh window and watches what the
+pages ask the server for while you sign in, search and post a form; it never
+clicks or types:
 
 ```sh
 itda record https://intranet.example/board --name board --install   # press Enter when done
                                                     # then say yes to keep the session or token it used
-itda call board.list-notices --json                 # reads run right away
-itda call board.create-notice --title "Server maintenance"   # changes wait for your approval
 itda mcp install claude-desktop                     # or let your agent call them
 ```
+
+`examples/lab` runs Gitea, Redmine, WordPress, MediaWiki and a small legacy
+intranet behind their sign-ins, and a test suite walks each one from setup to
+an approved change.
 
 The recording stays in memory and only the shape of each call reaches the
 draft: no header, cookie or value you typed. A HAR file saved from the
@@ -186,7 +204,8 @@ itda add spec.yaml / remove <site>       # install or remove a site (also a URL 
 itda ls                                  # installed sites and their actions
 itda describe <site>                     # their inputs and a command to copy each
 itda call <site>.<action> --input value  # run one; --json for agents
-echo "$KEY" | itda login <site>          # store an API key in the OS keyring
+itda login <site> --user me              # sign in through the site's own form (password from stdin or a prompt)
+echo "$KEY" | itda login <site> --secret api-key   # or store an API key in the OS keyring
 itda login <site> --browser              # or sign in in your own browser, once (sealed under the data directory)
 itda accounts / logout <site>            # see or remove saved sign-ins
 itda approvals / approve <id> / reject <id>

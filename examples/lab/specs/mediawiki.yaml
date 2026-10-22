@@ -1,0 +1,58 @@
+# MediaWiki in the lab (http://127.0.0.1:8084): a private wiki, read and
+# written through its API with the session `itda login mediawiki` keeps. An
+# edit needs a CSRF token the API hands out per session; a preflight step
+# reads it right before the edit. The API answers errors with HTTP 200, so a
+# signed-out read shows up as response_mismatch rather than auth_required.
+spec_version: 1
+site:
+  name: mediawiki
+  title: MediaWiki (lab)
+  base_url: http://127.0.0.1:8084
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:my_wikiUserID
+    login:
+      path: /index.php?title=Special:UserLogin
+      user: wpName
+      password: wpPassword
+operations:
+  - name: list-pages
+    desc: List the wiki's pages
+    method: GET
+    path: /api.php
+    auth: session
+    effect: read
+    evidence: "api.php?action=query&list=allpages answers {query: {allpages: [...]}} for a signed-in user; anonymous readers get readapidenied"
+    query:
+      action: {type: string, default: query}
+      list: {type: string, default: allpages}
+      aplimit: {type: int, default: 50}
+      format: {type: string, default: json}
+    response:
+      format: json
+      extract_pointer: /query/allpages
+      required_pointers: [/0/title]
+  - name: edit-page
+    desc: Replace a page's text, or create the page
+    method: POST
+    path: /api.php
+    auth: session
+    effect: write
+    evidence: "api.php action=edit with a csrf token from action=query&meta=tokens creates or replaces the page and answers {edit: {result: Success}}"
+    preflight:
+      - name: tokens
+        path: /api.php?action=query&meta=tokens&format=json
+        extract:
+          csrf: json:/query/tokens/csrftoken
+    body:
+      form:
+        action: {type: string, default: edit}
+        title: {type: string, required: true}
+        text: {type: string, required: true}
+        summary: {type: string, default: edited through itda}
+        format: {type: string, default: json}
+        token: {type: string, default: "{{step.tokens.csrf}}"}
+    response:
+      format: json
+      required_pointers: [/edit/result]

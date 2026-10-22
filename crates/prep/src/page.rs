@@ -107,6 +107,7 @@ fn merge_description(
         include: options.include.clone(),
         lang: options.lang.clone(),
         schemas: Vec::new(),
+        session: None,
     };
     let mut api = match openapi_parts(&description.bytes, &api_options, Some(url)) {
         Ok(api) => api,
@@ -334,9 +335,13 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
             let label = format!("{} form on {}", form.method, url.path());
             if form.password {
                 sign_in = true;
-                notes.push(format!(
-                    "{label}: a sign-in form; left out. Sign in with `itda login {site} --browser` once the definition is installed."
-                ));
+                notes.push(if options.session.is_some() {
+                    format!("{label}: the sign-in form; left out. `itda login {site}` signs in through it.")
+                } else {
+                    format!(
+                        "{label}: a sign-in form; left out. Sign in with `itda login {site} --browser` once the definition is installed."
+                    )
+                });
                 continue;
             }
             if form.multipart {
@@ -416,7 +421,28 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
         }
     }
     let mut auth = Vec::new();
-    if sign_in {
+    if let Some(session) = &options.session {
+        // The pages were read signed in, so every action needs the session,
+        // and the definition keeps how the sign-in went.
+        let mut strategy = Mapping::new();
+        strategy.insert("name".into(), "session".into());
+        strategy.insert("kind".into(), "browser".into());
+        if !session.cookie.is_empty() {
+            strategy.insert(
+                "value_from".into(),
+                format!("cookie:{}", session.cookie).into(),
+            );
+        }
+        let mut login = Mapping::new();
+        login.insert("path".into(), session.login.path.clone().into());
+        login.insert("user".into(), session.login.user.clone().into());
+        login.insert("password".into(), session.login.password.clone().into());
+        strategy.insert("login".into(), Yaml::Mapping(login));
+        auth.push(Yaml::Mapping(strategy));
+        for op in &mut operations {
+            op.entry("auth".into()).or_insert_with(|| "session".into());
+        }
+    } else if sign_in {
         let mut strategy = Mapping::new();
         strategy.insert("name".into(), "session".into());
         strategy.insert("kind".into(), "browser".into());

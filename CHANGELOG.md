@@ -9,6 +9,27 @@ change the definition format or the CLI.
 
 ### Added
 
+- Sign in with a password, without a browser: a `login` block on a `browser`
+  credential names the site's sign-in page and its user and password fields,
+  and `itda login <site> --user me` reads the page as itda, fills the form
+  in with the password you type (or pipe on stdin), sends it once with the
+  hidden fields and cookies the page gave, and keeps the session the way a
+  browser sign-in is kept. A redirect means the site accepted it; the form
+  coming back is reported, never retried. `itda setup <page> --user me` does
+  the same when the page needs a sign-in (a redirect to a sign-in page, 401
+  or 403, or a "log in to see this" page that links to one), drafts from the
+  page as you see it signed in, gives every action `auth: session` and writes
+  the `login` block from the form it found. Over MCP, `itda_setup` never
+  takes this path. `--secret` on `itda login` now names the API key path
+  explicitly (`api-key` stays the name when the site has no sign-in form).
+- `examples/lab`: Gitea, Redmine, WordPress, MediaWiki and a small legacy
+  intranet (`intranet/server.py`, standard library only) in Docker Compose,
+  pinned by digest, on fixed local ports, with one seeded account and a
+  little content each, plus reviewed definitions in `specs/`. With
+  `ITDA_LAB=1`, `apps/cli/tests/lab.rs` walks each one from `itda setup
+  --user` through `itda login`, a read, a change approved in a terminal and
+  the audit log. CI never runs it.
+
 - Sites that run known software are recognised. `itda setup` reads the
   page's HTML for GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
   WordPress and Gitea or Forgejo (a `generator` meta, well-known asset paths,
@@ -121,6 +142,18 @@ change the definition format or the CLI.
 
 ### Fixed
 
+- A change answered with a redirect (post, then redirect, then get, as
+  Gitea, Redmine and most server-rendered sites do) is reported as landed,
+  with the address the site pointed at, instead of `request_failed`. A
+  redirect to a sign-in page is reported as `auth_required`, since the site
+  is asking for a session it no longer accepts.
+- The cookies a preflight step's answer sets go along with the change, so a
+  Rails site (Redmine) that rewrites its session cookie on every answer
+  accepts the token it just handed out.
+- A read redirected to an address itda will not follow, such as a sign-in
+  page with a `reauth` parameter (WordPress), is answered as the redirect it
+  is instead of failing with `bad_url`, so `itda setup` can name the
+  sign-in page.
 - Two itda processes starting on a fresh data directory at once (the MCP
   server and `itda approve`, say) no longer race in the database setup:
   `Store::migrate` reads the schema version and applies the steps in one

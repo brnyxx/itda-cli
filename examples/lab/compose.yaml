@@ -1,0 +1,134 @@
+# The itda lab: self-hosted software behind a sign-in, on fixed local ports.
+# Images are pinned by digest (pulled 2026-10-22); nothing here is published.
+#
+#   127.0.0.1:8081  Gitea 1.24.7
+#   127.0.0.1:8082  Redmine 6.0.11
+#   127.0.0.1:8083  WordPress 6.8.3 (MariaDB 11.4.13 behind it)
+#   127.0.0.1:8084  MediaWiki 1.43.11
+#   127.0.0.1:8085  the legacy intranet in intranet/server.py (Python 3.12)
+#
+# One account everywhere: lab / labpassword. `lab.sh up` seeds it.
+name: itda-lab
+
+services:
+  gitea:
+    image: gitea/gitea:1.24@sha256:918955f16b1e91732af6c449bb2db3a34271748dbed1ccfbae48f8a2fb5480b8
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__ROOT_URL: http://127.0.0.1:8081/
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__database__DB_TYPE: sqlite3
+    ports:
+      - "127.0.0.1:8081:3000"
+    volumes:
+      - gitea:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redmine:
+    image: redmine:6.0@sha256:193216caac99cfe5297f1cb845d8d332a9e73ebbd2b5296352d92ba407f41549
+    environment:
+      REDMINE_SECRET_KEY_BASE: itda-lab-redmine-secret-key-base
+    ports:
+      - "127.0.0.1:8082:3000"
+    volumes:
+      - redmine:/usr/src/redmine/sqlite
+      - redmine-files:/usr/src/redmine/files
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  db:
+    image: mariadb:11.4@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873
+    environment:
+      MARIADB_ROOT_PASSWORD: itda-lab-root
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: itda-lab-wordpress
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  wordpress:
+    image: wordpress:6.8-apache@sha256:30bff39330d1693b0ce13d32fc9b7bb67193064f040b7d60d3494e136fa599d4
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: itda-lab-wordpress
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'http://127.0.0.1:8083');
+        define('WP_SITEURL', 'http://127.0.0.1:8083');
+    ports:
+      - "127.0.0.1:8083:80"
+    volumes:
+      - wordpress:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/wp-login.php"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # WP-CLI shares WordPress's files and database; `lab.sh up` runs it once to seed.
+  wpcli:
+    image: wordpress:cli@sha256:85a4b720cd8acaf02b590eb27fcdfc2a25f67a4820e01bf0f39504b97da76a22
+    profiles: ["seed"]
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: itda-lab-wordpress
+    volumes:
+      - wordpress:/var/www/html
+
+  mediawiki:
+    image: mediawiki:1.43@sha256:ff4bcc4866b27594d0eb597d8a12e27acf6dc2fd43d2f813cfb69bf0ab2920ce
+    environment:
+      MW_CONFIG_FILE: /var/www/data/LocalSettings.php
+    ports:
+      - "127.0.0.1:8084:80"
+    volumes:
+      - mediawiki:/var/www/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  intranet:
+    image: python:3.12-alpine@sha256:92abd2ba1bdfb48b1e2ac224b582dd1558d0d4bb11c903b126b5bf9c448fd656
+    command: ["python", "/app/server.py", "8085"]
+    ports:
+      - "127.0.0.1:8085:8085"
+    volumes:
+      - ./intranet:/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  gitea:
+  redmine:
+  redmine-files:
+  db:
+  wordpress:
+  mediawiki:

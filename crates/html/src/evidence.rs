@@ -1588,6 +1588,161 @@ pub fn forms(html: &str, base: &str) -> Vec<Form> {
         .collect()
 }
 
+/// A sign-in form as a person's submit would send it: where it posts to, the
+/// names of its user and password fields, and the fields that go along
+/// (hidden ones with their values, checked boxes, the submit button). Only
+/// the sign-in itself reads this; a draft never keeps the values.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SignInForm {
+    /// Resolved against the page address.
+    pub action: String,
+    pub user: String,
+    pub password: String,
+    pub fields: Vec<(String, String)>,
+}
+
+/// Values may be tokens, so `Debug` shows names only.
+impl std::fmt::Debug for SignInForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SignInForm")
+            .field("action", &self.action)
+            .field("user", &self.user)
+            .field("password", &self.password)
+            .field(
+                "fields",
+                &self
+                    .fields
+                    .iter()
+                    .map(|(n, _)| n.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
+    }
+}
+
+/// The page's sign-in form: the first `POST` form with a password field. When
+/// a definition names the fields (`user`, `password`), the form that has
+/// both is taken and they are used as named; otherwise the user field is the
+/// last text field before the password.
+pub fn sign_in_form(
+    html: &str,
+    base: &str,
+    user: Option<&str>,
+    password: Option<&str>,
+) -> Option<SignInForm> {
+    let document = Html::parse_document(html);
+    let base = url::Url::parse(base).ok()?;
+    let form_selector = Selector::parse("form").ok()?;
+    let control_selector = Selector::parse("input, button").ok()?;
+    'forms: for form in document.select(&form_selector).take(40) {
+        if form
+            .value()
+            .attr("method")
+            .is_none_or(|m| !m.trim().eq_ignore_ascii_case("post"))
+        {
+            continue;
+        }
+        let mut fields = Vec::new();
+        let mut last_text: Option<String> = None;
+        let mut user_field: Option<String> = None;
+        let mut password_field: Option<String> = None;
+        let mut submit: Option<(String, String)> = None;
+        for control in form.select(&control_selector).take(80) {
+            let element = control.value();
+            let Some(name) = element
+                .attr("name")
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
+            else {
+                continue;
+            };
+            let value = element.attr("value").unwrap_or_default();
+            let kind = element
+                .attr("type")
+                .map(|t| t.trim().to_ascii_lowercase())
+                .unwrap_or_else(|| {
+                    if element.name() == "button" {
+                        "submit".into()
+                    } else {
+                        "text".into()
+                    }
+                });
+            match kind.as_str() {
+                "password" => {
+                    if password.is_some_and(|wanted| wanted != name) {
+                        continue 'forms;
+                    }
+                    if password_field.is_none() {
+                        password_field = Some(name.to_owned());
+                    }
+                }
+                "hidden" => fields.push((name.to_owned(), value.to_owned())),
+                "checkbox" | "radio" => {
+                    if element.attr("checked").is_some() {
+                        let value = if value.is_empty() { "on" } else { value };
+                        fields.push((name.to_owned(), value.to_owned()));
+                    }
+                }
+                "submit" => {
+                    if submit.is_none() {
+                        submit = Some((name.to_owned(), value.to_owned()));
+                    }
+                }
+                "text" | "email" | "tel" | "" => {
+                    if user.is_some_and(|wanted| wanted == name) {
+                        user_field = Some(name.to_owned());
+                    } else if password_field.is_none() {
+                        last_text = Some(name.to_owned());
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(password_field) = password_field else {
+            continue;
+        };
+        let Some(user_field) = (if user.is_some() {
+            user_field
+        } else {
+            last_text
+        }) else {
+            continue;
+        };
+        if let Some(submit) = submit {
+            fields.push(submit);
+        }
+        let action = form.value().attr("action").unwrap_or_default().trim();
+        let action = base.join(action).ok().map(|mut url| {
+            url.set_fragment(None);
+            url.to_string()
+        })?;
+        return Some(SignInForm {
+            action,
+            user: user_field,
+            password: password_field,
+            fields,
+        });
+    }
+    None
+}
+
+/// The first link on the page to a sign-in page on the same site, for a
+/// page that answers "log in to see this" instead of redirecting.
+pub fn sign_in_link(html: &str, base: &str) -> Option<String> {
+    let document = Html::parse_document(html);
+    let base = url::Url::parse(base).ok()?;
+    let selector = Selector::parse("a[href]").ok()?;
+    document
+        .select(&selector)
+        .take(2000)
+        .filter_map(|link| {
+            base.join(link.value().attr("href").unwrap_or_default())
+                .ok()
+        })
+        .find(|url| url.origin() == base.origin() && itda_types::url::looks_like_sign_in(url))
+        .map(|url| itda_types::url::sign_in_page(&url).to_string())
+}
+
 /// RSS and Atom feeds the page links to.
 pub fn feeds(html: &str, base: &str) -> Vec<Feed> {
     let document = Html::parse_document(html);
@@ -2038,6 +2193,66 @@ mod tests {
                 .any(|c| c.name == "_csrf" && c.secret)
         );
         assert!(!format!("{forms:?}").contains("abc"));
+    }
+
+    #[test]
+    fn the_sign_in_form_is_read_as_a_person_would_submit_it() {
+        let html = r#"<form action="/search" method="get"><input name="q"></form>
+            <form action="/session?lang=en" method="post">
+              <input type="hidden" name="_csrf" value="tok-1">
+              <input type="hidden" name="next" value="/home">
+              <input type="email" name="email" required>
+              <input type="password" name="pass">
+              <input type="checkbox" name="remember" value="1">
+              <input type="checkbox" name="agree" value="yes" checked>
+              <button type="submit" name="commit" value="Sign in">Sign in</button>
+            </form>"#;
+        let form = sign_in_form(html, BASE, None, None).unwrap();
+        assert_eq!(form.action, "https://example.test/session?lang=en");
+        assert_eq!(form.user, "email");
+        assert_eq!(form.password, "pass");
+        assert_eq!(
+            form.fields,
+            [
+                ("_csrf".to_owned(), "tok-1".to_owned()),
+                ("next".to_owned(), "/home".to_owned()),
+                ("agree".to_owned(), "yes".to_owned()),
+                ("commit".to_owned(), "Sign in".to_owned()),
+            ]
+        );
+        assert!(!format!("{form:?}").contains("tok-1"));
+
+        // The fields a definition names are used as named; other names are
+        // not that form.
+        assert_eq!(
+            sign_in_form(html, BASE, Some("email"), Some("pass"))
+                .unwrap()
+                .user,
+            "email"
+        );
+        assert!(sign_in_form(html, BASE, Some("login"), Some("pass")).is_none());
+        // A GET form never carries a password anywhere.
+        assert!(
+            sign_in_form(
+                "<form action='/x'><input name='u'><input type='password' name='p'></form>",
+                BASE,
+                None,
+                None
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn the_link_to_the_sign_in_page_is_found() {
+        let html = r#"<a href="/wiki/Main">Main</a>
+            <a href="https://other.test/login">elsewhere</a>
+            <a href="/index.php?title=Special:UserLogin&returnto=Special%3AAllPages#top">Log in</a>"#;
+        assert_eq!(
+            sign_in_link(html, BASE).as_deref(),
+            Some("https://example.test/index.php?title=Special%3AUserLogin")
+        );
+        assert_eq!(sign_in_link("<a href='/about'>x</a>", BASE), None);
     }
 
     #[test]

@@ -23,5 +23,9 @@ serde_norway.workspace = true
 url.workspace = true
 tokio.workspace = true
 
+[dev-dependencies]
+axum.workspace = true
+itda-store.workspace = true
+
 [lints]
 workspace = true

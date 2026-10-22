@@ -311,6 +311,7 @@ async fn draft(
             sources.lang.clone()
         },
         schemas: Vec::new(),
+        session: None,
     };
     if let Some(file) = &sources.recording {
         let path = sites::specs_dir(&ctx.home).join(site).join(file);
@@ -354,7 +355,7 @@ async fn draft(
         report(Progress::Recognised(&found));
         let mut pages = Vec::new();
         for url in &sources.pages {
-            let probed = crate::probe(ctx, url).await?;
+            let probed = crate::probe(ctx, url, None).await?;
             match (probed.outcome, probed.page) {
                 (Ok(()), Some(page)) => pages.push(page),
                 (Err((_, Some(refused))), _) => report(Progress::Refused(&refused)),
@@ -382,7 +383,7 @@ async fn draft(
         report(Progress::Looking { host: &host });
         let mut pages = Vec::new();
         for url in &sources.pages {
-            let probed = crate::probe(ctx, url).await?;
+            let probed = crate::probe(ctx, url, None).await?;
             match (probed.outcome, probed.page) {
                 (Ok(()), Some(page)) => pages.push(page),
                 (Err((why, refused)), _) => {

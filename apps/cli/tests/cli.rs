@@ -2314,3 +2314,358 @@ async fn setup_watches_what_a_scripted_page_loads_before_asking_to_record() {
     assert!(said.contains("--no-record forbids the browser"), "{said}");
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A site behind a sign-in form, the way older intranets are built: the
+/// list redirects anonymous readers to the form (with a parameter itda
+/// refuses in an address), the form hands out a token, a change answers with
+/// a redirect, and the page the change's token comes from sets a cookie the
+/// change must carry back.
+async fn serve_intranet(posts: Arc<AtomicUsize>) -> String {
+    use axum::{
+        http::StatusCode,
+        response::{Html, IntoResponse, Redirect},
+    };
+    fn signed_in(headers: &HeaderMap) -> bool {
+        headers
+            .get("cookie")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|c| c.contains("SID=lab-session"))
+    }
+    let router = Router::new()
+        .route(
+            "/notices",
+            get(|headers: HeaderMap| async move {
+                if !signed_in(&headers) {
+                    return Redirect::to("/login?next=%2Fnotices&reauth=1").into_response();
+                }
+                Html(
+                    "<h1>Notices</h1><table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                     <tr class='notice'><td>1</td><td><a href='/n/1'>First</a></td></tr>
+                     <tr class='notice'><td>2</td><td><a href='/n/2'>Second</a></td></tr></table>",
+                )
+                .into_response()
+            })
+            .post(
+                move |headers: HeaderMap,
+                      axum::Form(form): axum::Form<std::collections::HashMap<String, String>>| {
+                    let posts = posts.clone();
+                    async move {
+                        posts.fetch_add(1, Ordering::SeqCst);
+                        if !signed_in(&headers) {
+                            return Redirect::to("/login?next=%2Fnotices").into_response();
+                        }
+                        let cookie = headers
+                            .get("cookie")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or_default();
+                        if !cookie.contains("FORM=visit-7")
+                            || form.get("_csrf").map(String::as_str) != Some("tok-7")
+                        {
+                            return StatusCode::FORBIDDEN.into_response();
+                        }
+                        Redirect::to("/n/3").into_response()
+                    }
+                },
+            ),
+        )
+        .route(
+            "/notices/new",
+            get(|headers: HeaderMap| async move {
+                if !signed_in(&headers) {
+                    return StatusCode::UNAUTHORIZED.into_response();
+                }
+                (
+                    [("set-cookie", "FORM=visit-7; Path=/")],
+                    Html("<form method='post' action='/notices'><input type='hidden' name='_csrf' value='tok-7'><input name='title'></form>"),
+                )
+                    .into_response()
+            }),
+        )
+        .route(
+            "/login",
+            get(|| async {
+                Html("<title>Sign in</title><form method='post' action='/login'><input type='hidden' name='_csrf' value='l1'><input name='username'><input type='password' name='password'></form>")
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+fn install_intranet(home: &Path, base: &str) {
+    let dir = home.join("specs/intranet");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.yaml"),
+        format!(
+            "spec_version: 1
+site: {{name: intranet, base_url: {base}}}
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:SID
+    login: {{path: /login, user: username, password: password}}
+operations:
+  - name: list-notices
+    method: GET
+    path: /notices
+    auth: session
+    effect: read
+    evidence: doc
+    response:
+      format: html
+      html:
+        items: tr.notice
+        fields:
+          title: {{selector: 'td:nth-child(2) a', required: true}}
+  - name: post-notice
+    method: POST
+    path: /notices
+    auth: session
+    effect: write
+    evidence: doc
+    preflight:
+      - name: form
+        path: /notices/new
+        extract: {{csrf: 'css:input[name=_csrf]@value'}}
+    body:
+      form:
+        title: {{type: string, required: true}}
+        _csrf: {{type: string, default: '{{{{step.form.csrf}}}}'}}
+"
+        ),
+    )
+    .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_change_carries_the_cookie_its_form_page_set_and_a_redirect_means_it_landed() {
+    let home = home();
+    let posts = Arc::new(AtomicUsize::new(0));
+    let base = serve_intranet(posts.clone()).await;
+    install_intranet(&home, &base);
+    let session = [("ITDA_SECRET__INTRANET__DEFAULT__SESSION", "SID=lab-session")];
+
+    let read = itda(
+        &home,
+        &["call", "intranet.list-notices", "--json"],
+        &session,
+    )
+    .await;
+    assert!(read.status.success(), "{read:?}");
+    assert_eq!(stdout_json(&read)["data"]["items"][1]["title"], "Second");
+
+    let waiting = itda(
+        &home,
+        &["call", "intranet.post-notice", "--title", "hi", "--json"],
+        &session,
+    )
+    .await;
+    let id = stdout_json(&waiting)["approval"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Approved the way `itda approve` does it, without a terminal to type in.
+    let store =
+        itda_policy::Approvals::open(itda_store::Store::open(&home.join("itda.db")).unwrap())
+            .unwrap();
+    store.claim(&id).await.unwrap();
+    let landed = itda(
+        &home,
+        &[
+            "call",
+            "intranet.post-notice",
+            "--title",
+            "hi",
+            "--approval",
+            &id,
+            "--json",
+        ],
+        &session,
+    )
+    .await;
+    assert!(landed.status.success(), "{landed:?}");
+    let envelope = stdout_json(&landed);
+    assert_eq!(envelope["meta"]["http_status"], 303);
+    assert_eq!(envelope["data"]["location"], format!("{base}/n/3"));
+    assert_eq!(posts.load(Ordering::SeqCst), 1);
+
+    // With a session the site no longer accepts, the form page itself
+    // refuses, so the change stops before it is sent.
+    let expired = [("ITDA_SECRET__INTRANET__DEFAULT__SESSION", "SID=stale")];
+    let waiting = itda(
+        &home,
+        &["call", "intranet.post-notice", "--title", "hi", "--json"],
+        &expired,
+    )
+    .await;
+    assert_eq!(waiting.status.code(), Some(20), "{waiting:?}");
+    let id = stdout_json(&waiting)["approval"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    store.claim(&id).await.unwrap();
+    let refused = itda(
+        &home,
+        &[
+            "call",
+            "intranet.post-notice",
+            "--title",
+            "hi",
+            "--approval",
+            &id,
+            "--json",
+        ],
+        &expired,
+    )
+    .await;
+    assert!(!refused.status.success(), "{refused:?}");
+    assert_eq!(posts.load(Ordering::SeqCst), 1);
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_change_redirected_to_the_sign_in_page_means_the_session_expired() {
+    use axum::response::Redirect;
+    let home = home();
+    let posts = Arc::new(AtomicUsize::new(0));
+    let sent = posts.clone();
+    let router = Router::new().route(
+        "/items",
+        axum::routing::post(move || {
+            let sent = sent.clone();
+            async move {
+                sent.fetch_add(1, Ordering::SeqCst);
+                Redirect::to("/user/login?redirect_to=%2Fitems")
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    install(&home, &base);
+
+    let waiting = itda(&home, &["call", "fixture.create-item", "--json"], &[]).await;
+    let id = stdout_json(&waiting)["approval"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let store =
+        itda_policy::Approvals::open(itda_store::Store::open(&home.join("itda.db")).unwrap())
+            .unwrap();
+    store.claim(&id).await.unwrap();
+    let answered = itda(
+        &home,
+        &["call", "fixture.create-item", "--approval", &id, "--json"],
+        &[],
+    )
+    .await;
+    assert_eq!(answered.status.code(), Some(10), "{answered:?}");
+    assert_eq!(stdout_json(&answered)["status"], "auth_required");
+    assert_eq!(posts.load(Ordering::SeqCst), 1);
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn setup_names_the_sign_in_and_signs_in_only_where_the_session_can_be_kept() {
+    let home = home();
+    let posts = Arc::new(AtomicUsize::new(0));
+    let base = serve_intranet(posts).await;
+    let url = format!("{base}/notices");
+    let english = [("ITDA_LANG", "en")];
+
+    // Without anyone to sign in, the redirect is named, not reported as a bad address.
+    let refused = itda(
+        &home,
+        &[
+            "setup",
+            &url,
+            "--name",
+            "intranet",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &english,
+    )
+    .await;
+    assert!(!refused.status.success());
+    let said = String::from_utf8_lossy(&refused.stderr);
+    assert!(said.contains("sends itda to a sign-in page"), "{said}");
+    assert!(!said.contains("bad_url"), "{said}");
+
+    // With a user name, the password is read from stdin; where secrets are
+    // read-only (the tests' environment store) nothing is sent anywhere.
+    let mut command = Command::new(env!("CARGO_BIN_EXE_itda"));
+    command
+        .args([
+            "setup",
+            &url,
+            "--name",
+            "intranet",
+            "--user",
+            "lab",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ])
+        .env("ITDA_HOME", &home)
+        .env("ITDA_ALLOW_LOCAL", "1")
+        .env("ITDA_SECRET_STORE", "env")
+        .env("ITDA_LANG", "en")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let output = tokio::task::spawn_blocking(move || {
+        use std::io::Write;
+        let mut child = command.spawn().unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"secret-word\n")
+            .unwrap();
+        child.wait_with_output().unwrap()
+    })
+    .await
+    .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("read-only"), "{said}");
+    assert!(!said.contains("secret-word"));
+    assert!(!home.join("specs/intranet").exists());
+
+    // `itda login` takes the same path and stops the same way.
+    install_intranet(&home, &base);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_itda"));
+    command
+        .args(["login", "intranet", "--user", "lab"])
+        .env("ITDA_HOME", &home)
+        .env("ITDA_ALLOW_LOCAL", "1")
+        .env("ITDA_SECRET_STORE", "env")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let output = tokio::task::spawn_blocking(move || {
+        use std::io::Write;
+        let mut child = command.spawn().unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"secret-word\n")
+            .unwrap();
+        child.wait_with_output().unwrap()
+    })
+    .await
+    .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("read-only"));
+    // An API key still goes in by name when asked for.
+    let key = itda(&home, &["login", "intranet", "--secret", "api-key"], &[]).await;
+    assert!(String::from_utf8_lossy(&key.stderr).contains("No secret was given"));
+    std::fs::remove_dir_all(home).ok();
+}

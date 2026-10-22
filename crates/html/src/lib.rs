@@ -22,6 +22,16 @@ pub fn selector_valid(selector: &str) -> bool {
 }
 
 /// Parse a full HTML document for [`Field::extract`] and [`Field::is_present`].
+/// The page's `<title>`, trimmed; empty when it has none.
+pub fn title(html: &str) -> String {
+    let document = Html::parse_document(html);
+    Selector::parse("title")
+        .ok()
+        .and_then(|selector| document.select(&selector).next())
+        .map(|element| element.text().collect::<String>().trim().to_owned())
+        .unwrap_or_default()
+}
+
 pub fn parse_document(html: &str) -> Html {
     Html::parse_document(html)
 }
