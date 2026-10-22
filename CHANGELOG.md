@@ -17,6 +17,10 @@ change the definition format or the CLI.
   still frame under reduced motion, and leaves the plain glow without WebGL.
 - The hero lost its badge and chips; the binary, platform and licence line
   moved to the footer.
+- The landing page's components now speak the same language as the sky:
+  smoked-glass panels with a chrome hairline and faint scanlines, chrome
+  headlines with a holographic accent, glossy pill buttons, Aqua-style
+  window lights on the terminal, and chrome coins for the step numbers.
 - `itda <address>` sets that site up, and `itda github` (or npm, crates-io,
   pypi) adds the ready-made site and connects the agent apps found on this
   computer; the README's one line is the one line you type. The tagline and
