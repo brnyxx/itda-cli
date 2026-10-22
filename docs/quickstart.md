@@ -84,8 +84,9 @@ itda audit                                  # everything above, hash-chained
 Without a keyring (CI, containers), skip `itda login` and set
 `ITDA_SECRET_STORE=env ITDA_SECRET__SANDBOX__DEFAULT__API_KEY=sandbox-key`.
 
-Requests to one site are spaced about 1.2 seconds apart, as they would be for a
-real website, so consecutive calls take a moment.
+Requests to one site go one at a time, spaced about 1.2 seconds apart, as
+they would be for a real website, so consecutive or parallel calls take a
+moment. A site definition can ask for more room with `defaults.interval`.
 
 ## Commands
 

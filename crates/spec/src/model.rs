@@ -47,10 +47,37 @@ pub struct Defaults {
     pub headers: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub timeout: String,
+    /// The least time between two requests to the site (`2s`, `500ms`). itda
+    /// never goes faster than its own pace; this can only ask for more room.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub interval: String,
     /// Ignored. Kept so v1 specs that set it still parse; requests never imitate
     /// another client's TLS fingerprint.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tls_profile: String,
+}
+impl Defaults {
+    /// `interval` as a duration, or `None` when unset or unreadable.
+    pub fn interval(&self) -> Option<std::time::Duration> {
+        duration(&self.interval)
+    }
+}
+
+/// Read a time written as `500ms`, `2s` or `1.5s`.
+pub fn duration(text: &str) -> Option<std::time::Duration> {
+    let text = text.trim();
+    let (number, unit) = text
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .map(|at| text.split_at(at))?;
+    let number: f64 = number
+        .parse()
+        .ok()
+        .filter(|n: &f64| n.is_finite() && *n >= 0.0)?;
+    match unit.trim() {
+        "ms" => Some(std::time::Duration::from_millis(number as u64)),
+        "s" => Some(std::time::Duration::from_secs_f64(number)),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

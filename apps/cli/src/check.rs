@@ -20,6 +20,9 @@ pub struct Outcome {
     /// How many records the answer held, when it was a list.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub records: Option<usize>,
+    /// How long the site asked to wait, when it rate limited the read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_after_s: Option<u64>,
 }
 
 impl Outcome {
@@ -40,6 +43,7 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                 detail,
                 duration_ms,
                 records: None,
+                retry_after_s: None,
             };
             if operation_effect(op, &BTreeMap::new()) != Effect::Read {
                 out.push(outcome("skipped", "changes the site".into(), None));
@@ -74,7 +78,13 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
                         "auth_required" => format!("sign in: itda login {}", spec.site.name),
                         _ => error.msg.clone(),
                     };
-                    outcome(&error.public_code, detail, None)
+                    Outcome {
+                        retry_after_s: error
+                            .extra
+                            .get("retry_after")
+                            .and_then(serde_json::Value::as_u64),
+                        ..outcome(&error.public_code, detail, None)
+                    }
                 }
             });
         }
@@ -243,6 +253,7 @@ mod tests {
             detail: String::new(),
             duration_ms: None,
             records: None,
+            retry_after_s: None,
         }
     }
 

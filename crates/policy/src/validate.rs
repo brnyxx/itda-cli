@@ -125,6 +125,13 @@ pub fn spec_problems(sp: &Spec) -> Vec<Problem> {
     if !sp.site.source_url.is_empty() {
         out.url("site.source_url", &sp.site.source_url);
     }
+    if !sp.defaults.interval.is_empty() && sp.defaults.interval().is_none() {
+        out.add(
+            "data_invalid",
+            "defaults.interval",
+            "must be a time such as 2s or 500ms",
+        );
+    }
     let mut names = std::collections::HashSet::new();
     for op in &sp.operations {
         check_operation(sp, op, &mut names, &mut out);

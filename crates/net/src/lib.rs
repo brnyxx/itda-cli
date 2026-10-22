@@ -14,7 +14,7 @@
 pub mod defend;
 pub mod gate;
 
-pub use gate::{Gate, Outcome};
+pub use gate::{Gate, Lease, Outcome};
 
 use futures_util::StreamExt;
 use itda_types::{
@@ -51,6 +51,9 @@ pub struct Request {
     pub timeout: Duration,
     pub read_only: bool,
     pub follow_redirects: bool,
+    /// The least time the site's definition wants between its requests. The
+    /// gate's own pace is the floor; see [`gate::DEFAULT_INTERVAL`].
+    pub interval: Option<Duration>,
 }
 impl Request {
     /// A bounded anonymous GET that follows same-origin redirects.
@@ -65,6 +68,7 @@ impl Request {
             timeout: Duration::from_secs(45),
             read_only: true,
             follow_redirects: true,
+            interval: None,
         }
     }
 }
@@ -198,22 +202,12 @@ impl Network {
         loop {
             let addresses = resolve(&target, self.allow_local).await?;
             let origin = target.origin().ascii_serialization();
+            // One request at a time per site, then per account on it. A short
+            // cooldown the site asked for is waited out here as well.
             let host_scope = format!("{origin}|*");
-            let host_token = self.gate.acquire(&host_scope).await?;
-            let mut host_lease = Lease {
-                gate: &self.gate,
-                scope: &host_scope,
-                token: &host_token,
-                released: false,
-            };
+            let host_lease = self.gate.acquire(&host_scope, input.interval).await?;
             let scope = format!("{origin}|{}", input.account_id);
-            let token = self.gate.acquire(&scope).await?;
-            let mut lease = Lease {
-                gate: &self.gate,
-                scope: &scope,
-                token: &token,
-                released: false,
-            };
+            let lease = self.gate.acquire(&scope, input.interval).await?;
             let client = self.pooled_client(
                 target.host_str().expect("validated host"),
                 USER_AGENT,
@@ -282,12 +276,8 @@ impl Network {
                 }
             }
             if too_large {
-                self.gate.release(&scope, &token, host_outcome).await?;
-                lease.released = true;
-                self.gate
-                    .release(&host_scope, &host_token, host_outcome)
-                    .await?;
-                host_lease.released = true;
+                lease.release(host_outcome).await?;
+                host_lease.release(host_outcome).await?;
                 return Err(AppError::api("too_large", 413));
             }
             let (defense, _) = defend::classify(&defend::Observation {
@@ -306,14 +296,10 @@ impl Network {
             } else {
                 host_outcome
             };
-            self.gate.release(&scope, &token, outcome).await?;
-            lease.released = true;
+            lease.release(outcome).await?;
             // A site that refuses automated access refuses it for every account.
             let host_outcome = if blocked { outcome } else { host_outcome };
-            self.gate
-                .release(&host_scope, &host_token, host_outcome)
-                .await?;
-            host_lease.released = true;
+            host_lease.release(host_outcome).await?;
             if input.follow_redirects
                 && input.read_only
                 && matches!(status, 301 | 302 | 303 | 307 | 308)
@@ -336,6 +322,19 @@ impl Network {
                         continue;
                     }
                 }
+            }
+            // A site that asks for a short wait (Retry-After of ten seconds or
+            // less) gets it, once, for a read: the cooldown just recorded is
+            // waited out by the gate before the request goes again. A longer
+            // wait is reported instead. A change is never sent twice.
+            if input.read_only
+                && retries < 1
+                && matches!(status, 429 | 503)
+                && !blocked
+                && retry_after.is_some_and(|wait| wait <= gate::SHORT_COOLDOWN)
+            {
+                retries += 1;
+                continue;
             }
             // Automatic retries are bounded, read-only and never bypass a site's cooldown.
             if input.read_only
@@ -404,21 +403,6 @@ fn default_headers(target: &url::Url, input: &Request, origin: &str) -> AppResul
         headers.insert(name, value);
     }
     Ok(headers)
-}
-
-struct Lease<'a> {
-    gate: &'a Gate,
-    scope: &'a str,
-    token: &'a str,
-    released: bool,
-}
-impl Drop for Lease<'_> {
-    fn drop(&mut self) {
-        if !self.released {
-            self.gate
-                .release_detached(self.scope, self.token, Outcome::Done);
-        }
-    }
 }
 
 pub async fn resolve(url: &url::Url, allow_local: bool) -> AppResult<Vec<SocketAddr>> {

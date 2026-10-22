@@ -1,10 +1,13 @@
 //! Request pacing shared by every process using the same data directory.
 //!
 //! Each scope (`origin|account`, plus `origin|*` for the whole host) gets one
-//! request at a time, a minimum interval and a ten-minute budget. A rate limit
-//! sets a cooldown. A block, challenge, or a signed-in request answered with 401
-//! pauses the scope until the user resumes it, so a refused site is never retried
-//! in a loop.
+//! request at a time, a minimum interval and a ten-minute budget. Callers in
+//! one process line up in order; the lease itself lives in SQLite, so other
+//! itda processes on the same data directory wait too. A rate limit sets a
+//! cooldown: a short one (ten seconds or less) is waited out, a longer one
+//! fails at once. A block, challenge, or a signed-in request answered with 401
+//! pauses the scope until the user resumes it, so a refused site is never
+//! retried in a loop.
 //!
 //! Derived from Hycli `src/policy.rs` (`acquire`, `release`, `resume`,
 //! `resume_auth`), Apache-2.0. Changes: split out of the approval store and onto
@@ -17,10 +20,22 @@ use itda_types::{
     util,
 };
 use rusqlite::{Connection, params};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::sync::OwnedMutexGuard;
 
 pub const BLOCKED: &str = "blocked_by_site";
 pub const AUTH_REQUIRED: &str = "auth_required";
+
+/// The pace every site gets unless its definition asks for more room.
+pub const DEFAULT_INTERVAL: Duration = Duration::from_millis(1200);
+/// A site definition cannot ask for more than this between requests.
+pub const MAX_INTERVAL: Duration = Duration::from_secs(30);
+/// A cooldown this long or shorter is waited out; a longer one fails at once.
+pub const SHORT_COOLDOWN: Duration = Duration::from_secs(10);
 
 static SCHEMA: Migration = Migration {
     component: "gate",
@@ -29,10 +44,16 @@ static SCHEMA: Migration = Migration {
         CREATE INDEX request_event_scope_time ON request_event(scope,at);"],
 };
 
+type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
+
 pub struct Gate {
     store: Store,
     interval_ms: i64,
     budget: i64,
+    clock: Clock,
+    /// One queue per scope, so callers in this process take turns in order
+    /// instead of polling the store against each other.
+    slots: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 /// How a finished request should affect its scope.
@@ -45,10 +66,44 @@ pub enum Outcome {
     Pause(&'static str),
 }
 
+/// A turn on one scope. Dropping it without [`Lease::release`] releases it as
+/// [`Outcome::Done`].
+pub struct Lease<'a> {
+    gate: &'a Gate,
+    scope: String,
+    token: String,
+    released: bool,
+    _slot: OwnedMutexGuard<()>,
+}
+
+impl std::fmt::Debug for Lease<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Lease").field("scope", &self.scope).finish()
+    }
+}
+
+impl Lease<'_> {
+    /// Let the next caller through, recording how this request ended.
+    pub async fn release(mut self, outcome: Outcome) -> AppResult<()> {
+        self.gate.release(&self.scope, &self.token, outcome).await?;
+        self.released = true;
+        Ok(())
+    }
+}
+
+impl Drop for Lease<'_> {
+    fn drop(&mut self) {
+        if !self.released {
+            self.gate
+                .release_detached(&self.scope, &self.token, Outcome::Done);
+        }
+    }
+}
+
 impl Gate {
     /// The default pace: 1.2 seconds between requests, 60 per ten minutes.
     pub fn open(store: Store) -> AppResult<Self> {
-        Self::with_limits(store, 1200, 60)
+        Self::with_limits(store, DEFAULT_INTERVAL.as_millis() as i64, 60)
     }
 
     /// `interval_ms` between requests in one scope, at most `budget` requests per
@@ -59,27 +114,67 @@ impl Gate {
             store,
             interval_ms: interval_ms.max(0),
             budget: budget.max(1),
+            clock: Arc::new(util::unix_ms),
+            slots: Mutex::new(HashMap::new()),
         })
     }
 
-    /// Wait for this scope's turn and return a lease token. Fails at once when
-    /// the scope is paused, cooling down or over budget.
-    pub async fn acquire(&self, scope: &str) -> AppResult<String> {
-        let start = util::unix_ms();
+    /// Read the time from `clock` (Unix milliseconds) instead of the system
+    /// clock, so tests can run on a paused runtime.
+    pub fn with_clock(mut self, clock: impl Fn() -> i64 + Send + Sync + 'static) -> Self {
+        self.clock = Arc::new(clock);
+        self
+    }
+
+    fn now(&self) -> i64 {
+        (self.clock)()
+    }
+
+    fn slot(&self, scope: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if slots.len() >= 256 && !slots.contains_key(scope) {
+            slots.retain(|_, slot| Arc::strong_count(slot) > 1);
+        }
+        slots.entry(scope.to_owned()).or_default().clone()
+    }
+
+    /// Wait for this scope's turn and return its lease. `interval` is the least
+    /// time the site's definition wants between its requests; the gate's own
+    /// interval is the floor. Fails when the scope is paused, over budget or
+    /// cooling down for longer than [`SHORT_COOLDOWN`].
+    pub async fn acquire(&self, scope: &str, interval: Option<Duration>) -> AppResult<Lease<'_>> {
+        let start = self.now();
+        let deadline = Duration::from_secs(45);
+        let slot = tokio::time::timeout(deadline, self.slot(scope).lock_owned())
+            .await
+            .map_err(|_| AppError::api("timeout", 408))?;
+        let interval_ms = interval
+            .map(|wanted| wanted.min(MAX_INTERVAL).as_millis() as i64)
+            .unwrap_or(0)
+            .max(self.interval_ms);
         loop {
             let token = util::id();
             let (scope_owned, token_owned) = (scope.to_owned(), token.clone());
-            let (interval_ms, budget) = (self.interval_ms, self.budget);
+            let (budget, now) = (self.budget, self.now());
             let wait = self
                 .store
                 .call(move |conn| {
-                    try_acquire(conn, &scope_owned, &token_owned, interval_ms, budget)
+                    try_acquire(conn, &scope_owned, &token_owned, interval_ms, budget, now)
                 })
                 .await?;
             if wait == 0 {
-                return Ok(token);
+                return Ok(Lease {
+                    gate: self,
+                    scope: scope.to_owned(),
+                    token,
+                    released: false,
+                    _slot: slot,
+                });
             }
-            if util::unix_ms() - start > 45_000 {
+            if self.now() - start > deadline.as_millis() as i64 {
                 return Err(AppError::api("timeout", 408));
             }
             tokio::time::sleep(Duration::from_millis(wait.min(500) as u64)).await;
@@ -87,18 +182,18 @@ impl Gate {
     }
 
     /// Release a lease. Only the holder of `token` can release or pause the scope.
-    pub async fn release(&self, scope: &str, token: &str, outcome: Outcome) -> AppResult<()> {
-        let (scope, token) = (scope.to_owned(), token.to_owned());
+    async fn release(&self, scope: &str, token: &str, outcome: Outcome) -> AppResult<()> {
+        let (scope, token, now) = (scope.to_owned(), token.to_owned(), self.now());
         self.store
-            .call(move |conn| finish(conn, &scope, &token, outcome))
+            .call(move |conn| finish(conn, &scope, &token, outcome, now))
             .await
     }
 
     /// Release a lease from synchronous code (a guard's `Drop`) without waiting.
-    pub fn release_detached(&self, scope: &str, token: &str, outcome: Outcome) {
-        let (scope, token) = (scope.to_owned(), token.to_owned());
+    fn release_detached(&self, scope: &str, token: &str, outcome: Outcome) {
+        let (scope, token, now) = (scope.to_owned(), token.to_owned(), self.now());
         self.store
-            .submit(move |conn| finish(conn, &scope, &token, outcome));
+            .submit(move |conn| finish(conn, &scope, &token, outcome, now));
     }
 
     /// The reason a scope is paused, if it is.
@@ -139,6 +234,7 @@ fn try_acquire(
     token: &str,
     interval_ms: i64,
     budget: i64,
+    now: i64,
 ) -> AppResult<i64> {
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     tx.execute(
@@ -150,14 +246,13 @@ fn try_acquire(
         [scope],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )?;
-    let now = util::unix_ms();
     if !paused.is_empty() {
         return Err(AppError::api(
             &paused,
             if paused == AUTH_REQUIRED { 401 } else { 403 },
         ));
     }
-    if cooldown > now {
+    if cooldown - now > SHORT_COOLDOWN.as_millis() as i64 {
         return Err(AppError::api("rate_limited", 429));
     }
     let count: i64 = tx.query_row(
@@ -168,7 +263,7 @@ fn try_acquire(
     if count >= budget {
         return Err(AppError::api("rate_limited", 429));
     }
-    let wait = (lease_until.max(next_at) - now).max(0);
+    let wait = (lease_until.max(next_at).max(cooldown) - now).max(0);
     if wait == 0 {
         let jitter = if interval_ms >= 500 {
             ((now as u64 ^ token.as_bytes().first().copied().unwrap_or(0) as u64) % 180) as i64
@@ -189,15 +284,20 @@ fn try_acquire(
     Ok(wait)
 }
 
-fn finish(conn: &mut Connection, scope: &str, token: &str, outcome: Outcome) -> AppResult<()> {
+fn finish(
+    conn: &mut Connection,
+    scope: &str,
+    token: &str,
+    outcome: Outcome,
+    now: i64,
+) -> AppResult<()> {
     let (cooldown, paused) = match outcome {
         Outcome::Done => (0, ""),
         Outcome::RateLimited(retry_after) => (
-            util::unix_ms()
-                + retry_after
-                    .unwrap_or(Duration::from_secs(60))
-                    .as_millis()
-                    .min(i64::MAX as u128) as i64,
+            now + retry_after
+                .unwrap_or(Duration::from_secs(60))
+                .as_millis()
+                .min(i64::MAX as u128) as i64,
             "",
         ),
         Outcome::Pause(reason) => (0, reason),

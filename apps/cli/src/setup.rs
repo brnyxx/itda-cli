@@ -148,14 +148,18 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
             ),
             code => {
                 failed.push(o.action.clone());
-                let why = match code {
-                    "response_mismatch" => t("why_mismatch"),
-                    "auth_required" => t("why_auth"),
-                    "not_found" => t("why_not_found"),
-                    "blocked_by_site" => t("why_blocked"),
-                    _ => o.detail.as_str(),
+                let why = match (code, o.retry_after_s) {
+                    ("response_mismatch", _) => t("why_mismatch").to_owned(),
+                    ("auth_required", _) => t("why_auth").to_owned(),
+                    ("not_found", _) => t("why_not_found").to_owned(),
+                    ("blocked_by_site", _) => t("why_blocked").to_owned(),
+                    ("site_rate_limited", Some(seconds)) => {
+                        tf("why_wait", &[("n", &seconds.to_string())])
+                    }
+                    ("site_rate_limited", None) => t("why_rate_limited").to_owned(),
+                    _ => o.detail.clone(),
                 };
-                format!("✗ {:<width$} {}", o.action, tf("removed", &[("why", why)]))
+                format!("✗ {:<width$} {}", o.action, tf("removed", &[("why", &why)]))
             }
         };
         eprintln!("    {line}");

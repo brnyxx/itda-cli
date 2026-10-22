@@ -12,7 +12,8 @@ rules are fixed. Pull requests that weaken them are declined.
 | No browser imitation: no browser user agent, no `sec-ch-ua` or `sec-fetch-*` headers. | `itda-net` default headers; `itda-policy` refuses `sec-*` headers in derived credentials |
 | A block, challenge or CAPTCHA pauses the whole site, for every account, until the user resumes it. | `itda-net` `Gate` (`blocked_by_site`) |
 | A signed-in request answered with 401 pauses only that account (`auth_required`). | `itda-net` `Gate` |
-| A rate limit or `Retry-After` sets a cooldown; requests in one scope are paced and budgeted. | `itda-net` `Gate` |
+| One request at a time per site, about 1.2 seconds apart (a definition may ask for more with `defaults.interval`), shared by every itda process on the same data directory, during discovery as well as for actions. | `itda-net` `Gate` |
+| A rate limit or `Retry-After` sets a cooldown. A read waits out a short one (ten seconds or less) once and tries again; a longer one is reported with the time the site asked for. Budgets cap requests per scope. | `itda-net` `Gate`, `Network::fetch` |
 | Credentials go only to the origin or site they belong to; redirects never carry them elsewhere. | `itda-policy` `validate_spec`, `itda-net` redirect checks |
 | Changes need a single-use approval bound to the exact inputs. Reads are the default. | `itda-policy` classification and `Approvals`, `itda-runtime` |
 | A change is sent once: no automatic retries or redirects. | `itda-runtime` write path |

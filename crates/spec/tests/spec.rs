@@ -286,3 +286,18 @@ operations:
     assert!(!op.matches_response(&failed));
     assert_eq!(op.effect, spec::Effect::Read);
 }
+
+#[test]
+fn a_time_is_read_from_a_short_string() {
+    use std::time::Duration;
+    assert_eq!(spec::duration("500ms"), Some(Duration::from_millis(500)));
+    assert_eq!(spec::duration(" 2s "), Some(Duration::from_secs(2)));
+    assert_eq!(spec::duration("1.5s"), Some(Duration::from_millis(1500)));
+    assert_eq!(spec::duration("5"), None);
+    assert_eq!(spec::duration("soon"), None);
+    assert_eq!(spec::duration(""), None);
+    let parsed = parse(
+        "spec_version: 1\nsite: {name: s, base_url: https://example.test}\ndefaults: {interval: 2s}\noperations: []\n",
+    );
+    assert_eq!(parsed.defaults.interval(), Some(Duration::from_secs(2)));
+}

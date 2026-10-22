@@ -38,5 +38,6 @@ itda resume sandbox
 Without a system keyring (CI, containers), skip `itda login` and use
 `ITDA_SECRET_STORE=env ITDA_SECRET__SANDBOX__DEFAULT__API_KEY=sandbox-key`.
 
-Requests to the same site are spaced about 1.2 seconds apart, as they would
-be for a real website, so consecutive calls take a moment.
+Requests to the same site go one at a time, spaced about 1.2 seconds apart,
+as they would be for a real website, so consecutive or parallel calls take a
+moment. A site definition can ask for more room with `defaults.interval`.
