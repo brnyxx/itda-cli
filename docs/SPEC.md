@@ -106,6 +106,22 @@ the operation name are fixed inputs, and the variables are the inputs an agent
 fills in, rendered through a `json_template` into the same JSON the page sent.
 Variables that held objects or lists are listed for you to add by hand.
 
+A GraphQL endpoint can also say what else it offers. When a draft sees one
+(a recorded call to it, or a page naming a same-origin `/graphql` path), itda
+sends it the standard introspection query once, as itself, as a read with a
+size cap, and drafts one read per root `Query` field whose arguments are
+scalars, enums or ids: the field name becomes the action (`countries`), its
+arguments the typed inputs (required when the schema says so), and the
+selection is the field's scalar fields, two levels deep, up to 24 of them.
+An optional argument that holds an object or a list is left out of the read
+and listed, so the field is still read without it; a field that requires one,
+or a credential, is listed instead of drafted. An argument named `query`
+becomes the input `<field>_query`, since `query` holds the document.
+`Mutation` fields are only listed in the notes, never drafted as changes: a
+schema says what a change takes, not what it does. A site that has
+turned introspection off is drafted from its pages and calls alone, with no
+error. This is the one request `itda draft har` makes on its own.
+
 Either way, the pages you saw are drafted too, the way `itda draft page`
 does it, so a site that renders its lists and forms on the server gets
 actions even when its pages call no API. A recording holds real tokens,

@@ -5,6 +5,7 @@
 //! changes, and whatever could not be translated is listed as a note instead of
 //! guessed. The draft is checked with the same rules `itda` applies at install
 //! time, so problems show up before anyone runs it.
+pub mod graphql;
 mod har;
 pub mod label;
 mod openapi;
@@ -30,6 +31,52 @@ pub struct Options {
     /// `ko` or `en` for the descriptions people read; the page's own
     /// language, or English, when left empty.
     pub lang: String,
+    /// What the GraphQL endpoints the pages or calls named answered the
+    /// introspection query with, fetched by the caller. Each becomes reads.
+    pub schemas: Vec<graphql::Schema>,
+}
+
+/// The schemas' reads, after what the source itself gave. They share one
+/// path, so they go in directly rather than through the `(method, path)`
+/// checks that keep two sources from drafting one call twice.
+pub(crate) fn add_schemas(parts: &mut Parts, options: &Options, lang: &str) {
+    if options.schemas.is_empty() {
+        return;
+    }
+    let Ok(base) = url::Url::parse(&parts.base_url) else {
+        return;
+    };
+    let origin = base.origin();
+    let prefix = base.path().trim_end_matches('/').to_owned();
+    let mut names: std::collections::BTreeSet<String> = parts
+        .operations
+        .iter()
+        .filter_map(|op| op.get("name").and_then(Yaml::as_str).map(str::to_owned))
+        .collect();
+    for schema in &options.schemas {
+        let rest = url::Url::parse(&schema.url)
+            .ok()
+            .filter(|url| url.origin() == origin)
+            .and_then(|url| url.path().strip_prefix(prefix.as_str()).map(str::to_owned))
+            .filter(|rest| rest.is_empty() || rest.starts_with('/'));
+        let Some(rest) = rest else {
+            parts.notes.push(format!(
+                "{}: its schema was left out; it is not under {}.",
+                schema.url, parts.base_url
+            ));
+            continue;
+        };
+        let path = if rest.is_empty() { "/" } else { rest.as_str() };
+        let reads = graphql::operations(
+            schema,
+            path,
+            lang,
+            options.include.as_deref(),
+            &mut names,
+            &mut parts.notes,
+        );
+        parts.operations.extend(reads);
+    }
 }
 
 /// A drafted definition and what the person should review.
@@ -187,9 +234,11 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
             base_url: Some(parts.base_url.clone()),
             include: options.include.clone(),
             lang: options.lang.clone(),
+            schemas: Vec::new(),
         };
         parts.merge(page::page_parts(&pages, &page_options)?);
     }
+    add_schemas(&mut parts, options, &label::language(&options.lang, ""));
     if parts.operations.is_empty() {
         return Err(har::no_operations());
     }

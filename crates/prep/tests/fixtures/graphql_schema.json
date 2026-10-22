@@ -1,0 +1,113 @@
+{
+  "data": {
+    "__schema": {
+      "queryType": {"name": "Query"},
+      "mutationType": {"name": "Mutation"},
+      "subscriptionType": null,
+      "types": [
+        {"kind": "SCALAR", "name": "ID", "fields": null},
+        {"kind": "SCALAR", "name": "String", "fields": null},
+        {"kind": "SCALAR", "name": "Int", "fields": null},
+        {"kind": "SCALAR", "name": "Float", "fields": null},
+        {"kind": "SCALAR", "name": "Boolean", "fields": null},
+        {"kind": "ENUM", "name": "Status", "fields": null, "enumValues": [{"name": "OPEN"}, {"name": "CLOSED"}]},
+        {"kind": "INPUT_OBJECT", "name": "NoticeFilter", "fields": null, "inputFields": [
+          {"name": "status", "type": {"kind": "ENUM", "name": "Status", "ofType": null}, "defaultValue": null}
+        ]},
+        {"kind": "OBJECT", "name": "Query", "fields": [
+          {"name": "notices", "description": "Notices, newest first.", "isDeprecated": false, "args": [
+            {"name": "first", "type": {"kind": "SCALAR", "name": "Int", "ofType": null}, "defaultValue": "20"},
+            {"name": "status", "type": {"kind": "ENUM", "name": "Status", "ofType": null}, "defaultValue": null},
+            {"name": "pinned", "type": {"kind": "SCALAR", "name": "Boolean", "ofType": null}, "defaultValue": null}
+          ], "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "LIST", "name": null, "ofType": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "OBJECT", "name": "Notice", "ofType": null}}}}},
+          {"name": "notice", "isDeprecated": false, "args": [
+            {"name": "id", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "ID", "ofType": null}}, "defaultValue": null}
+          ], "type": {"kind": "OBJECT", "name": "Notice", "ofType": null}},
+          {"name": "searchNotices", "isDeprecated": false, "args": [
+            {"name": "filter", "type": {"kind": "INPUT_OBJECT", "name": "NoticeFilter", "ofType": null}, "defaultValue": null}
+          ], "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Notice", "ofType": null}}},
+          {"name": "noticesByIds", "isDeprecated": false, "args": [
+            {"name": "ids", "type": {"kind": "LIST", "name": null, "ofType": {"kind": "SCALAR", "name": "ID", "ofType": null}}, "defaultValue": null}
+          ], "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Notice", "ofType": null}}},
+          {"name": "viewer", "isDeprecated": false, "args": [
+            {"name": "token", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}, "defaultValue": null}
+          ], "type": {"kind": "OBJECT", "name": "Account", "ofType": null}},
+          {"name": "me", "isDeprecated": false, "args": [
+            {"name": "sessionId", "type": {"kind": "SCALAR", "name": "String", "ofType": null}, "defaultValue": null}
+          ], "type": {"kind": "OBJECT", "name": "Account", "ofType": null}},
+          {"name": "version", "isDeprecated": false, "args": [], "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}},
+          {"name": "wide", "isDeprecated": false, "args": [], "type": {"kind": "OBJECT", "name": "Wide", "ofType": null}},
+          {"name": "purgeCache", "isDeprecated": false, "args": [
+            {"name": "id", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "ID", "ofType": null}}, "defaultValue": null}
+          ], "type": {"kind": "SCALAR", "name": "Boolean", "ofType": null}},
+          {"name": "empty", "isDeprecated": false, "args": [], "type": {"kind": "OBJECT", "name": "Empty", "ofType": null}},
+          {"name": "search", "isDeprecated": false, "args": [
+            {"name": "query", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}, "defaultValue": null},
+            {"name": "first", "type": {"kind": "SCALAR", "name": "Int", "ofType": null}, "defaultValue": null}
+          ], "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Notice", "ofType": null}}},
+          {"name": "oldNotices", "isDeprecated": true, "deprecationReason": "use notices", "args": [], "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Notice", "ofType": null}}}
+        ]},
+        {"kind": "OBJECT", "name": "Notice", "fields": [
+          {"name": "id", "isDeprecated": false, "args": [], "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "ID", "ofType": null}}},
+          {"name": "title", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "String", "ofType": null}},
+          {"name": "status", "isDeprecated": false, "args": [], "type": {"kind": "ENUM", "name": "Status", "ofType": null}},
+          {"name": "body", "isDeprecated": false, "args": [{"name": "format", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}, "defaultValue": null}], "type": {"kind": "SCALAR", "name": "String", "ofType": null}},
+          {"name": "author", "isDeprecated": false, "args": [], "type": {"kind": "OBJECT", "name": "Account", "ofType": null}},
+          {"name": "comments", "isDeprecated": false, "args": [{"name": "first", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "Int", "ofType": null}}, "defaultValue": null}], "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Comment", "ofType": null}}},
+          {"name": "tags", "isDeprecated": false, "args": [], "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Tag", "ofType": null}}}
+        ]},
+        {"kind": "OBJECT", "name": "Account", "fields": [
+          {"name": "id", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "ID", "ofType": null}},
+          {"name": "name", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "String", "ofType": null}},
+          {"name": "team", "isDeprecated": false, "args": [], "type": {"kind": "OBJECT", "name": "Team", "ofType": null}}
+        ]},
+        {"kind": "OBJECT", "name": "Team", "fields": [
+          {"name": "name", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "String", "ofType": null}}
+        ]},
+        {"kind": "OBJECT", "name": "Comment", "fields": [
+          {"name": "text", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "String", "ofType": null}}
+        ]},
+        {"kind": "OBJECT", "name": "Tag", "fields": [
+          {"name": "label", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "String", "ofType": null}},
+          {"name": "weight", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Float", "ofType": null}}
+        ]},
+        {"kind": "OBJECT", "name": "Empty", "fields": [
+          {"name": "link", "isDeprecated": false, "args": [], "type": {"kind": "OBJECT", "name": "Empty", "ofType": null}}
+        ]},
+        {"kind": "OBJECT", "name": "Wide", "fields": [
+          {"name": "f01", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f02", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f03", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f04", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f05", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f06", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f07", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f08", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f09", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f10", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f11", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f12", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f13", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f14", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f15", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f16", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f17", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f18", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f19", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f20", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f21", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f22", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f23", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f24", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f25", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "f26", "isDeprecated": false, "args": [], "type": {"kind": "SCALAR", "name": "Int", "ofType": null}},
+          {"name": "more", "isDeprecated": false, "args": [], "type": {"kind": "OBJECT", "name": "Team", "ofType": null}}
+        ]},
+        {"kind": "OBJECT", "name": "Mutation", "fields": [
+          {"name": "createNotice", "isDeprecated": false, "args": [{"name": "title", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}, "defaultValue": null}], "type": {"kind": "OBJECT", "name": "Notice", "ofType": null}},
+          {"name": "deleteNotice", "isDeprecated": false, "args": [{"name": "id", "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "ID", "ofType": null}}, "defaultValue": null}], "type": {"kind": "SCALAR", "name": "Boolean", "ofType": null}}
+        ]}
+      ]
+    }
+  }
+}

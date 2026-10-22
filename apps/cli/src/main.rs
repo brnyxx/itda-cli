@@ -4,6 +4,7 @@
 mod check;
 mod feedback;
 mod install;
+mod introspect;
 mod login;
 mod output;
 mod record;
@@ -364,6 +365,7 @@ fn main() -> ExitCode {
                     base_url,
                     include,
                     lang: lang(),
+                    schemas: Vec::new(),
                 },
                 install,
                 force,
@@ -375,19 +377,19 @@ fn main() -> ExitCode {
                 include,
                 install,
                 force,
-            } => draft(
+            } => block_on(draft_har(
                 &home,
-                draft_har,
                 &file,
                 itda_prep::Options {
                     name,
                     base_url,
                     include,
                     lang: lang(),
+                    schemas: Vec::new(),
                 },
                 install,
                 force,
-            ),
+            )),
             DraftSource::Page {
                 urls,
                 name,
@@ -403,6 +405,7 @@ fn main() -> ExitCode {
                     base_url,
                     include,
                     lang: lang(),
+                    schemas: Vec::new(),
                 },
                 install,
                 force,
@@ -447,6 +450,7 @@ fn main() -> ExitCode {
                 base_url,
                 include,
                 lang: lang(),
+                schemas: Vec::new(),
             },
             install,
             force,
@@ -998,9 +1002,27 @@ fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
 type Drafter = fn(&[u8], &itda_prep::Options) -> AppResult<itda_prep::Draft>;
 
 /// A saved recording holds the pages the person saw as well as the calls
-/// those pages made; both become actions.
-fn draft_har(text: &[u8], options: &itda_prep::Options) -> AppResult<itda_prep::Draft> {
-    itda_prep::from_recording(text, options, "`itda draft har`")
+/// those pages made; both become actions. A GraphQL endpoint the pages
+/// called is asked once what else it offers.
+async fn draft_har(
+    home: &Path,
+    file: &Path,
+    mut options: itda_prep::Options,
+    install: bool,
+    force: bool,
+) -> AppResult<ExitCode> {
+    let text = std::fs::read(file)?;
+    let endpoints = itda_prep::graphql::endpoints_in_recording(&text);
+    if !endpoints.is_empty() {
+        options.schemas = introspect::schemas(&open(home)?.net, &endpoints).await;
+        introspect::say(&options.schemas, "");
+    }
+    publish(
+        home,
+        itda_prep::from_recording(&text, &options, "`itda draft har`")?,
+        install,
+        force,
+    )
 }
 
 /// The draft goes to stdout (or the data directory); what to review goes to
@@ -1023,7 +1045,7 @@ fn draft(
 async fn draft_page(
     home: &Path,
     urls: &[String],
-    options: itda_prep::Options,
+    mut options: itda_prep::Options,
     install: bool,
     force: bool,
 ) -> AppResult<ExitCode> {
@@ -1060,6 +1082,11 @@ async fn draft_page(
             html: String::from_utf8_lossy(&response.bytes).into_owned(),
         });
     }
+    let endpoints = introspect::endpoints_in_pages(&pages);
+    if !endpoints.is_empty() {
+        options.schemas = introspect::schemas(&net, &endpoints).await;
+        introspect::say(&options.schemas, "");
+    }
     publish(
         home,
         itda_prep::from_pages(&pages, &options)?,
@@ -1075,7 +1102,7 @@ async fn draft_page(
 async fn record(
     home: &Path,
     url: &str,
-    options: itda_prep::Options,
+    mut options: itda_prep::Options,
     install: bool,
     force: bool,
     save: Option<&Path>,
@@ -1091,6 +1118,11 @@ async fn record(
             "Saved the recording at {}. It holds your cookies and tokens; delete it when you are done.",
             path.display()
         );
+    }
+    let endpoints = itda_prep::graphql::endpoints_in_recording(&har);
+    if !endpoints.is_empty() {
+        options.schemas = introspect::schemas(&open(home)?.net, &endpoints).await;
+        introspect::say(&options.schemas, "");
     }
     let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
     let site = draft.site.clone();

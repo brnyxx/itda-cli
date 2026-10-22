@@ -27,6 +27,11 @@ pub fn t(key: &str) -> &'static str {
         ("found_data", "data the page embeds", "페이지에 담긴 데이터"),
         ("found_title", "only a title", "제목만"),
         (
+            "asked_schema",
+            "Asked the GraphQL API at {url} what it offers.",
+            "{url}의 GraphQL API에 무엇을 제공하는지 물었습니다.",
+        ),
+        (
             "needs_record",
             "The page could not be read as itself ({why}). itda can open your browser and watch while you use the site instead.",
             "itda 이름으로는 이 페이지를 읽지 못했습니다({why}). 대신 브라우저를 열어, 사이트를 쓰시는 동안 지켜볼 수 있습니다.",

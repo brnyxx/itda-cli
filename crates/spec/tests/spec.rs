@@ -301,3 +301,39 @@ fn a_time_is_read_from_a_short_string() {
     );
     assert_eq!(parsed.defaults.interval(), Some(Duration::from_secs(2)));
 }
+
+#[test]
+fn an_optional_template_input_left_out_leaves_the_body() {
+    let sp = parse(
+        r##"
+spec_version: 1
+site: {name: gql, base_url: https://app.example}
+operations:
+  - name: notices
+    method: POST
+    path: /graphql
+    effect: read
+    evidence: doc
+    body:
+      json:
+        query: {type: string, default: "query Notices($first: Int) { notices(first: $first) { id } }"}
+        first: {type: int}
+        after: {type: string}
+      json_template:
+        query: "{{query}}"
+        variables: {first: "{{first}}", after: "{{after}}", page: "p-{{after}}"}
+"##,
+    );
+    let op = sp.op("notices").unwrap();
+    let (_, body) = sp.build_request(op, &BTreeMap::new()).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body.unwrap()).unwrap();
+    assert_eq!(body["variables"], serde_json::json!({"page": "p-"}));
+    let mut args = BTreeMap::new();
+    args.insert("first".to_owned(), "3".to_owned());
+    let (_, body) = sp.build_request(op, &args).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body.unwrap()).unwrap();
+    assert_eq!(
+        body["variables"],
+        serde_json::json!({"first": 3, "page": "p-"})
+    );
+}
