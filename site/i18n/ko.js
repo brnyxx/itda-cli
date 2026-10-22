@@ -1,8 +1,9 @@
 // Korean strings for the landing page; English is the page itself.
-// Keys match the data-i18n attributes in index.html.
-window.ITDA_KO = {
+// Keys match the data-i18n attributes in index.html. See docs/i18n.md.
+window.ITDA_I18N = window.ITDA_I18N || {};
+window.ITDA_I18N["ko"] = {
   "hero.demo": "<span class=\"l\"><b class=\"p\">$</b> itda news.ycombinator.com</span>\n<span class=\"l o\">1/5  news.ycombinator.com 살펴보는 중...</span>\n<span class=\"l o\">    이 페이지는 로그인 없이 열립니다.</span>\n<span class=\"l o\">    찾은 것: 목록 30건, 폼 1개, 피드.</span>\n<span class=\"l o\">2/5  에이전트가 할 수 있게 되는 일:</span>\n<span class=\"l o\">    읽기   home         Hacker News 목록 읽기  (입력: p)</span>\n<span class=\"l o\">    읽기   feed         RSS 피드 읽기</span>\n<span class=\"l o\">3/5  읽기를 하나씩 실제로 불러보는 중...</span>\n<span class=\"l g\">    ✓ home         30건</span>\n<span class=\"l g\">    ✓ feed         성공</span>\n<span class=\"l o\">4/5  'news-ycombinator'로 저장했습니다.</span>\n<span class=\"l w\">    Claude Desktop에 연결할까요? [Y/n]</span>\n<span class=\"l o\">5/5  Claude Desktop에 itda 추가 중...</span>\n<span class=\"l o\">Claude Desktop에 itda를 추가했습니다 (~/Library/Application Support/Claude/claude_desktop_config.json).</span>\n<span class=\"l o\">Claude Desktop를 열면 itda가 보입니다.</span>\n<span class=\"l g\">끝났습니다. 에이전트에게 'news-ycombinator'에 대해 물어보세요. 예: \"news-ycombinator에서 Hacker News 목록 읽기\".</span>",
-  "hero.then": "그다음 <code>itda 내가-쓰는-사이트.example</code>",
+  "hero.then": "그다음 <code>itda the-site-you-use.example</code>",
   "install.desktop": "<a href=\"https://github.com/brnyxx/itda-cli/releases/latest/download/itda-aarch64-apple-darwin.mcpb\">macOS (Apple silicon)</a>, <a href=\"https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-apple-darwin.mcpb\">macOS (Intel)</a>, <a href=\"https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-pc-windows-msvc.mcpb\">Windows</a> 중 하나를 받아서 열면 Claude Desktop이 itda와 도구를 설치합니다.",
   "meta.title": "itda: 뒤에 주소만 쓰면 AI가 사이트를 써요",
   "meta.description": "명령 하나로 내가 쓰는 사이트가 AI 에이전트가 부를 수 있는, 사람 말로 된 짧은 목록이 됩니다. 회사가 운영하는 사이트와 내 계정이 있는 서비스가 대상입니다. 읽기는 알아서, 사이트를 바꾸는 건 내가 허락할 때만. 내 컴퓨터에서만 돌아갑니다.",
@@ -76,7 +77,7 @@ window.ITDA_KO = {
   "prompt.h2": "에이전트에게 이걸 건네세요.",
   "prompt.lede": "내가 쓰는 사이트 주소만 바꿔서 Claude Code, Cursor, Codex에 붙여넣으면 됩니다. 에이전트가 itda를 설치합니다. 사이트를 세팅하고 바로 쓰기 시작합니다. 나는 변경만 허락하면 됩니다.",
   "prompt.win": "에이전트에 붙여넣기",
-  "prompt.body": "itda를 설치하고 내가-쓰는-사이트.example을 세팅해 줘.\n1. 설치: curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh\n   (Windows면: irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex)\n2. 실행: itda setup https://내가-쓰는-사이트.example --client claude-code -y\n   (네가 cursor, codex, claude-desktop이면 그 이름으로)\n3. https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md 를 읽고 itda로 그 사이트를 써.\n   읽기는 그냥 하면 돼. 사이트를 바꾸는 건 내 승인을 기다려.\n   읽기가 로그인하라고 하면 나한테 이걸 실행하라고 말해: itda login &lt;site&gt; --browser",
+  "prompt.body": "itda를 설치하고 the-site-you-use.example을 세팅해 줘.\n1. 설치: curl -LsSf https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.sh | sh\n   (Windows면: irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex)\n2. 실행: itda setup https://the-site-you-use.example --client claude-code -y\n   (네가 cursor, codex, claude-desktop이면 그 이름으로)\n3. https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md 를 읽고 itda로 그 사이트를 써.\n   읽기는 그냥 하면 돼. 사이트를 바꾸는 건 내 승인을 기다려.\n   읽기가 로그인하라고 하면 나한테 이걸 실행하라고 말해: itda login &lt;site&gt; --browser",
   "clients.shell": "모든 셸",
   "how.h2": "주소 하나로 에이전트 연결까지.",
   "how.lede": "itda가 페이지를 살펴봅니다. 로그인이 필요한 사이트면 내 브라우저를 열고 내가 평소처럼 쓰는 동안 지켜보기만 합니다. 클릭도 입력도 하지 않습니다. 그 사이트에서 할 수 있는 일마다 이름을 붙입니다. 읽기를 하나씩 실제로 해 봅니다. 되는 것만 남겨 에이전트에 연결합니다.",
@@ -143,5 +144,7 @@ window.ITDA_KO = {
   "final.download": "최신 버전 내려받기",
   "foot.docs": "문서",
   "foot.threat": "위협 모델",
-  "foot.releases": "릴리스"
+  "foot.releases": "릴리스",
+  "flow.src": "assets/flow.ko.svg",
+  "flow.alt": "브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 사람이 승인할 때까지 기다립니다."
 };

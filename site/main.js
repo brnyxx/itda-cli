@@ -39,44 +39,68 @@ for (const btn of document.querySelectorAll("[data-copy]")) {
   });
 }
 
-// English and Korean. English is the page as served; Korean strings come from
-// i18n.js and replace elements marked data-i18n. The choice comes from ?lang=,
-// then the last choice on this device, then the browser's language.
-const ko = window.ITDA_KO;
+// Languages. English is the page as served; the other eleven come from
+// i18n/<tag>.js, loaded when chosen, and replace elements marked data-i18n.
+// The choice comes from ?lang=, then the last choice on this device, then the
+// browser's languages, with the same rules as the CLI (docs/i18n.md).
+const LANGS = ["en", "ko", "ja", "zh-Hans", "zh-Hant", "es", "fr", "de", "pt-BR", "vi", "id", "ru"];
+const resolve = (locale) => {
+  const parts = String(locale ?? "").split(/[.@]/)[0].trim().replace(/_/g, "-").toLowerCase()
+    .split("-").filter(Boolean);
+  const [language, ...rest] = parts;
+  if (!language) return null;
+  if (language === "zh") {
+    const traditional = rest.some((p) => ["tw", "hk", "mo"].includes(p) || p.startsWith("hant"));
+    return traditional ? "zh-Hant" : "zh-Hans";
+  }
+  if (language === "pt") return "pt-BR";
+  if (language === "in") return "id";
+  return LANGS.find((tag) => tag.toLowerCase() === language) ?? null;
+};
 const switcher = document.querySelector("[data-lang-switch]");
-if (ko && switcher) {
+if (switcher) {
   const english = new Map();
   for (const el of document.querySelectorAll("[data-i18n]")) english.set(el, el.innerHTML);
   const meta = document.querySelector('meta[name="description"]');
   const en = { title: document.title, description: meta.content };
-  const flow = document.querySelector("[data-src-ko]");
+  const flow = document.querySelector("[data-flow]");
   const flowEn = flow && { src: flow.getAttribute("src"), alt: flow.alt };
 
   const apply = (lang) => {
-    const isKo = lang === "ko";
+    const dict = lang === "en" ? {} : window.ITDA_I18N?.[lang] ?? {};
     document.documentElement.lang = lang;
-    for (const [el, html] of english) el.innerHTML = isKo ? ko[el.dataset.i18n] ?? html : html;
-    document.title = isKo ? ko["meta.title"] : en.title;
-    meta.content = isKo ? ko["meta.description"] : en.description;
+    for (const [el, html] of english) el.innerHTML = dict[el.dataset.i18n] ?? html;
+    document.title = dict["meta.title"] ?? en.title;
+    meta.content = dict["meta.description"] ?? en.description;
     if (flow) {
-      flow.src = isKo ? flow.dataset.srcKo : flowEn.src;
-      flow.alt = isKo ? flow.dataset.altKo : flowEn.alt;
+      flow.src = dict["flow.src"] ?? flowEn.src;
+      flow.alt = dict["flow.alt"] ?? flowEn.alt;
     }
-    switcher.textContent = isKo ? "English" : "한국어";
-    switcher.lang = isKo ? "en" : "ko";
-    switcher.setAttribute("aria-label", isKo ? "View in English" : "한국어로 보기");
+    switcher.value = lang;
+  };
+
+  // A language's strings load once, from its own file, then apply.
+  const show = (lang) => {
+    if (lang === "en" || window.ITDA_I18N?.[lang]) return apply(lang);
+    const script = document.createElement("script");
+    script.src = `i18n/${lang}.js`;
+    script.onload = () => apply(lang);
+    script.onerror = () => apply("en");
+    document.head.append(script);
   };
 
   const fromUrl = new URLSearchParams(location.search).get("lang");
   let saved = null;
   try { saved = localStorage.getItem("itda-lang"); } catch {}
-  const initial = ["en", "ko"].includes(fromUrl) ? fromUrl
-    : saved ?? (navigator.language?.toLowerCase().startsWith("ko") ? "ko" : "en");
-  if (initial === "ko") apply("ko");
+  const browser = (navigator.languages ?? [navigator.language]).map(resolve).find(Boolean);
+  const initial = LANGS.includes(fromUrl) ? fromUrl
+    : LANGS.includes(saved) ? saved
+    : browser ?? "en";
+  if (initial !== "en") show(initial);
 
-  switcher.addEventListener("click", () => {
-    const next = document.documentElement.lang === "ko" ? "en" : "ko";
-    apply(next);
+  switcher.addEventListener("change", () => {
+    const next = LANGS.includes(switcher.value) ? switcher.value : "en";
+    show(next);
     try { localStorage.setItem("itda-lang", next); } catch {}
     const url = new URL(location.href);
     url.searchParams.set("lang", next);
