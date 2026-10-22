@@ -93,6 +93,14 @@ your computer and connects them after one Enter (`ITDA_LANG=ko` makes it speak
 Korean). A bare `itda` asks for the address; `itda setup <address>` takes flags
 for scripts.
 
+Sites that run known software are recognised. When the page says it is a
+GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress or Gitea
+(also Forgejo), and one request to that software's own API confirms it, the
+agent gets that software's real API from a ready-made template
+([`sites/software/`](sites/software/)), signed in the way that software does
+it, and what the page itself shows joins it. `itda setup --as jira` forces a
+template; `--no-template` reads the page like any other.
+
 Once an agent is connected, you can also just ask it: "set up
 news.ycombinator.com for me". It calls `itda_setup`, the site is looked at,
 drafted and tried the same way, and its actions appear as tools in the same
