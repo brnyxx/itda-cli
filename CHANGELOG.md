@@ -9,11 +9,14 @@ change the definition format or the CLI.
 
 ### Changed
 
-- The landing page's hero has a living sky: slow liquid chrome in the brand
-  blues under a field of points and threads that gather around the cursor,
-  with a website on the left and an agent on the right (`site/sky.js`,
-  three.js from cdnjs). One still frame under reduced motion; the plain glow
-  without WebGL.
+- The landing page has a living sky behind the whole page: liquid chrome
+  with striped, colour-split reflections and a holographic sheen, a wire
+  grid running to the horizon, and a field of points and threads that gather
+  around the cursor, with a website on the left and an agent on the right
+  (`site/sky.js`, three.js from cdnjs). It follows the scroll, draws one
+  still frame under reduced motion, and leaves the plain glow without WebGL.
+- The hero lost its badge and chips; the binary, platform and licence line
+  moved to the footer.
 - `itda <address>` sets that site up, and `itda github` (or npm, crates-io,
   pypi) adds the ready-made site and connects the agent apps found on this
   computer; the README's one line is the one line you type. The tagline and
