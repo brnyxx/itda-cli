@@ -39,7 +39,13 @@ itda draft page https://example.com/board --name board --install
 itda fetches each page as itself (`itda/<version>`, never a browser), on the
 same rules as every other request: private addresses need `ITDA_ALLOW_LOCAL=1`,
 and a page that refuses or challenges the request pauses the site instead of
-being retried. Each page becomes a read with a response check, so `itda check`
+being retried. The draft then stops with what the gate saw, as `itda call`
+would report it: `blocked_by_site` (exit 12) naming Cloudflare, a bot
+manager or a captcha, or `site_rate_limited` (exit 13) with the wait the
+site asked for. A page that sends itda on to a sign-in page stops with
+`auth_required` (exit 10) and points at `itda record`. itda does not go
+around a block; the site's official API, or its owner, is the way in. Each
+page that answers becomes a read with a response check, so `itda check`
 notices when the page changes:
 
 | What the page has | What the draft gets |
@@ -47,7 +53,8 @@ notices when the page changes:
 | A table with a header row | `html.items` per row, one field per column named after its header, plus `link` |
 | A list of similar elements with a title and a link (cards, posts, `tr.athing`) | `html.items` with `title`, `link` and, when present, `id`, `summary`, `meta`, `published_at` |
 | Any run of three or more siblings of one shape, outside navigation, sidebars, headers and footers, each holding one link at the same place (`ol.stories > li.story`, `#articles > dt`, a `dl` per section) | The same, with the title and link read from that link's own path in the page |
-| Data embedded for its scripts (`__NEXT_DATA__`, `__NUXT_DATA__`, `__remixContext`, `__APOLLO_STATE__`, `ld+json`) | `ssr_json` with `required_pointers` |
+| A list inside data embedded for its scripts: an `ItemList` or a list of one typed thing (`NewsArticle`, `Product`...) in `ld+json`; in `__NEXT_DATA__`, `__NEXT_F__`, `__APOLLO_STATE__` (grouped by typename), `__PRELOADED_STATE__` and the like, the list of objects with the most to read (a title, a link, a date) and, among those, the longest | One read per list, named after what it holds (`list-news-articles`), with `ssr_json`, `extract_pointer` to the list, `required_pointers` on its first record and a `model` that keeps up to eight plain fields of each record, ids and titles first; credentials are left out |
+| Data embedded for its scripts with no list in it | `ssr_json` with `required_pointers` on the whole payload, and a note saying what to add |
 | Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
 | Links to `?page=2` on the same path | A `page` query input (`int`, default 1) |
 | A `GET` form | A read with the form's fields as `query` inputs |
@@ -405,7 +412,9 @@ stops with `response_mismatch` and nothing is sent.
 ## `models`
 
 A model picks and renames fields from a JSON answer, so agents get small,
-stable records. When the answer is a list, each record is picked the same way:
+stable records. When the answer is a list, each record is picked the same way.
+`itda draft page` writes one for every list it finds in a page's embedded
+data; `path` reaches into nested objects with dots (`item.headline`):
 
 ```yaml
 models:
