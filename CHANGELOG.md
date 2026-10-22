@@ -383,6 +383,13 @@ change the definition format or the CLI.
   322 KB page. Leaving the header out is not enough: amazon.com then sends a
   gzip body itda does not decode. A definition that needs a language can
   still set one in `defaults.headers`.
+- A challenge page served with HTTP 200 (small, titled as a challenge, only
+  a script and no link to follow, as bugzilla.mozilla.org's bug list and
+  pypi.org answer when they challenge) now counts as a block: the site is
+  paused, `itda draft page` and `itda setup` say the site's bot protection
+  refused itda (`blocked_by_site`, exit 12), and `itda check` says
+  `blocked`. Before, it was drafted as a read named after the challenge and
+  checked as `ok`.
 
 ## [0.4.0] - 2026-10-22
 

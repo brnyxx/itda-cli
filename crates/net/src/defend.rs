@@ -102,6 +102,9 @@ pub fn classify(o: &Observation) -> (Class, &'static str) {
         {
             return (Class::Captcha, "captcha-interstitial-2xx");
         }
+        if challenge_interstitial(o) {
+            return (Class::BotManager, "challenge-interstitial-2xx");
+        }
         return (Class::None, "");
     }
     if !o.header("cf-mitigated").is_empty() {
@@ -152,6 +155,26 @@ pub fn classify(o: &Observation) -> (Class, &'static str) {
         return (Class::Unknown, "403/503-no-signal");
     }
     (Class::None, "")
+}
+
+/// A page served with a success status that only runs a script before it
+/// shows the site: small, titled as a challenge, and with no link to follow.
+/// A script-drawn app shell has links or another title, and is not a block.
+fn challenge_interstitial(o: &Observation) -> bool {
+    let body = o.body_snippet.to_lowercase();
+    if o.is_json_payload()
+        || body.len() >= 8_192
+        || !body.contains("<script")
+        || body.contains("<a ")
+    {
+        return false;
+    }
+    let title = body
+        .split_once("<title")
+        .and_then(|(_, rest)| rest.split_once('>'))
+        .and_then(|(_, rest)| rest.split_once("</title>"))
+        .map(|(title, _)| title.trim());
+    title.is_some_and(|title| title.contains("challenge"))
 }
 
 fn body_hit(o: &Observation, subs: &[&str]) -> bool {
@@ -206,6 +229,24 @@ mod tests {
             body_snippet: "{\"captcha_key\":[\"You need to update your app\"],\"captcha_sitekey\":\"a9b5fb07\"}".into(),
         });
         assert_eq!(cls, Class::Captcha);
+    }
+
+    #[test]
+    fn a_client_challenge_page_served_with_200_is_a_block() {
+        let page = |body: &str| Observation {
+            status_code: 200,
+            headers: vec![("content-type".into(), "text/html; charset=utf-8".into())],
+            body_snippet: body.into(),
+        };
+        let challenge = include_str!("../tests/fixtures/client-challenge.html");
+        assert_eq!(classify(&page(challenge)).0, Class::BotManager);
+
+        // A script-drawn app shell asks for JavaScript too, but is the site.
+        let shell = "<!doctype html><html><head><title>Crates</title><script src=\"/app.js\"></script></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id=\"root\"></div></body></html>";
+        assert_eq!(classify(&page(shell)).0, Class::None);
+        // A small page about a challenge links somewhere.
+        let article = "<html><head><title>Weekly coding challenge</title><script src=\"/a.js\"></script></head><body><a href=\"/posts/1\">Day 1</a></body></html>";
+        assert_eq!(classify(&page(article)).0, Class::None);
     }
 
     #[test]

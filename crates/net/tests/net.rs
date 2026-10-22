@@ -200,6 +200,39 @@ async fn a_challenge_pauses_the_site_until_the_user_resumes() {
 }
 
 #[tokio::test]
+async fn a_challenge_page_served_with_200_pauses_the_site() {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let counted = hits.clone();
+    let base = host(Router::new().route(
+        "/project/requests/",
+        get(move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+            async {
+                (
+                    [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                    include_str!("fixtures/client-challenge.html"),
+                )
+            }
+        }),
+    ))
+    .await;
+    let net = network(true);
+    let first = net
+        .fetch(Request::read(format!("{base}/project/requests/")))
+        .await
+        .unwrap();
+    assert_eq!(first.status, 200);
+    assert_eq!(first.defense, "bot-manager");
+    assert!(!first.successful());
+    let paused = net
+        .fetch(Request::read(format!("{base}/project/requests/")))
+        .await
+        .unwrap_err();
+    assert_eq!(paused.public_code, gate::BLOCKED);
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn an_expired_session_pauses_only_that_account() {
     let base =
         host(Router::new().route("/api/me", get(|| async { StatusCode::UNAUTHORIZED }))).await;
