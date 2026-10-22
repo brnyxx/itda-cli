@@ -266,6 +266,19 @@ change the definition format or the CLI.
 
 ### Fixed
 
+- Approving in the client works on MCP protocol 2026-07-28, which Claude
+  Code 2.1.289 negotiates: that revision took server-to-client requests
+  away, so the `elicitation/create` request itda sent was dropped unseen
+  and the call hung until itda gave up. itda now hands the form back as the
+  call's result (`resultType: input_required`), the client shows it, and
+  calls again with the answer and the approval id as `requestState`; the id
+  only ever names an approval itda stored for this very call, and anything
+  else is asked again. The confirmations `itda_manage` and `itda_login` put
+  to the person go the same way. Clients on the earlier handshake keep the
+  request they had. The review the form shows no longer starts with a blank
+  line, and leaves "as account" out when the site has no accounts: Claude
+  Code cut a five-line review to its first three and hid the request and the
+  inputs behind "(+2 more lines)", and shows the four-line one whole.
 - A change answered with a redirect (post, then redirect, then get, as
   Gitea, Redmine and most server-rendered sites do) is reported as landed,
   with the address the site pointed at, instead of `request_failed`. A

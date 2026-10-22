@@ -946,3 +946,265 @@ async fn a_server_pinned_to_one_site_stays_inside_it() {
     assert_eq!(audit["structuredContent"]["unknown_outcome"], json!([]));
     std::fs::remove_dir_all(home).ok();
 }
+
+// ---- Protocol 2026-07-28: forms come back as results ----
+
+/// A client on protocol 2026-07-28: no handshake, every request carries its
+/// version, identity and capabilities in `_meta`, and the server never sends
+/// it a request. A form is the result of a call; the client calls again with
+/// the answer in `inputResponses` and the `requestState` it was given.
+struct Modern {
+    lines: Lines<BufReader<ReadHalf<DuplexStream>>>,
+    writer: WriteHalf<DuplexStream>,
+    capabilities: Value,
+    next: u64,
+}
+
+impl Modern {
+    async fn start(server: Server, capabilities: Value) -> Self {
+        let (ours, theirs) = tokio::io::duplex(1 << 20);
+        tokio::spawn(async move {
+            let running = server.serve(tokio::io::split(theirs)).await.unwrap();
+            running.waiting().await.unwrap();
+        });
+        let (reader, writer) = tokio::io::split(ours);
+        Self {
+            lines: BufReader::new(reader).lines(),
+            writer,
+            capabilities,
+            next: 1,
+        }
+    }
+
+    /// Call a tool; `answers` and `state` are the previous round's form
+    /// answered and the state echoed back, on a retry.
+    async fn call(
+        &mut self,
+        name: &str,
+        arguments: Value,
+        answers: Option<Value>,
+        state: Option<&str>,
+    ) -> Value {
+        let id = self.next;
+        self.next += 1;
+        let mut params = json!({
+            "name": name,
+            "arguments": arguments,
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "0"},
+                "io.modelcontextprotocol/clientCapabilities": self.capabilities,
+            }
+        });
+        if let Some(answers) = answers {
+            params["inputResponses"] = answers;
+        }
+        if let Some(state) = state {
+            params["requestState"] = state.into();
+        }
+        let mut line =
+            json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": params})
+                .to_string();
+        line.push('\n');
+        self.writer.write_all(line.as_bytes()).await.unwrap();
+        loop {
+            let line = self.lines.next_line().await.unwrap().unwrap();
+            let message: Value = serde_json::from_str(&line).unwrap();
+            assert!(
+                message["method"] != "elicitation/create",
+                "a 2026-07-28 client takes no requests: {message}"
+            );
+            if message["id"] == id {
+                return message["result"].clone();
+            }
+        }
+    }
+}
+
+const FORMS: &str = r#"{"elicitation": {"form": {}}}"#;
+
+fn forms() -> Value {
+    serde_json::from_str(FORMS).unwrap()
+}
+
+#[tokio::test]
+async fn on_2026_07_28_the_form_is_the_result_and_the_answer_comes_on_the_next_call() {
+    let base = site().await;
+    let Approving { server, audit } = approving(&base);
+    let mut client = Modern::start(server, forms()).await;
+
+    let asked = client
+        .call("fixture.delete-item", json!({"id": 3}), None, None)
+        .await;
+    assert_eq!(asked["resultType"], "input_required", "{asked}");
+    let form = &asked["inputRequests"]["approve"];
+    assert_eq!(form["method"], "elicitation/create");
+    let message = form["params"]["message"].as_str().unwrap();
+    assert!(message.contains("delete-item"), "{message}");
+    assert!(message.contains("/items/3"), "{message}");
+    assert_eq!(
+        form["params"]["requestedSchema"]["required"],
+        json!(["approve"])
+    );
+    let state = asked["requestState"].as_str().unwrap().to_owned();
+
+    let done = client
+        .call(
+            "fixture.delete-item",
+            json!({"id": 3}),
+            Some(json!({"approve": {"action": "accept", "content": {"approve": true}}})),
+            Some(&state),
+        )
+        .await;
+    assert_eq!(done["isError"], false, "{done}");
+    assert_eq!(done["structuredContent"]["effect"], "write");
+    let kinds: Vec<String> = audit
+        .records()
+        .unwrap()
+        .into_iter()
+        .map(|r| r.kind)
+        .collect();
+    assert!(kinds.contains(&"approved".to_owned()), "{kinds:?}");
+
+    // The approval was used up: the same answer again is a new question.
+    let again = client
+        .call(
+            "fixture.delete-item",
+            json!({"id": 3}),
+            Some(json!({"approve": {"action": "accept", "content": {"approve": true}}})),
+            Some(&state),
+        )
+        .await;
+    assert_eq!(again["resultType"], "input_required", "{again}");
+    assert_ne!(again["requestState"], state);
+}
+
+#[tokio::test]
+async fn on_2026_07_28_a_declined_or_closed_form_rejects_the_change() {
+    let base = site().await;
+    for answer in [
+        json!({"action": "decline"}),
+        json!({"action": "cancel"}),
+        json!({"action": "accept", "content": {"approve": false}}),
+    ] {
+        let Approving { server, .. } = approving(&base);
+        let mut client = Modern::start(server, forms()).await;
+        let asked = client
+            .call("fixture.delete-item", json!({"id": 3}), None, None)
+            .await;
+        let state = asked["requestState"].as_str().unwrap().to_owned();
+        let refused = client
+            .call(
+                "fixture.delete-item",
+                json!({"id": 3}),
+                Some(json!({"approve": answer})),
+                Some(&state),
+            )
+            .await;
+        assert_eq!(refused["isError"], true, "{refused}");
+        assert_eq!(refused["structuredContent"]["status"], "approval_rejected");
+        assert_eq!(refused["structuredContent"]["approval"], state);
+    }
+}
+
+#[tokio::test]
+async fn on_2026_07_28_a_state_that_is_not_this_call_is_a_new_question() {
+    let base = site().await;
+    let Approving { server, audit } = approving(&base);
+    let mut client = Modern::start(server, forms()).await;
+    let accept = json!({"approve": {"action": "accept", "content": {"approve": true}}});
+
+    // An id the server never gave out, and one it gave for other inputs.
+    let asked = client
+        .call("fixture.delete-item", json!({"id": 3}), None, None)
+        .await;
+    let other = asked["requestState"].as_str().unwrap().to_owned();
+    for state in ["not-an-approval", other.as_str()] {
+        let again = client
+            .call(
+                "fixture.delete-item",
+                json!({"id": 4}),
+                Some(accept.clone()),
+                Some(state),
+            )
+            .await;
+        assert_eq!(again["resultType"], "input_required", "{again}");
+        assert_ne!(again["requestState"], state);
+    }
+
+    // The state without the answer: the same question, same state.
+    let repeated = client
+        .call("fixture.delete-item", json!({"id": 3}), None, Some(&other))
+        .await;
+    assert_eq!(repeated["resultType"], "input_required", "{repeated}");
+    assert_eq!(repeated["requestState"], other);
+
+    let kinds: Vec<String> = audit
+        .records()
+        .unwrap()
+        .into_iter()
+        .map(|r| r.kind)
+        .collect();
+    assert!(
+        !kinds
+            .iter()
+            .any(|k| k == "approved" || k == "change_started"),
+        "{kinds:?}"
+    );
+}
+
+#[tokio::test]
+async fn on_2026_07_28_a_client_without_forms_gets_an_approval_id() {
+    let base = site().await;
+    let Approving { server, .. } = approving(&base);
+    let mut client = Modern::start(server, json!({})).await;
+    let first = client
+        .call("fixture.delete-item", json!({"id": 3}), None, None)
+        .await;
+    assert_eq!(first["isError"], true, "{first}");
+    assert_eq!(first["structuredContent"]["status"], "approval_required");
+}
+
+#[tokio::test]
+async fn on_2026_07_28_a_confirmation_is_the_result_and_the_answer_comes_on_the_next_call() {
+    let base = site_with_board().await;
+    let Managed { server, home } = managed(&base);
+    let mut client = Modern::start(server, forms()).await;
+    let remove = json!({"action": "remove", "site": "fixture"});
+
+    let asked = client.call("itda_manage", remove.clone(), None, None).await;
+    assert_eq!(asked["resultType"], "input_required", "{asked}");
+    let form = &asked["inputRequests"]["confirm"];
+    assert_eq!(form["method"], "elicitation/create");
+    assert!(
+        form["params"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("fixture")
+    );
+    assert!(asked.get("requestState").is_none(), "{asked}");
+    assert!(home.join("specs/fixture/spec.json").exists());
+
+    let declined = client
+        .call(
+            "itda_manage",
+            remove.clone(),
+            Some(json!({"confirm": {"action": "decline"}})),
+            None,
+        )
+        .await;
+    assert_eq!(declined["structuredContent"]["status"], "declined");
+    assert!(home.join("specs/fixture/spec.json").exists());
+
+    let removed = client
+        .call(
+            "itda_manage",
+            remove,
+            Some(json!({"confirm": {"action": "accept", "content": {"confirm": true}}})),
+            None,
+        )
+        .await;
+    assert_eq!(removed["isError"], false, "{removed}");
+    assert!(!home.join("specs/fixture").exists());
+    std::fs::remove_dir_all(home).ok();
+}
