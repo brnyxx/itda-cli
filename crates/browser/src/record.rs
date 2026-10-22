@@ -411,6 +411,9 @@ pub struct Recorder {
     next_id: u64,
     pending: BTreeMap<u64, Pending>,
     sessions: BTreeSet<String>,
+    /// The session attached to each page target, by target id, so a read of
+    /// a page's storage goes to the session already watching it.
+    targets: BTreeMap<String, String>,
     capture: Capture,
     /// The page to open once the first tab is being watched, so its own
     /// document request is recorded too.
@@ -447,6 +450,7 @@ impl Recorder {
             next_id: 0,
             pending: BTreeMap::new(),
             sessions: BTreeSet::new(),
+            targets: BTreeMap::new(),
             capture: Capture::default(),
             start: Some(url.clone()),
             page: None,
@@ -501,6 +505,19 @@ impl Recorder {
     pub fn cookies(&mut self, site: &url::Url) -> AppResult<Vec<crate::Cookie>> {
         let result = self.send(None, "Storage.getCookies", json!({}))?;
         crate::site_cookies(&result, site)
+    }
+
+    /// The `localStorage` and `sessionStorage` items of `site`'s origin, from
+    /// the page open there, through the session already watching that page:
+    /// where a single-page app keeps the session it signed in to.
+    pub fn storage(&mut self, site: &url::Url) -> AppResult<Vec<crate::StorageItem>> {
+        let targets = self.targets.clone();
+        let known = move |target: &str| targets.get(target).cloned();
+        crate::storage::read(
+            &mut |session, method, params| self.send(session, method, params),
+            site,
+            Some(&known),
+        )
     }
 
     /// How long the network has been quiet: the time since the browser last
@@ -604,6 +621,9 @@ impl Recorder {
                     Some("page" | "iframe" | "webview")
                 );
                 if page && !session.is_empty() && self.sessions.insert(session.clone()) {
+                    if let Some(target) = reply["params"]["targetInfo"]["targetId"].as_str() {
+                        self.targets.insert(target.to_owned(), session.clone());
+                    }
                     let enabled = self.send_async(Some(&session), "Network.enable", json!({}))?;
                     // The page is opened only once the browser confirms
                     // tracking is on; sent together, a load could start
@@ -621,8 +641,9 @@ impl Recorder {
                 }
             }
             "Target.detachedFromTarget" => {
-                self.sessions
-                    .remove(reply["params"]["sessionId"].as_str().unwrap_or_default());
+                let gone = reply["params"]["sessionId"].as_str().unwrap_or_default();
+                self.sessions.remove(gone);
+                self.targets.retain(|_, session| session != gone);
             }
             method if method.starts_with("Network.") => {
                 self.last_event = Some(Instant::now());

@@ -658,10 +658,41 @@ operations:
     assert!(with("cookie:SID").is_empty());
     assert!(with("query:sid").is_empty());
     assert!(with("").is_empty());
-    for bad in ["query:", "query: ", "header:sid", "sid"] {
+    for bad in ["query:", "query: ", "header:sid", "sid", "storage:token"] {
         let issues = with(bad);
         assert_eq!(issues.len(), 1, "{bad}: {issues:?}");
         assert_eq!(issues[0].field, "auth.session.value_from");
         assert!(issues[0].detail.contains("query:<key>"), "{issues:?}");
+    }
+}
+
+#[test]
+fn a_header_credential_comes_from_the_store_or_from_browser_storage() {
+    let with = |value_from: &str| {
+        parse(&format!(
+            r##"
+site: {{name: app, base_url: https://example.com}}
+auth:
+  - name: session
+    kind: header
+    header: Authorization
+    prefix: "Bearer "
+    value_from: "{value_from}"
+operations:
+  - name: feed
+    method: GET
+    path: /feed
+    auth: session
+"##
+        ))
+        .validate()
+    };
+    assert!(with("store:app/token").is_empty());
+    assert!(with("storage:access_token").is_empty());
+    for bad in ["storage:", "storage: ", "cookie:sid", "query:sid", ""] {
+        let issues = with(bad);
+        assert_eq!(issues.len(), 1, "{bad}: {issues:?}");
+        assert_eq!(issues[0].field, "auth.session.value_from");
+        assert!(issues[0].detail.contains("storage:<key>"), "{issues:?}");
     }
 }

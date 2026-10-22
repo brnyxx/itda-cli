@@ -515,16 +515,25 @@ fn check_auth(sp: &Spec, out: &mut Problems) {
                 "transport or multi-line headers are not allowed",
             );
         }
-        if auth.kind == "header"
-            && !auth
+        // A header credential takes its value from this site's own store, or
+        // from a session the site keeps in the browser's storage under a
+        // named key (`storage:<key>`), captured at sign-in and kept in the
+        // keyring like any other session.
+        if auth.kind == "header" {
+            let store = auth
                 .value_from
-                .starts_with(&format!("store:{}/", sp.site.name))
-        {
-            out.add(
-                "data_invalid",
-                format!("{field}.value_from"),
-                "header credentials must come from this site's own store",
-            );
+                .starts_with(&format!("store:{}/", sp.site.name));
+            let storage = auth
+                .value_from
+                .strip_prefix("storage:")
+                .is_some_and(|key| !key.trim().is_empty());
+            if !store && !storage {
+                out.add(
+                    "data_invalid",
+                    format!("{field}.value_from"),
+                    "header credentials must come from this site's own store, or a session the site keeps in browser storage as storage:<key>",
+                );
+            }
         }
         if let Some(login) = &auth.login {
             check_login(auth.kind == "browser", login, &field, out);

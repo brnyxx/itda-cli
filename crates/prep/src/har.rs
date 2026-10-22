@@ -412,7 +412,19 @@ fn parts_at(
     let login = query_signed_in
         .then(|| login_block(entries, &origin, &prefix))
         .flatten();
-    if query_signed_in && let Some(key) = &query_session {
+    let storage_signed_in = options.storage.as_ref().is_some_and(|storage| {
+        calls.values().any(|call| {
+            call.token
+                .as_ref()
+                .is_some_and(|(header, _)| storage.header.eq_ignore_ascii_case(header))
+        })
+    });
+    if storage_signed_in && let Some(storage) = &options.storage {
+        notes.push(format!(
+            "Actions with auth: session send a bearer token the site keeps in the browser ({key} in its storage). It is kept in the keyring, never in the definition. Sign in again with `itda login {site} --browser` once after installing.",
+            key = storage.key
+        ));
+    } else if query_signed_in && let Some(key) = &query_session {
         notes.push(match &login {
             Some(_) => format!(
                 "Actions with auth: session carry the {key} query parameter the site hands out at sign-in. It is kept in the keyring, never in the definition. Run `itda login {site}` once after installing."
@@ -492,7 +504,37 @@ fn parts_at(
         entry.insert("desc".into(), desc.into());
         entry.insert("method".into(), call.method.clone().into());
         entry.insert("path".into(), call.path.clone().into());
-        if let Some((header, bearer)) = &call.token {
+        let storage_for = |header: &str| {
+            options
+                .storage
+                .as_ref()
+                .filter(|storage| storage.header.eq_ignore_ascii_case(header))
+        };
+        if let Some((header, _)) = &call.token
+            && let Some(storage) = storage_for(header)
+        {
+            // The token the call sent as a header is one the site keeps in
+            // its own storage, found in the sign-in window: a session itda
+            // can read again at the next sign-in, not a static key the person
+            // pastes. It is a `header` credential still, but its value lives
+            // in the keyring under `storage:<key>`.
+            if !auth_names.contains_key("storage") {
+                let mut strategy = Mapping::new();
+                strategy.insert("name".into(), "session".into());
+                strategy.insert("kind".into(), "header".into());
+                strategy.insert("header".into(), storage.header.clone().into());
+                if !storage.prefix.is_empty() {
+                    strategy.insert("prefix".into(), storage.prefix.clone().into());
+                }
+                strategy.insert(
+                    "value_from".into(),
+                    format!("storage:{}", storage.key).into(),
+                );
+                auth.push(Yaml::Mapping(strategy));
+                auth_names.insert("storage".into(), "session".into());
+            }
+            entry.insert("auth".into(), "session".into());
+        } else if let Some((header, bearer)) = &call.token {
             let key = header.to_ascii_lowercase();
             let auth_name = auth_names.entry(key.clone()).or_insert_with(|| {
                 let auth_name = if key == "authorization" {

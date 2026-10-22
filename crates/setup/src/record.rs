@@ -16,11 +16,14 @@ const QUIET: Duration = Duration::from_secs(2);
 /// ...and this is the longest one wait lasts, quiet or not.
 const WAIT_CAP: Duration = Duration::from_secs(10);
 
-/// What a recording session leaves behind: the HAR document and the cookies
-/// the browser held for the site when it closed.
+/// What a recording session leaves behind: the HAR document, the cookies the
+/// browser held for the site when it closed, and the items the signed-in page
+/// kept in the site's `localStorage` and `sessionStorage` (where a single-page
+/// app keeps a session it has no cookie for).
 pub struct Recording {
     pub har: Value,
     pub cookies: Vec<itda_browser::Cookie>,
+    pub storage: Vec<itda_browser::StorageItem>,
 }
 
 /// What the recording says while it runs.
@@ -32,6 +35,20 @@ pub enum Progress {
     Calls(usize),
     /// The window closed or the person said so.
     Finished(usize),
+}
+
+/// The session a recording shows the site keeping in browser storage and
+/// sending as a header, as a [`itda_prep::StorageAuth`] for the draft: the
+/// storage key, the header its scripts put the token in, and the prefix in
+/// front of it. The token value is never in the draft. `None` when no stored
+/// value was sent as a header to `page`'s origin.
+pub fn storage_auth(rec: &Recording, page: &url::Url) -> Option<itda_prep::StorageAuth> {
+    let session = itda_browser::bearer_session(&rec.har, &rec.storage, &page.origin())?;
+    Some(itda_prep::StorageAuth {
+        key: session.key,
+        header: session.header,
+        prefix: session.prefix,
+    })
 }
 
 /// Open the browser at `page` and record until `done` fires or the person
@@ -60,10 +77,13 @@ pub fn browser(
     // Replies to the last body fetches may still be on the way.
     recorder.poll(Duration::from_millis(750))?;
     let count = recorder.len();
-    let cookies = if recorder.is_open() {
-        recorder.cookies(&page).unwrap_or_default()
+    let (cookies, storage) = if recorder.is_open() {
+        (
+            recorder.cookies(&page).unwrap_or_default(),
+            recorder.storage(&page).unwrap_or_default(),
+        )
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
     let har = recorder.finish();
     if count == 0 {
@@ -73,7 +93,11 @@ pub fn browser(
         ));
     }
     report(Progress::Finished(count));
-    Ok(Recording { har, cookies })
+    Ok(Recording {
+        har,
+        cookies,
+        storage,
+    })
 }
 
 /// Open `browser` at `page`, watch what the page loads on its own, scroll
@@ -95,6 +119,7 @@ pub fn watch(browser: &std::path::Path, page: &str) -> AppResult<Recording> {
     Ok(Recording {
         har: recorder.finish(),
         cookies: Vec::new(),
+        storage: Vec::new(),
     })
 }
 

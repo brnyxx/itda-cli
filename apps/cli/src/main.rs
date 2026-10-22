@@ -421,6 +421,7 @@ fn main() -> ExitCode {
                     lang: lang(),
                     schemas: Vec::new(),
                     session: None,
+                    storage: None,
                     frames_to_sign_in: Vec::new(),
                 },
                 install,
@@ -443,6 +444,7 @@ fn main() -> ExitCode {
                     lang: lang(),
                     schemas: Vec::new(),
                     session: None,
+                    storage: None,
                     frames_to_sign_in: Vec::new(),
                 },
                 install,
@@ -465,6 +467,7 @@ fn main() -> ExitCode {
                     lang: lang(),
                     schemas: Vec::new(),
                     session: None,
+                    storage: None,
                     frames_to_sign_in: Vec::new(),
                 },
                 install,
@@ -523,6 +526,7 @@ fn main() -> ExitCode {
                 lang: lang(),
                 schemas: Vec::new(),
                 session: None,
+                storage: None,
                 frames_to_sign_in: Vec::new(),
             },
             install,
@@ -1240,6 +1244,11 @@ async fn login_browser(
     // Check where the session will be kept before the person signs in.
     itda_setup::credentials::writable()?;
     let ctx = open(home)?.context(home);
+    // What the definition keeps as the session, so the right value is sealed:
+    // a storage token for a `storage:<key>` entry, else the cookies.
+    let from = itda_setup::login::session_value_from(&spec)
+        .unwrap_or_default()
+        .to_owned();
     let session = tokio::task::spawn_blocking(move || {
         let done = setup::enter_pressed();
         itda_setup::login::browser(&spec, url.as_deref(), Some(&done), &mut say_login)
@@ -1247,10 +1256,17 @@ async fn login_browser(
     .await
     .map_err(|_| AppError::api("internal", 500))??;
     let count = session.count;
-    itda_setup::login::keep(&ctx, site, account, label, session, "").await?;
-    eprintln!(
-        "Saved the session for {site}/{account} ({count} cookies). It is sealed under the data directory with a key in the system keyring. Agents only see the account id."
-    );
+    let storage = session.storage.is_some();
+    itda_setup::login::keep(&ctx, site, account, label, session, &from).await?;
+    if storage {
+        eprintln!(
+            "Saved the session for {site}/{account} (a bearer token the site keeps in storage). It is sealed under the data directory with a key in the system keyring. Agents only see the account id."
+        );
+    } else {
+        eprintln!(
+            "Saved the session for {site}/{account} ({count} cookies). It is sealed under the data directory with a key in the system keyring. Agents only see the account id."
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1538,6 +1554,7 @@ async fn record(
     force: bool,
     save: Option<&Path>,
 ) -> AppResult<ExitCode> {
+    let page = itda_types::url::validate_url(url).ok();
     let url = url.to_owned();
     let recording = tokio::task::spawn_blocking(move || {
         let done = setup::enter_pressed();
@@ -1558,6 +1575,9 @@ async fn record(
         options.schemas = itda_setup::introspect::schemas(&open(home)?.net, &endpoints).await;
         say_schemas(&options.schemas);
     }
+    if let Some(page) = &page {
+        options.storage = itda_setup::record::storage_auth(&recording, page);
+    }
     let draft = itda_prep::from_recording(&har, &options, "`itda record`")?;
     let site = draft.site.clone();
     // Without --save the recording is gone once this returns, so a refresh
@@ -1577,7 +1597,14 @@ async fn record(
         return Ok(code);
     }
     let spec = sites::load(home, &site)?;
-    let kept = keep_credentials(home, &spec, &recording.har, &recording.cookies).await?;
+    let kept = keep_credentials(
+        home,
+        &spec,
+        &recording.har,
+        &recording.cookies,
+        &recording.storage,
+    )
+    .await?;
     if !kept {
         eprintln!(
             "Sign in once with `itda login {site} --browser` if its actions need an account."
@@ -1594,11 +1621,12 @@ async fn keep_credentials(
     spec: &itda_spec::Spec,
     har: &Value,
     cookies: &[itda_browser::Cookie],
+    storage: &[itda_browser::StorageItem],
 ) -> AppResult<bool> {
     if !std::io::stdin().is_terminal() || itda_setup::credentials::store_is_env() {
         return Ok(false);
     }
-    let offers = itda_setup::credentials::offers(spec, har, cookies);
+    let offers = itda_setup::credentials::offers(spec, har, cookies, storage);
     if offers.is_empty() {
         return Ok(false);
     }

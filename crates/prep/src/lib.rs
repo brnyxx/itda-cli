@@ -40,6 +40,11 @@ pub struct Options {
     /// The pages were fetched signed in through the site's own form: every
     /// action needs that session, and the definition says how to sign in.
     pub session: Option<SessionAuth>,
+    /// A session the site keeps in the page's own storage and sends as a
+    /// header, recognised from the sign-in window: the calls that sent it
+    /// get a `kind: header` session whose value lives in the keyring under
+    /// `storage:<key>`, not a static `store:` token.
+    pub storage: Option<StorageAuth>,
     /// Paths of the page's own frames that answered with a redirect to a
     /// sign-in and so were not read; the note for each says it leads to a
     /// sign-in instead of only that it was not read.
@@ -56,6 +61,16 @@ pub struct SessionAuth {
     /// the site keeps its session in the address rather than a cookie.
     pub query: Option<String>,
     pub login: itda_spec::LoginForm,
+}
+
+/// A session the site keeps in browser storage and sends as a header: the
+/// storage key it is under, the header the scripts put it in, and the prefix
+/// in front of it there (`Bearer `). The value itself never reaches a draft.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StorageAuth {
+    pub key: String,
+    pub header: String,
+    pub prefix: String,
 }
 
 /// The schemas' reads, after what the source itself gave. They share one
@@ -334,6 +349,7 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
             lang: options.lang.clone(),
             schemas: Vec::new(),
             session,
+            storage: None,
             frames_to_sign_in: options.frames_to_sign_in.clone(),
         };
         parts.merge(page::page_parts(&pages, &page_options)?);
@@ -455,6 +471,7 @@ pub fn from_template(
             lang: options.lang.clone(),
             schemas: options.schemas.clone(),
             session: options.session.clone(),
+            storage: None,
             frames_to_sign_in: options.frames_to_sign_in.clone(),
         };
         let (mut found, from_description) =

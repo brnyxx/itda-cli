@@ -19,12 +19,22 @@ pub struct Session {
     pub cookies: String,
     pub count: usize,
     pub query: Option<(String, String)>,
+    /// The bearer token the signed-in page kept in browser storage, with the
+    /// key it was under, when the site keeps its session there rather than in
+    /// a cookie.
+    pub storage: Option<(String, String)>,
 }
 
 impl Session {
     /// What goes in the keyring for a definition whose `value_from` is
-    /// `from`: the query value for `query:<key>`, else the cookies.
+    /// `from`: the storage token for `storage:<key>`, the query value for
+    /// `query:<key>`, else the cookies.
     pub fn secret_for(&self, from: &str) -> Secret {
+        if let Some((key, value)) = &self.storage
+            && from.strip_prefix("storage:") == Some(key.as_str())
+        {
+            return Secret::new(value.clone());
+        }
         match (&self.query, from.strip_prefix("query:")) {
             (Some((key, value)), Some(named)) if key == named => Secret::new(value.clone()),
             _ => Secret::new(self.cookies.clone()),
@@ -46,15 +56,30 @@ impl Session {
 pub enum Progress {
     /// The window is open: sign in there.
     Opened { site: String },
-    /// The sign-in ends when this cookie appears, or when the person says so.
+    /// The sign-in ends when this cookie (or storage key) appears, or when
+    /// the person says so.
     WaitsFor { cookie: Option<String> },
 }
 
+/// The `value_from` of the entry a browser sign-in fills: a `browser`
+/// credential (cookies, or a query key the form hands out), or a `header`
+/// credential whose value the site keeps in browser storage (`storage:<key>`).
+pub fn session_value_from(spec: &Spec) -> Option<&str> {
+    spec.auth
+        .iter()
+        .find(|auth| {
+            auth.kind == "browser"
+                || (auth.kind == "header" && auth.value_from.starts_with("storage:"))
+        })
+        .map(|auth| auth.value_from.as_str())
+}
+
 /// Open the browser at the site's sign-in page and wait until the person is
-/// signed in: the sign-in cookie the definition names appears, or `done`
-/// fires. Without `done` (no terminal to press Enter in), the definition
-/// must name the cookie, or there is nothing to wait for. Blocks; run it off
-/// the async runtime.
+/// signed in: the sign-in cookie the definition names appears, the bearer
+/// token it keeps in storage appears, or `done` fires. Without `done` (no
+/// terminal to press Enter in), the definition must name the cookie or the
+/// storage key, or there is nothing to wait for. Blocks; run it off the async
+/// runtime.
 pub fn browser(
     spec: &Spec,
     page: Option<&str>,
@@ -64,7 +89,10 @@ pub fn browser(
     let auth = spec
         .auth
         .iter()
-        .find(|auth| auth.kind == "browser")
+        .find(|auth| {
+            auth.kind == "browser"
+                || (auth.kind == "header" && auth.value_from.starts_with("storage:"))
+        })
         .ok_or_else(|| {
             usage(
                 format!("{} has no browser sign-in", spec.site.name),
@@ -86,8 +114,9 @@ pub fn browser(
             format!("Use a page on {}.", scope.origin().ascii_serialization()),
         ));
     }
+    let storage_key = auth.value_from.strip_prefix("storage:");
     let required = auth.value_from.strip_prefix("cookie:");
-    if done.is_none() && required.is_none() {
+    if done.is_none() && required.is_none() && storage_key.is_none() {
         return Err(usage(
             format!(
                 "{}'s definition does not name the cookie that shows a sign-in",
@@ -105,7 +134,7 @@ pub fn browser(
         site: spec.site.name.clone(),
     });
     report(Progress::WaitsFor {
-        cookie: required.map(str::to_owned),
+        cookie: required.or(storage_key).map(str::to_owned),
     });
     loop {
         std::thread::sleep(Duration::from_millis(500));
@@ -114,6 +143,31 @@ pub fn browser(
                 "The browser was closed before sign-in finished",
                 "Run the command again and leave the window open until itda continues.",
             ));
+        }
+        // A session the site keeps in the page's own storage: wait for the
+        // named key to hold a token, then keep that value.
+        if let Some(key) = storage_key {
+            let token = window
+                .storage(&scope)?
+                .into_iter()
+                .find(|item| item.key == key)
+                .map(|item| item.value);
+            let pressed = done.is_some_and(|done| done.try_recv().is_ok());
+            if let Some(value) = token.filter(|value| !value.trim().is_empty()) {
+                return Ok(Session {
+                    cookies: String::new(),
+                    count: 0,
+                    query: None,
+                    storage: Some((key.to_owned(), value)),
+                });
+            }
+            if pressed {
+                return Err(usage(
+                    format!("The browser has no {key} value in storage for this site"),
+                    "Finish signing in before pressing Enter.",
+                ));
+            }
+            continue;
         }
         let cookies = window.cookies(&scope)?;
         let signed_in = required.is_some_and(|name| cookies.iter().any(|c| c.name == name));
@@ -136,6 +190,7 @@ pub fn browser(
                 cookies: itda_browser::header(&cookies),
                 count: cookies.len(),
                 query: None,
+                storage: None,
             });
         }
     }
@@ -307,6 +362,7 @@ pub async fn form(
             count: jar.len(),
             cookies: header(&jar),
             query,
+            storage: None,
         },
         cookie,
         form,
@@ -452,6 +508,7 @@ mod tests {
             cookies: "lang=en".into(),
             count: 1,
             query,
+            storage: None,
         };
         assert_eq!(session.value_from(Some("lang")), "query:sid");
         assert_eq!(session.secret_for("query:sid").expose(), "9f8e7d6c5b4a3210");
@@ -461,6 +518,7 @@ mod tests {
             cookies: "SID=x".into(),
             count: 1,
             query: None,
+            storage: None,
         };
         assert_eq!(plain.value_from(Some("SID")), "cookie:SID");
         assert_eq!(plain.value_from(None), "");

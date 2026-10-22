@@ -312,6 +312,7 @@ async fn draft(
         },
         schemas: Vec::new(),
         session: None,
+        storage: None,
         frames_to_sign_in: Vec::new(),
     };
     if let Some(file) = &sources.recording {

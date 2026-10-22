@@ -1549,3 +1549,100 @@ async fn a_graphql_read_that_sends_no_document_is_refused_with_a_remedy() {
     assert_eq!(envelope.effect, "read");
     assert_eq!(site.hits.load(Ordering::SeqCst), 2);
 }
+
+/// A JSON Web Token `{"sub":"u-1","exp":4102444800}` (the year 2100).
+const FRESH: &str =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LTEiLCJleHAiOjQxMDI0NDQ4MDB9.sig";
+/// The same claims with `exp` in the year 2001: a signed-out session.
+const EXPIRED: &str =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LTEiLCJleHAiOjEwMDAwMDAwMDB9.sig";
+
+#[tokio::test]
+async fn a_session_kept_in_storage_is_sent_as_a_bearer_header_and_stays_out_of_results() {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let seen = hits.clone();
+    let router = Router::new().route(
+        "/api/items",
+        get(move |headers: HeaderMap| {
+            let seen = seen.clone();
+            async move {
+                seen.fetch_add(1, Ordering::SeqCst);
+                let token = headers
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.strip_prefix("Bearer "))
+                    .unwrap_or_default()
+                    .to_owned();
+                if token.is_empty() {
+                    Err(StatusCode::UNAUTHORIZED)
+                } else {
+                    Ok(axum::Json(
+                        json!({"items": [{"title": "notice"}], "echo": token}),
+                    ))
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let spec = itda_spec::parse(
+        &serde_json::to_vec(&json!({
+            "spec_version": 1,
+            "site": {"name": "spa", "base_url": base},
+            "auth": [{"name": "session", "kind": "header", "header": "Authorization",
+                      "prefix": "Bearer ", "value_from": "storage:access_token"}],
+            "operations": [
+                {"name": "list-items", "method": "GET", "path": "/api/items", "auth": "session",
+                 "effect": "read", "evidence": "doc",
+                 "response": {"format": "json", "required_pointers": ["/items"]}}
+            ]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let (runtime, vault) = runtime().await;
+
+    // Before sign-in: no session, the API answers 401, nothing is read.
+    let error = runtime
+        .call(&spec, call("list-items", &[]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "auth_required");
+    assert_eq!(hits.load(Ordering::SeqCst), 0);
+
+    // After sign-in: the token the window kept in storage is sent as the
+    // bearer header, the read answers, and the token never reaches the result.
+    vault.add_account("spa", "default", "").await.unwrap();
+    vault
+        .set_secret("spa", "default", "session", Secret::new(FRESH))
+        .await
+        .unwrap();
+    let envelope = runtime.call(&spec, call("list-items", &[])).await.unwrap();
+    assert_eq!(envelope.data["items"][0]["title"], "notice");
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    let text = serde_json::to_string(&envelope).unwrap();
+    assert!(
+        !text.contains(FRESH),
+        "the bearer token must be redacted: {text}"
+    );
+
+    // An expired token is a signed-out session, not a changed site: the
+    // account is asked to sign in again and nothing goes to the site.
+    vault
+        .set_secret("spa", "default", "session", Secret::new(EXPIRED))
+        .await
+        .unwrap();
+    let error = runtime
+        .call(&spec, call("list-items", &[]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "auth_required");
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        1,
+        "no request went out for an expired token"
+    );
+}
