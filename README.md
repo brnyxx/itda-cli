@@ -11,10 +11,10 @@
   <a href="https://brnyxx.github.io/itda-cli/docs/">Docs</a>
 </p>
 
-Give itda one address. It learns what the site can do, tries it, and hands
-your AI agent a short list of actions in plain words. Reads just work.
-Nothing changes on the site until you say yes. It runs on your own computer,
-and it works on the old intranet behind a login too.
+Give itda one address. It learns what the site can do and tries it. It gives
+your AI agent a short list of actions in plain words. Reads just work. Nothing
+changes on the site until you say yes. It runs on your own computer, and it
+works on the old intranet behind a login too.
 
 It is for the sites your company runs and the services you have an account
 on, not the web at large.
@@ -46,13 +46,13 @@ Done. Ask your agent for something on 'news-ycombinator', for example "use news-
 
 </details>
 
-Then ask your agent: *"use news-ycombinator to list what Hacker News shows"*.
-A site behind a sign-in form asks for your user name and password instead:
-itda fills in the site's own form, as itself, and keeps the session on your
-computer. Where that is not enough (single sign-on, a one-time code), your own
-browser opens; you sign in and use the site as usual while itda watches.
+Ask your agent: *"use news-ycombinator to list what Hacker News shows"*. A site
+behind a sign-in form asks for your user name and password instead. itda fills
+in the site's own form as itself and keeps the session on your computer. If that
+is not enough (single sign-on, a one-time code), your own browser opens. You
+sign in and use the site as usual while itda watches.
 
-<p align="center"><img src="assets/flow.svg" alt="Record a website once in your browser, itda drafts commands from the recording, the agent calls them, and a change waits until a person approves it" width="860"></p>
+<p align="center"><img src="assets/flow.svg" alt="Record a website once in your browser; itda drafts commands from it. The agent calls them; a change waits for a person's approval." width="860"></p>
 
 > Status: early, and used against real sites. The runtime, CLI, MCP server,
 > approvals (in a terminal or inside the agent app), audit log, drafting from
@@ -62,9 +62,9 @@ browser opens; you sign in and use the site as usual while itda watches.
 
 ## Why
 
-Agents that drive a browser re-read every page, spend thousands of tokens on
-each screenshot or accessibility snapshot, click whatever the page tells them
-to, and break silently when a layout changes. itda moves that work to an
+Agents that drive a browser re-read every page and spend thousands of tokens on
+each screenshot or accessibility snapshot. They click whatever the page tells
+them to and break silently when a layout changes. itda moves that work to an
 install step:
 
 | | Browser-driving agent | itda |
@@ -170,37 +170,37 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/brnyxx/itda-cli/release
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/releases/latest/download/itda-cli-installer.ps1 | iex"
 ```
 
-Or download an archive from [Releases](https://github.com/brnyxx/itda-cli/releases),
-or build from source with
-`cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
+Download an archive from
+[Releases](https://github.com/brnyxx/itda-cli/releases), or build from source
+with `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`.
 
-Then type `itda` and the address of a site you use. It finds the agent apps on
-your computer and connects them after one Enter (`ITDA_LANG=ko` makes it speak
-Korean). A bare `itda` asks for the address; `itda setup <address>` takes flags
+Type `itda` and the address of a site you use. It finds agent apps on your
+computer and connects them after one Enter. `ITDA_LANG=ko` makes it speak
+Korean. A bare `itda` asks for the address; `itda setup <address>` takes flags
 for scripts.
 
-Sites that run known software are recognised. When the page says it is a
+itda recognises sites that run known software. When the page says it is a
 GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress or Gitea
 (also Forgejo), and one request to that software's own API confirms it, the
 agent gets that software's real API from a ready-made template
-([`sites/software/`](sites/software/)), signed in the way that software does
-it, and what the page itself shows joins it. `itda setup --as jira` forces a
-template; `--no-template` reads the page like any other.
+([`sites/software/`](sites/software/)), signed in the way that software does it.
+What the page itself shows joins it. `itda setup --as jira` forces a template;
+`--no-template` reads the page like any other.
 
-A page drawn by scripts shows itda only a title, so itda opens your browser
-on it for a few seconds, watches what the page loads by itself and drafts
-from those calls; nothing is clicked or typed, and the window closes on its
-own. Only a page that still shows nothing, or needs a sign-in, asks you to
-use the site in your browser while itda watches.
+A page drawn by scripts shows itda only a title, so itda opens your browser on
+it for a few seconds. It watches what the page loads by itself and drafts from
+those calls. Nothing is clicked or typed, and the window closes on its own. Only
+a page that still shows nothing, or needs a sign-in, asks you to use the site in
+your browser while itda watches.
 
 Once an agent is connected, you can also just ask it: "set up
-news.ycombinator.com for me". It calls `itda_setup`, itda looks at the site,
-drafts and tries it the same way, and its actions appear as tools in the same
-conversation (a scripted page opens briefly in a browser window on your
-screen); when a read says to sign in, `itda_login` opens your own browser
-and the agent only sees the account id.
+news.ycombinator.com for me". It calls `itda_setup`. itda looks at the site,
+drafts and tries it the same way. Its actions appear as tools in the same
+conversation. A scripted page opens briefly in a browser window on your screen.
+When a read says to sign in, `itda_login` opens your own browser; the agent only
+sees the account id.
 
-Or skip the terminal and hand this to Claude Code, Cursor or Codex, with the
+Skip the terminal and hand this to Claude Code, Cursor or Codex, with the
 address of a site you use:
 
 ```text
@@ -214,15 +214,14 @@ Install itda and set up the-site-you-use.example for me.
    If a read says to sign in, tell me to run: itda login <site> --browser
 ```
 
-The pieces are commands of their own. For pages you can open without
-signing in, give itda their addresses: tables, lists and repeated cards
-become records, a page that is one thing (a package, an article, a product)
-becomes a read of its headline, body and labelled values, a list whose links
-share one shape gets a read of one record by its id,
-search forms become reads, post forms become changes, feeds come along, a
-GraphQL endpoint the page names is asked once what it offers, one read per
-query field, and when the site publishes an API description, its reads join
-the draft:
+The pieces are commands of their own. For pages you can open without signing in,
+give itda their addresses. Tables, lists and repeated cards become records. A
+page that is one thing (a package, an article, a product) becomes a read of its
+headline, body and labelled values. A list whose links share one shape gets a
+read of one record by its id. Search forms become reads; post forms become
+changes. Feeds come along. A GraphQL endpoint the page names is asked once what
+it offers, one read per query field. When the site publishes an API description,
+its reads join the draft:
 
 ```sh
 itda draft page https://example.com/board --install   # shows what it found on the page
@@ -230,11 +229,11 @@ itda call example.get-board --page 2 --json
 itda check example                                     # does the page still match?
 ```
 
-For a site behind a sign-in form, give `itda setup` the page and your user
-name. It sends the site's own form once, as itself, with the password you
-type, keeps the session in the system keyring and drafts from the page the
-way you see it signed in. The definition remembers the form, so
-`itda login board` signs in again when the session expires:
+For a site behind a sign-in form, give `itda setup` the page and your user name.
+It sends the site's own form once, as itself, with the password you type. It
+keeps the session in the system keyring and drafts from the page as you see it
+signed in. The definition remembers the form, so `itda login board` signs in
+again when the session expires:
 
 ```sh
 itda setup https://intranet.example/board --name board --user me   # asks for the password
@@ -243,10 +242,9 @@ itda call board.create-notice --title "Server maintenance"   # changes wait for 
 itda login board --user me                          # when the session expires
 ```
 
-Behind single sign-on or a one-time code, record yourself using the site
-instead. itda opens your own browser in a fresh window and watches what the
-pages ask the server for while you sign in, search and post a form; it never
-clicks or types:
+For single sign-on or a one-time code, record yourself using the site instead.
+itda opens your own browser in a fresh window. It watches what the pages ask the
+server for while you sign in, search and post a form; it never clicks or types:
 
 ```sh
 itda record https://intranet.example/board --name board --install   # press Enter when done
@@ -273,12 +271,11 @@ itda add github      # or npm, crates-io, pypi
 itda call github.repo --owner rust-lang --repo rust
 ```
 
-Or try the bundled sandbox, a fake intranet that only listens on
-127.0.0.1: follow [examples/sandbox](examples/sandbox/README.md). A site
-definition is one YAML file; `itda add spec.yaml` installs it after showing
-where it sends requests and which actions change the site, `itda doctor`
-prints where the data directory is, and
-[docs/SPEC.md](docs/SPEC.md) explains how to write one.
+Try the bundled sandbox, a fake intranet that only listens on 127.0.0.1: follow
+[examples/sandbox](examples/sandbox/README.md). A site definition is one YAML
+file. `itda add spec.yaml` installs it after showing where it sends requests and
+which actions change the site. `itda doctor` prints the data directory's
+location. [docs/SPEC.md](docs/SPEC.md) explains how to write a definition.
 
 ```sh
 itda setup <url>                         # page or recording -> named actions -> tried -> agent, with questions
@@ -310,8 +307,8 @@ itda mcp install claude-code      # prints the `claude mcp add` command
 # itda mcp --site <name> serves one site only, for a project's own configuration
 ```
 
-The installer merges into the client's config, keeps your other servers and
-backs the old file up as `.bak`; `--dry-run` shows the change first. `itda mcp`
+The installer merges into the client's config and keeps your other servers. It
+backs up the old file as `.bak`. `--dry-run` shows the change first. `itda mcp`
 serves every installed site:
 
 - Up to 30 actions appear as one tool each (`sandbox.list-notices`), with input
@@ -336,7 +333,7 @@ exit code:
 | 14 | the site refused this one request as not allowed; signing in again will not help |
 | 20 | needs approval, or the user has not answered yet (or changes are off) |
 | 21 | approval used, rejected, expired or withdrawn because the inputs changed |
-| 22 | a change was sent but its outcome is unknown; check the site |
+| 22 | itda sent a change but its outcome is unknown; check the site |
 | 30 | network error |
 
 ## Principles
@@ -345,9 +342,9 @@ exit code:
 - **Read-only by default.** An action is a read only when its method, name,
   path, inputs and GraphQL document all agree. Everything else is a change.
 - **People approve changes.** Each approval covers one request with exact
-  inputs, account, definition and credential, works once and expires.
-- **Blocks are reported, not bypassed.** itda identifies itself, never imitates
-  a browser, and pauses a site that refuses it. See
+  inputs, account, definition and credential. It works once and expires.
+- **Blocks are reported, not bypassed.** itda identifies itself and never
+  imitates a browser. It pauses a site that refuses it. See
   [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - **Verified actions.** A definition declares what a correct response looks
   like, so "signed out" and "the site changed" are errors, not data.
@@ -377,8 +374,8 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo xtask check-layers
 ```
 
-Rust 1.98 (edition 2024) is pinned in `rust-toolchain.toml`. Tests only talk
-to local servers they start themselves. Commit and PR rules are in
+`rust-toolchain.toml` pins Rust 1.98 (edition 2024). Tests only talk to local
+servers they start themselves. Commit and PR rules are in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security

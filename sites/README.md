@@ -33,20 +33,20 @@ echo "$GITHUB_TOKEN" | itda login github
 
 ## Software templates
 
-[`software/`](software/) holds a definition per kind of software, not per
-site: GitLab (REST v4), Jira (REST 2, Data Center and Cloud), Confluence
-(REST), Redmine (REST, JSON), Discourse (the `.json` form of its pages),
-MediaWiki (`api.php`), WordPress (`wp-json/wp/v2`) and Gitea with Forgejo
-(`api/v1`). Each has the reads an agent needs most, up to three changes, models
-for the records and that software's own way of signing in, with the
-documentation of every operation in `evidence`. `itda setup <url>` picks one
-when the page says it runs that software and one request to the software's
-API confirms it; `itda setup --as <name>` forces one. Their `base_url` is a
-placeholder the setup fills in, so `itda add` does not take them.
+[`software/`](software/) holds a definition per kind of software, not per site:
+GitLab (REST v4), Jira (REST 2, Data Center and Cloud), Confluence (REST),
+Redmine (REST, JSON), Discourse (the `.json` form of its pages), MediaWiki
+(`api.php`), WordPress (`wp-json/wp/v2`) and Gitea with Forgejo (`api/v1`). Each
+has the reads an agent needs most and up to three changes. It includes record
+models, the software's own sign-in method and every operation's documentation in
+`evidence`. `itda setup <url>` picks one when the page says it runs that
+software and one request to the software's API confirms it.
+`itda setup --as <name>` forces one. Their `base_url` is a placeholder the setup
+fills in, so `itda add` does not take them.
 
 ## Adding a site
 
-A good shared definition reads public data or uses the site's official API,
-gives every read a `response` check and a `model` so agents get small records,
-and links each action's documentation in `evidence`. Open a pull request with
-the file named after its `site.name`; CI checks that it is valid.
+A good shared definition reads public data or uses the site's official API.
+Every read has a `response` check and a `model` to give agents small records.
+Each action links its documentation in `evidence`. Open a pull request with the
+file named after its `site.name`; CI checks that it is valid.

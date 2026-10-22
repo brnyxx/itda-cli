@@ -1,12 +1,11 @@
 # Writing a site definition
 
-A site definition (`spec.yaml`) tells itda which actions a website has, what
-each one sends, what a correct answer looks like and whether it changes
-anything. itda reads it from `<data dir>/specs/<site>/spec.yaml` (next to it,
-`check.json` keeps the time and verdict of the last `itda check`, and
-`sources.json` what a drafted definition was made from; see
-[Keep it working](#keep-it-working)); `itda add spec.yaml` copies it there
-after a short review, `itda doctor` prints the data directory, and
+A site definition (`spec.yaml`) tells itda a website's actions, what each sends,
+what a correct answer looks like and whether it changes anything. itda reads
+`<data dir>/specs/<site>/spec.yaml`. Beside it, `check.json` stores the last
+`itda check` time and verdict; `sources.json` stores a drafted definition's
+sources (see [Keep it working](#keep-it-working)). `itda add spec.yaml` copies
+it there after a short review. `itda doctor` prints the data directory;
 `ITDA_HOME` moves it.
 
 ## Start from an OpenAPI document
@@ -20,13 +19,13 @@ itda draft openapi openapi.json --include orders       # only matching paths, id
 itda draft openapi openapi.json --base-url https://api.example.com --install
 ```
 
-The draft keeps every operation's source in `evidence`, turns `GET` into reads
-and everything else into changes, adds response checks from the required
-fields of the success schema, and maps header API keys and bearer tokens to
-`auth`. What it cannot translate (OAuth, cookie keys, header parameters,
-multipart bodies, deprecated operations) is listed on stderr instead of being
-guessed. Review the draft before agents use it: shorten descriptions, remove
-actions agents should not call, and tighten the response checks.
+The draft keeps each operation's source in `evidence` and maps `GET` to reads,
+all else to changes. It adds response checks from required fields in the success
+schema and maps header API keys and bearer tokens to `auth`. itda lists what it
+cannot translate (OAuth, cookie keys, header parameters, multipart bodies,
+deprecated operations) on stderr without guessing. Review the draft before
+agents use it: shorten descriptions, remove actions agents should not call, and
+tighten the response checks.
 
 ## Start from the pages you use
 
@@ -39,26 +38,25 @@ itda draft page https://example.com/board https://example.com/board/42
 itda draft page https://example.com/board --name board --install
 ```
 
-itda fetches each page as itself (`itda/<version>`, never a browser), on the
-same rules as every other request: private addresses need `ITDA_ALLOW_LOCAL=1`,
-and a page that refuses or challenges the request pauses the site instead of
-being retried. The draft then stops with what the gate saw, as `itda call`
-would report it: `blocked_by_site` (exit 12) naming Cloudflare, a bot
-manager or a captcha, or `site_rate_limited` (exit 13) with the wait the
-site asked for. A page that sends itda on to a sign-in page stops with
-`auth_required` (exit 10) and points at `itda record`. itda does not go
-around a block; the site's official API, or its owner, is the way in. Each
-page that answers becomes a read with a response check, so `itda check`
-notices when the page changes:
+itda fetches each page as itself (`itda/<version>`, never a browser), under the
+same rules as every other request. Private addresses need `ITDA_ALLOW_LOCAL=1`.
+If a page refuses or challenges the request, itda pauses the site without
+retrying. The draft then stops with what the gate saw, as `itda call` would
+report it: `blocked_by_site` (exit 12) naming Cloudflare, a bot manager or a
+captcha, or `site_rate_limited` (exit 13) with the wait the site asked for. A
+page that sends itda on to a sign-in page stops with `auth_required` (exit 10)
+and points at `itda record`. itda does not go around a block; the site's
+official API, or its owner, is the way in. Each page that answers becomes a read
+with a response check, so `itda check` notices when the page changes:
 
 | What the page has | What the draft gets |
 |---|---|
 | A table with a header row | `html.items` per row, one field per column named after its header, plus `link` |
-| A list of similar elements with a title and a link (cards, posts, `tr.athing`) | `html.items` with `title`, `link` and, when present, `id`, `summary`, `meta`, `published_at`, plus whatever most records hold at one place under a class the site named (`score`, `author`, `release__version` becomes `version`); build names such as `heading__fzQskI` are left out |
-| Any run of three or more siblings of one shape, outside navigation, sidebars, headers and footers and leaving out ad slots (an element whose class, id or label marks it as an ad: `AdHolder`, `ad-*`, `sponsored`, `aria-label="Sponsored"`), each holding a title at the same place: a link (`ol.stories > li.story`, `#articles > dt`, a `dl` per section), a heading, a text named as a title (`span.result__title`), or the record itself when it is a link with something inside (`a.release`) | The same, with the title and link read from that title's own path in the page and a text that reads as a date as `published_at`; a heading or a link that is the whole record needs one more field, so bare links, menus and paragraphs never qualify. The read is described by what the records are when the page names them (`List the projects on Projects`) |
-| A list whose records' links share one shape: one path with one segment that differs per record (`/item/{id}`), or one path with one query key that does (`view.php?id=`) | A read of one record (`get-project`, `get-post`) with a required `id` input (`int` when the ids are numbers), the query keys every link sends as inputs with defaults, and no response check yet: run it once, then declare what the page shows |
-| One thing (an article, a package, a product, a bug): an `h1` outside the site's header and menus, with a body of text, a date, or two or more labelled values beside it, outside any list of records (or the list takes less than a quarter of the main block) | `html.page` fields on the whole page, each matching once: `headline` (required), `body` (the longest block named as one, `div.project-description`, `#readme`, `[itemprop=articleBody]`, else the block that holds most of the text), what sits beside the headline under a class the site named (`project-header__summary` becomes `summary`), `description` from the page's meta, `published_at`, `author`, and one field per `dt`/`dd` pair or `th`/`td` row, named after its label. A page that is one thing with a named list of five or more records on it (a package with its releases) gets both reads |
-| A list inside data embedded for its scripts: an `ItemList` or a list of one typed thing (`NewsArticle`, `Product`...) in `ld+json`; in `__NEXT_DATA__`, `__NEXT_F__`, `__APOLLO_STATE__` (grouped by typename), `__PRELOADED_STATE__` and the like, the list of objects with the most to read (a title, a link, a date) and, among those, the longest | One read per list, named after what it holds (`list-news-articles`), with `ssr_json`, `extract_pointer` to the list, `required_pointers` on its first record and a `model` that keeps up to eight plain fields of each record, ids and titles first; credentials are left out |
+| A list of similar elements with a title and a link (cards, posts, `tr.athing`) | `html.items` with `title`, `link` and, when present, `id`, `summary`, `meta`, `published_at`, plus fields most records share at one location under a site-named class (`score`, `author`, `release__version` becomes `version`). Build names such as `heading__fzQskI` are left out. |
+| Three or more consecutive siblings of the same shape, outside navigation, sidebars, headers and footers, leaving out ad slots (an element whose class, id or label marks it as an ad: `AdHolder`, `ad-*`, `sponsored`, `aria-label="Sponsored"`). Each has a title in the same place: a link (`ol.stories > li.story`, `#articles > dt`, a `dl` per section), a heading, text named as a title (`span.result__title`), or the record itself if it is a link with content (`a.release`). | The same, reading title and link from the title's own path in the page and date-like text as `published_at`. A heading or a link spanning the whole record needs one more field. Bare links, menus and paragraphs never qualify. If the page names its records, itda uses that name to describe the read (`List the projects on Projects`) |
+| A list of record links sharing one shape: one path with a different segment per record (`/item/{id}`), or one path with one varying query key (`view.php?id=`) | A one-record read (`get-project`, `get-post`) with a required `id` input (`int` for numeric ids). Query keys every link sends become inputs with defaults. No response check yet: run it once, then declare what the page shows. |
+| One thing (an article, a package, a product, a bug): an `h1` outside the site's header and menus, beside a body of text, a date, or two or more labelled values. It is outside any record list, or the list takes less than a quarter of the main block. | `html.page` fields across the page, each matching once: required `headline`; `body` (the longest named body block, `div.project-description`, `#readme`, `[itemprop=articleBody]`, else the block with most text); fields beside the headline under site-named classes (`project-header__summary` becomes `summary`); `description` from page meta; `published_at`; `author`. Each `dt`/`dd` pair or `th`/`td` row adds a field named after its label. A page that is one thing with a named list of five or more records on it (a package with its releases) gets both reads |
+| A list in data embedded for scripts: an `ItemList` or a list of one type (`NewsArticle`, `Product`...) in `ld+json`. In `__NEXT_DATA__`, `__NEXT_F__`, `__APOLLO_STATE__` (grouped by typename), `__PRELOADED_STATE__` and similar data, choose the object list with the most to read (a title, a link, a date), then the longest among ties. | One read per list, named for its contents (`list-news-articles`), with `ssr_json`, `extract_pointer` to the list and `required_pointers` on its first record. Its `model` keeps up to eight plain fields per record, ids and titles first, excluding credentials. |
 | Data embedded for its scripts with no list in it | `ssr_json` with `required_pointers` on the whole payload, and a note saying what to add |
 | Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
 | Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | An optional query input named after that key (`int`, no default, so the read asks for the address it was drafted from until an agent or a page handle asks for another; counting starts at 1 for `page` and the like, at 0 for `offset` and `start`), and a key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
@@ -66,28 +64,27 @@ notices when the page changes:
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
 | A sign-in form | Left out; `itda setup --user` and `itda login <site>` sign in through it, see `auth` below |
 | `<link rel="alternate">` to RSS or Atom | A read with `format: xml` |
-| A link to an OpenAPI document (`rel="service-desc"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or, when nothing is linked, `/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` would make them, under the page's address; its changes are listed as notes; see below |
+| A link to an OpenAPI document (`rel="service-desc"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or, when nothing is linked, `/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` makes them, under the page's address. Its changes appear as notes. See below. |
 
-When a site also publishes an API description, itda reads it: the one the
-page links to, else `/openapi.json` on the same origin when it answers with
-an OpenAPI 3 or Swagger 2.0 document (one GET, as itda, at most 4 MB; every
-request to a site waits its turn, so no other path is tried). Its reads become actions the way `itda draft openapi`
-makes them, so the same path is drafted once whether the page or the
-description named it. The changes it lists are notes rather than actions (one
-each up to ten, then a count); `itda draft openapi <url>` drafts those for
-review. A read whose input is a credential, such as an `apikey` query
-parameter, is left out and listed, as the install-time checks would refuse
-it. A description whose server is another address is not merged, only noted,
-and one that does not parse leaves the page draft as it is. The header
-comment and every merged action's `evidence` name the description's address.
+When a site also publishes an API description, itda reads it: the one the page
+links to, else `/openapi.json` on the same origin when it answers with an
+OpenAPI 3 or Swagger 2.0 document. It makes one GET as itda, at most 4 MB. Every
+request to a site waits its turn, so no other path is tried. Its reads become
+actions as `itda draft openapi` makes them. Each path is drafted once, whether
+the page or description named it. The changes it lists are notes rather than
+actions (one each up to ten, then a count); `itda draft openapi <url>` drafts
+those for review. itda omits and lists reads with credential inputs, such as an
+`apikey` query parameter. Install-time checks would refuse them. itda only notes
+descriptions with another server address; it does not merge them. A description
+that does not parse leaves the page draft unchanged. The header comment and
+every merged action's `evidence` name the description's address.
 
-Field and input names go through the same checks as a hand-written
-definition: a name that looks like a credential is left out and listed. A
-hidden form field that is not a token keeps its value as a default, since the
-form always sends it; nothing else from the page is copied. A page drawn by
-scripts shows little to a plain fetch; `itda draft page` says so and points
-at recording the site instead, and `itda setup` first watches the page load
-in your browser (below).
+Field and input names face the same checks as a hand-written definition: itda
+omits and lists names that look like credentials. A hidden form field other than
+a token keeps its value as a default: the form always sends it. itda copies
+nothing else from the page. A script-drawn page shows little to a plain fetch.
+`itda draft page` reports this and points to recording the site; `itda setup`
+first watches the page load in your browser (below).
 
 When a fetched page is a shell whose main content is one or more
 `<iframe src>` (or an older `<frameset>`'s `<frame src>`) on the same origin,
@@ -104,14 +101,15 @@ never fetched, and so is a same-origin frame that answered with nothing.
 
 ## Start from the software a site runs
 
-Most intranets run software everyone knows, and that software has a stable
-API worth more than a reading of one page. `itda setup` recognises eight of
-them from the page's HTML (a `generator` meta, a well-known asset path, an
-Atlassian context-path meta, a body class) and confirms the guess with exactly
-one GET to that software's own endpoint, as itda, through the same gate as
-every other request. No fingerprint, no request. A confirmed match says so in
-one line, "This looks like GitLab. Using its API at <base>.", and drafts from
-the software's template under [`sites/software/`](https://github.com/brnyxx/itda-cli/tree/main/sites/software):
+Most intranets run software everyone knows, and that software has a stable API
+worth more than a reading of one page. `itda setup` recognises eight of them
+from page HTML (a `generator` meta, a well-known asset path, an Atlassian
+context-path meta, a body class). It confirms the guess with exactly one GET to
+the software's own endpoint, as itda, through the same gate as other requests.
+No fingerprint, no request. A confirmed match says so in one line, "This looks
+like GitLab. Using its API at <base>.", and drafts from the software's template
+under
+[`sites/software/`](https://github.com/brnyxx/itda-cli/tree/main/sites/software):
 
 | Software | Recognised by | Confirmed with | API base | Signs in with |
 |---|---|---|---|---|
@@ -124,30 +122,28 @@ the software's template under [`sites/software/`](https://github.com/brnyxx/itda
 | WordPress | `<link rel="https://api.w.org/">`, else `generator` WordPress | `GET <wp-json>/` listing `wp/v2` | the linked API root | an application password, as basic auth |
 | Gitea, Forgejo | their default `keywords` meta; `appSubUrl` in `window.config` | `GET /api/v1/version` (a `+gitea-` version is Forgejo) | `<sub>/api/v1` | `Authorization: token` |
 
-Each template holds the reads an agent needs most (lists, search, one item;
-eight to fourteen), up to three changes marked as such, models for the
-records and the software's own way of signing in, every operation with its
-documentation in `evidence`. The site is named after the host
-(`issues.apache.org` becomes `issues-apache`; `--name` overrides), the
-template's `store:<software>/...` secrets follow that name, and every read
-is tried once as on any site; a read the instance does not answer (a
-private project list, a disabled module) is removed. The page draft still
-runs: its lists, forms and feeds join the template under the page's own
-address when it differs from the API's, the same method and path drafted
-once. A page that is not enough on its own, because it needs a sign-in or is
-drawn by scripts, still gets the template when the software is confirmed.
-When the page says WordPress but `/wp-json/` does not answer the way
-WordPress does, nothing is said and the page is drafted like any other.
+Each template holds eight to fourteen reads an agent needs most (lists, search,
+one item), up to three marked changes, record models and the software's sign-in
+method. Every operation has its documentation in `evidence`. itda names the site
+after the host (`issues.apache.org` becomes `issues-apache`; `--name`
+overrides). The template's `store:<software>/...` secrets follow that name. itda
+tries every read once, as on any site, and removes reads the instance does not
+answer (a private project list, a disabled module). The page draft still runs.
+Its lists, forms and feeds join the template under the page's address if it
+differs from the API's. Each method and path is drafted once. A page that is not
+enough on its own, because it needs a sign-in or is drawn by scripts, still gets
+the template when the software is confirmed. If the page says WordPress but
+`/wp-json/` does not answer like WordPress, itda says nothing. It drafts the
+page like any other.
 
-`itda setup --as <software>` forces a template (the fingerprint's base when
-the page agrees, else the API under the page's origin; the confirm request is
-still made and the line says when it did not answer). `--no-template` reads
-the page like any other. `itda check` and `itda refresh` work on the result
-as on any site: a refresh fills the same template at the same API base and
-merges the page's reads again. Over MCP, `itda_setup` does the same, takes
-`template` (a name, or `none`) and names the template it used in its result.
-The templates are not installed by `itda add`: their `base_url` is a
-placeholder the setup fills.
+`itda setup --as <software>` forces a template, using the fingerprint's base if
+the page agrees, else the API under the page's origin. The confirm request still
+runs; the line says if it got no answer. `--no-template` reads the page like any
+other. `itda check` and `itda refresh` work on the result as on any site. A
+refresh fills the same template at the same API base and merges the page's reads
+again. Over MCP, `itda_setup` does the same. It takes `template` (a name or
+`none`) and names the template used in its result. `itda add` does not install
+the templates: setup fills their placeholder `base_url`.
 
 ## Sites with a ready-made definition
 
@@ -189,41 +185,37 @@ itda record https://intranet.example.com/board --save session.har   # keep the r
 ```
 
 itda opens Chrome, Edge or Chromium (or `ITDA_BROWSER`) in a fresh, empty
-profile at that page and watches, through the browser's own DevTools
-protocol, what every page asks the server for. Use the site the way an agent
-should: sign in, search, open an item, submit a form. Press Enter in the
-terminal, or close the window, when you are done. itda never clicks, types or
-navigates in that window; only the page you named is opened. The recording
-stays in memory unless `--save` writes it to a file, which then holds your
-cookies and tokens and should be deleted afterwards. With `--install`, itda
-then offers to keep what the recording signed in with, each after a yes in
-the terminal: the token a drafted header `auth` entry refers to, and the
-browser session for a `browser` one. They go to the system keyring under
-`<site>/default`, never on screen, so `itda login` is not needed until a
-token expires.
+profile at that page and watches, through the browser's own DevTools protocol,
+what every page asks the server for. Use the site the way an agent should: sign
+in, search, open an item, submit a form. Press Enter in the terminal or close
+the window when you are done. itda never clicks, types or navigates in that
+window; it opens only the page you named. The recording stays in memory unless
+`--save` writes it to a file. That file holds your cookies and tokens; delete it
+afterwards. With `--install`, itda offers to keep the recording's sign-in token
+for a drafted header `auth` entry and session for a `browser` entry. Each needs
+a yes in the terminal. They go to the system keyring under `<site>/default` and
+never appear on screen. You need `itda login` only when a token expires.
 
-`itda setup` runs a shorter form of this by itself when the page shows itda
-nothing but a title and carries scripts that could fetch something (a script
-file or a preloaded module, or an inline script that imports a module or
-mentions `fetch`, `XMLHttpRequest`, `graphql` or `api`); a page without them
-goes straight to the question below. It opens the same kind of window on the
-page, waits until the network has been quiet for two seconds (ten at most),
-scrolls once to the bottom, waits again, closes the window and drafts from
-what the page loaded on its own, the way `itda draft har` does. It tries the
-page's own address first, so what the page itself shows is never lost to a
-busier API elsewhere. It says what it saw in one line (`Watched the page
-load: 12 calls, 3 reads drafted.`, counting the reads beyond a title check)
-and only asks you to record when no such read came out. Nothing in the
-window is clicked or typed, and nothing it signed in with is kept, since
-nobody signed in; a page
-whose scripts go to a sign-in page stops with `auth_required`, as a redirect
-does. `--no-record` skips the window as well, `--watch-only` watches but
-never asks you to record. A site whose software is recognised (above) gets
-its template instead and is not watched.
+`itda setup` runs a shorter version automatically when a page shows itda only a
+title and has scripts that could fetch data: a script file, preloaded module, or
+inline script that imports a module or mentions `fetch`, `XMLHttpRequest`,
+`graphql` or `api`. Without these, the page goes straight to the question below.
+It opens the same kind of window on the page, waits for two seconds of network
+silence (ten at most), scrolls to the bottom once and waits again. It closes the
+window and drafts from what the page loaded on its own, like `itda draft har`.
+It tries the page's own address first, so what the page itself shows is never
+lost to a busier API elsewhere. It reports one line
+(`Watched the page load: 12 calls, 3 reads drafted.`, counting reads beyond a
+title check). It asks you to record only if it drafted no such read. It never
+clicks or types in the window or keeps sign-in data, since nobody signed in. A
+page whose scripts lead to sign-in stops with `auth_required`, as a redirect
+does. `--no-record` skips the window as well, `--watch-only` watches but never
+asks you to record. itda uses the template for a site with recognised software
+(above) and does not watch it.
 
-A recording saved from the browser's developer tools works the same way:
-open the Network tab, use the site, save it with "Save all as HAR" (Chrome,
-Edge) or "Save All As HAR" (Firefox), and draft from the file:
+A browser developer-tools recording works the same way. Open the Network tab,
+use the site, save with "Save all as HAR" (Chrome, Edge) or "Save All As HAR"
+(Firefox), and draft from the file:
 
 ```sh
 itda draft har session.har > spec.yaml                  # print the draft
@@ -231,44 +223,42 @@ itda draft har session.har --base-url https://intranet.example.com/api
 itda draft har session.har --name board --install
 ```
 
-A page that talks GraphQL sends every call to one path, so each recorded
-operation becomes its own action, named after it (`exploreProjects` is
-`explore-projects`): a query is a read, a mutation a change, the document and
-the operation name are fixed inputs, and the variables are the inputs an agent
-fills in, rendered through a `json_template` into the same JSON the page sent.
-Variables that held objects or lists are listed for you to add by hand.
+A GraphQL page sends every call to one path; each recorded operation becomes an
+action named after it (`exploreProjects` is `explore-projects`), with queries as
+reads and mutations as changes. The document and operation name are fixed
+inputs; agents fill in variables, which a `json_template` renders into the same
+JSON the page sent. itda lists variables holding objects or lists for you to add
+by hand.
 
-A GraphQL endpoint can also say what else it offers. When a draft sees one
-(a recorded call to it, or a page naming a same-origin `/graphql` path), itda
-sends it the standard introspection query once, as itself, as a read with a
-size cap, and drafts one read per root `Query` field whose arguments are
-scalars, enums or ids: the field name becomes the action (`countries`), its
-arguments the typed inputs (required when the schema says so), and the
-selection is the field's scalar fields, two levels deep, up to 24 of them.
-An optional argument that holds an object or a list is left out of the read
-and listed, so the field is still read without it; a field that requires one,
-or a credential, is listed instead of drafted. An argument named `query`
-becomes the input `<field>_query`, since `query` holds the document.
-`Mutation` fields are only listed in the notes, never drafted as changes: a
-schema says what a change takes, not what it does. A site that has
-turned introspection off is drafted from its pages and calls alone, with no
-error. This is the one request `itda draft har` makes on its own.
+A GraphQL endpoint can also say what else it offers. When a draft finds an
+endpoint in a recorded call or a page naming a same-origin `/graphql` path, itda
+sends the standard introspection query once, as itself, as a read with a size
+cap. It drafts one read per root `Query` field with scalar, enum or id
+arguments: the field name is the action (`countries`), arguments are typed
+inputs (required if the schema says so), and the selection contains up to 24
+scalar fields, two levels deep. itda omits and lists optional object or list
+arguments, so it can still read the field without them. It lists fields
+requiring an object, list or credential instead of drafting them. An argument
+named `query` becomes the input `<field>_query`, since `query` holds the
+document. itda lists `Mutation` fields in notes, never drafting them as changes:
+a schema says what a change takes, not what it does. itda drafts sites with
+introspection off from their pages and calls alone, with no error. This is the
+one request `itda draft har` makes on its own.
 
-Either way, the pages you saw are drafted too, the way `itda draft page`
-does it, so a site that renders its lists and forms on the server gets
-actions even when its pages call no API. A recording holds real tokens,
-cookies and personal data, so the draft keeps only the shape of each call:
-method, path, input names and types, and the response fields every sample
-returned. Numbers and ids in paths become
-placeholders (`/notices/42` becomes `/notices/{notice_id}`). Inputs every
-sample sent are marked required. Token headers become `auth` entries whose
-values you add with `itda login`. Calls that sent a sign-in cookie (by name,
-such as `JSESSIONID` or `SID`) and no token get a `kind: browser` entry, so
-`itda login <site> --browser` signs them in. A form token such as `_csrf` becomes a
-`preflight` step that reads it from the form page recorded before the post, so
-each change sends a fresh one. A header such as `X-CSRF-Token` gets the same
-treatment from a `<meta name="csrf-token">` tag on an earlier page, the pattern
-Rails, Laravel and many single-page apps use. A session the site carries in
+In both cases, itda also drafts the pages you saw, as `itda draft page` does.
+Sites rendering lists and forms on the server get actions even when their pages
+call no API. A recording holds real tokens, cookies and personal data, so the
+draft keeps only the shape of each call: method, path, input names and types,
+and the response fields every sample returned. Numbers and ids in paths become
+placeholders (`/notices/42` becomes `/notices/{notice_id}`). itda marks inputs
+every sample sent as required. Token headers become `auth` entries whose values
+you add with `itda login`. Calls with a sign-in cookie (by name, such as
+`JSESSIONID` or `SID`) but no token get a `kind: browser` entry.
+`itda login <site> --browser` signs them in. A form token such as `_csrf`
+becomes a `preflight` step. It reads the token from the form page recorded
+before the post, so each change sends a fresh one. A header such as
+`X-CSRF-Token` gets the same treatment using a `<meta name="csrf-token">` tag on
+an earlier page, as Rails, Laravel and many single-page apps do. A session the site carries in
 the URL rather than a cookie gets a `kind: browser` entry too, with
 `value_from: query:<key>`: when a sign-in's answer hands out a query key
 whose value looks like a session (in the redirect `Location`, or on the links
@@ -278,8 +268,9 @@ it, that key is drafted as the session, every operation that sent it gets
 is kept in the keyring, never in the definition; at run time it is appended
 to the query of each request the way a `cookie:` session is sent as a cookie.
 The sign-in call itself is left out, as a person signs in, never an agent.
-Any other token and session field is left out and
-listed, since they come from sign-in, never from the agent. Calls to other addresses, file uploads and failed calls are skipped.
+itda omits and
+lists other token and session fields, since they come from sign-in, never the
+agent. itda skips calls to other addresses, file uploads and failed calls.
 Delete the HAR file when you are done with it.
 
 ## Write one by hand
@@ -336,14 +327,14 @@ operations:
 | `base_url` | yes | `https://` origin every path is joined to. Local and private addresses also need `ITDA_ALLOW_LOCAL=1`. |
 
 `defaults.headers` adds headers to every request (for example an `Accept`
-language). Headers that imitate a browser (`sec-*`, client hints) are refused;
+language). itda refuses headers that imitate a browser (`sec-*`, client hints);
 see [HONEST_CLIENT.md](HONEST_CLIENT.md).
 
-`defaults.interval` is the least time between two requests to the site,
-written as `2s` or `500ms`. itda sends one request at a time to a site and
-leaves about 1.2 seconds between them on its own; a definition can ask for
-more room (up to 30 seconds), never for less. Use it when the site's terms
-name a rate, or when `itda check` keeps running into `site_rate_limited`.
+`defaults.interval` sets the minimum time between requests to a site, written as
+`2s` or `500ms`. itda sends one request at a time per site, about 1.2 seconds
+apart by default; a definition can increase this to 30 seconds but cannot reduce
+it. Use it when the site's terms name a rate, or when `itda check` keeps running
+into `site_rate_limited`.
 
 ```yaml
 defaults:
@@ -359,7 +350,7 @@ Each operation is one action, called as `itda call <site>.<name>`.
 | `name` | Action id: lower case, digits and `-`. |
 | `desc` | One line an agent reads to decide whether to use it. Write it as an instruction: "Search notices by title". |
 | `method` | `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. Defaults to `GET`. |
-| `path` | Path under `base_url`. `{name}` is replaced by a path input. |
+| `path` | Path under `base_url`. itda replaces `{name}` with a path input. |
 | `effect` | `read` or `write`. See below. |
 | `evidence` | Why you believe the effect is right: a doc link, a captured request. Reviewers read it. |
 | `auth` | Name of an `auth` entry, for actions that need an account. |
@@ -380,29 +371,28 @@ query:
   draft: {type: bool, required: true}
 ```
 
-`type` is `string`, `int`, `float` or `bool`. Inputs are checked before
-anything is sent, and an agent sees them as a JSON Schema. Inputs whose names
-look like credentials (`password`, `token`, `api_key`…) are refused: those go
-in `auth`, never through the agent.
+`type` is `string`, `int`, `float` or `bool`. itda checks inputs before sending
+anything; agents see them as a JSON Schema. itda refuses inputs with names
+resembling credentials (`password`, `token`, `api_key`…): those go in `auth`,
+never through the agent.
 
 ### Read or write
 
-An action counts as a read only when everything agrees: `effect` says `read`,
-the method is not `PUT`, `PATCH` or `DELETE`, neither the name nor the path
-contains a word that means a change (`delete`, `send`, `pay`, `submit`,
-`logout`…), no input such as `action` or `mode` asks for one, and a GraphQL
-`query` input holds no mutation. A `POST` can be a read, for example a search
-endpoint or a GraphQL query. Anything else is a change. A change never runs until the user approves that exact request
-with `itda approve`, and it is sent once, without retries.
+An action is a read only if `effect` is `read`, its method is not `PUT`, `PATCH`
+or `DELETE`, and neither name nor path has a change word (`delete`, `send`,
+`pay`, `submit`, `logout`…). It must also have no input such as `action` or
+`mode` asking for a change, and no mutation in a GraphQL `query` input. A `POST`
+can be a read, for example a search endpoint or a GraphQL query. Anything else
+is a change. itda sends a change once, without retries, only after the user
+approves that exact request with `itda approve`.
 
 When the checks disagree with your `effect: read`, itda treats the action as a
-write. Rename the action or path rather than fighting the classifier: a `GET
-/logout` really is a change. Headers and inputs that ask the site to treat
-the request as another method (`X-HTTP-Method-Override`, `X-Method-Override`,
-`X-HTTP-Method`, `_method`) are refused: the method that was reviewed is the
-method that is sent. `transport` other than `http` and `auth` kinds other
-than `none`, `header` and `browser` are refused too; itda sends plain HTTP
-requests as itself.
+write. Rename the action or path rather than fighting the classifier: a
+`GET /logout` really is a change. itda refuses headers and inputs that ask the
+site to use another method (`X-HTTP-Method-Override`, `X-Method-Override`,
+`X-HTTP-Method`, `_method`). It sends the reviewed method. itda refuses
+`transport` other than `http` and `auth` kinds other than `none`, `header` and
+`browser`; it sends plain HTTP requests as itself.
 
 ## `response`
 
@@ -415,8 +405,8 @@ response:
   required_pointers: [/items, /total]  # JSON Pointers that must exist
 ```
 
-When the records sit inside a wrapper, `extract_pointer` returns only that
-part, and `required_pointers` and `model` then apply to it:
+For records inside a wrapper, `extract_pointer` returns only that part.
+`required_pointers` and `model` then apply to it:
 
 ```yaml
 response:
@@ -460,8 +450,8 @@ auth:
 
 Store the value with `echo "$KEY" | itda login <site>` (OS keyring), or set
 `ITDA_SECRET__<SITE>__<ACCOUNT>__<NAME>` for CI and containers. `--account`
-picks among several accounts; the default account is `default`. The header is
-sent only to `base_url`'s origin, or to `origin` when you set it.
+picks among several accounts; the default account is `default`. itda sends the
+header only to `base_url`'s origin, or to `origin` when you set it.
 
 ### Sign in with a password
 
@@ -485,22 +475,21 @@ $ itda login intranet --user me
 Signed in. The session for intranet/default (2 cookies) is sealed under the data directory with a key in the system keyring; agents only see the account id.
 ```
 
-itda reads the page at `path` as itself, takes the form that has those two
-fields (a `POST` form, on the same site), fills them in and sends it once
-with the hidden fields the page gave (a token such as `_csrf`, a return
-address) and the cookies the page set, the way your browser would. A redirect
-means the site accepted the sign-in; the cookies it answered with are the
-session, kept the way a browser sign-in is. The form coming back means it
-did not, and nothing is retried or paused. The password is sent to the form's
-own action and nowhere else, and is never kept. Without a terminal, the
+itda reads the page at `path` as itself and selects the same-site `POST` form
+with those two fields. It fills them in and sends the form once, as your browser
+would, with the page's hidden fields (a token such as `_csrf`, a return address)
+and cookies. A redirect means sign-in succeeded. itda stores the site's reply
+cookies as the session, as for a browser sign-in. If the form comes back,
+sign-in failed. itda does not retry or pause anything. itda sends the password
+only to the form's own action and never keeps it. Without a terminal, the
 password is the first line of stdin, so a password manager can pipe it.
 
-`itda setup <page> --user me` does the same when the page needs a sign-in
-(it redirects to one, answers 401 or 403, or says "log in to see this"),
-then drafts from the page as you see it signed in: every action gets `auth:
-session`, and the `login` block is written from the form it found, so the
-command above works later. An agent never gets this path: `itda_setup` over
-MCP refuses pages behind a sign-in and says what you should run.
+`itda setup <page> --user me` does the same if the page needs a sign-in
+(redirects to one, answers 401 or 403, or says "log in to see this"). It drafts
+from the page as you see it signed in. Every action gets `auth: session`; it
+writes the `login` block from the form it found so the command above works
+later. An agent never gets this path: `itda_setup` over MCP refuses pages behind
+a sign-in and says what you should run.
 
 Some older sites keep the session in the address instead of a cookie, as a
 query parameter the sign-in hands out (`?sid=...`). Name that key with
@@ -525,10 +514,10 @@ cookie. Because it travels in URLs, it can reach a server's or a proxy's
 logs; see [THREAT_MODEL.md](THREAT_MODEL.md). A `browser` entry carries one or
 the other, a cookie or a query key, not both.
 
-A change answered with a redirect (post, then redirect, then get, as older
-sites do) has landed; its result carries the address the site pointed at. A
-redirect to a sign-in page instead means the session is no longer accepted:
-the call stops with `auth_required`, and `itda login <site>` signs in again.
+When the site redirects after a change (post, then redirect, then get, as older
+sites do), the change has landed. Its result carries the redirect address. A
+redirect to a sign-in page means the site no longer accepts the session. The
+call stops with `auth_required`; `itda login <site>` signs in again.
 
 ### Browser sign-in
 
@@ -542,7 +531,7 @@ auth:
     value_from: cookie:JSESSIONID   # optional: the cookie that shows you are signed in
 ```
 
-Then sign in once in your own browser:
+Sign in once in your own browser:
 
 ```console
 $ itda login intranet --browser
@@ -553,21 +542,21 @@ Saved the session for intranet/default (3 cookies); it is sealed under the data 
 
 itda opens Chrome, Edge or Chromium (or `ITDA_BROWSER`) in a fresh, empty
 profile at the site's address, or at `--url`. You sign in by hand; itda never
-clicks or types on the page. It keeps only the unexpired cookies for that
-site, closes the window and deletes the profile. The session is sent only to
-addresses on the same site, and cookie values are removed from results.
+clicks or types on the page. It keeps only the site's unexpired cookies. It
+closes the window and deletes the profile. itda sends the session only to
+addresses on the same site and removes cookie values from results.
 
-A session is a whole `Cookie` header, longer than some credential stores
-take (Windows Credential Manager caps a credential at 2560 bytes), so it is
-kept in `vault.sealed` under the data directory, encrypted with a key that
-lives in the system keyring; API keys stay in the keyring itself. The move is
-automatic in both directions, and `itda doctor` says where secrets are.
+A session is a whole `Cookie` header, too long for some credential stores
+(Windows Credential Manager caps a credential at 2560 bytes). itda stores it in
+`vault.sealed` under the data directory, encrypted with a system keyring key.
+API keys stay in the keyring itself. The move is automatic in both directions,
+and `itda doctor` says where secrets are.
 
 When the session expires, the site answers 401, or 403 with a reason such as
-`session_expired`, the account pauses with `auth_required`, and `itda login
-<site> --browser` signs it in again and resumes it. A 403 with any other
-reason is `api_denied`: the request was not allowed, and signing in again
-will not help. On a server without a keyring, set
+`session_expired`. The account pauses with `auth_required`;
+`itda login <site> --browser` signs it in again and resumes it. A 403 with any
+other reason is `api_denied`: the site did not allow the request. Signing in
+again will not help. On a server without a keyring, set
 `ITDA_SECRET__<SITE>__<ACCOUNT>__SESSION` to a `Cookie` header value instead.
 
 ## `preflight`
@@ -606,24 +595,24 @@ operations:
 | `cookie:name` | a cookie the answer sets |
 | `ssr:key#/pointer` | a value in the JSON a page embeds for its scripts: `ssr:__NEXT_DATA__#/buildId`, or `ssr:auto#/pointer` for the first payload found. Only a string, number or boolean counts; an object or a list stops the call |
 
-A step is a `GET` to the action's own origin, with the same account, either
-to `path` or to a read action named in `op` (with `args`). Steps run in order,
-after you approve a change and right before it is sent, so the value is always
-fresh. The cookies a step's answer sets go along with the action, the way a
-browser sends them (a Rails site keeps the token it hands out in a session
-cookie it rewrites on every answer); they are used for that one request and
-never kept. A value is used as `{{step.<step>.<name>}}`; inputs filled this way are not
-shown to agents and they cannot set them. When a step finds nothing, the call
-stops with `response_mismatch` and nothing is sent. After the steps, a read is
-classified again with the values filled in: one that would now count as a
-change stops with `effect_changed` (exit 2) and is not sent.
+A step is a `GET` to the action's own origin, with the same account, either to
+`path` or to a read action named in `op` (with `args`). Steps run in order after
+you approve a change, just before itda sends it. This keeps the value fresh.
+itda sends cookies from a step's answer with the action, as a browser does, for
+that request only; it never keeps them. A Rails site keeps its issued token in a
+session cookie it rewrites on every answer. A value is used as
+`{{step.<step>.<name>}}`. Agents cannot see or set inputs filled this way. If a
+step finds nothing, itda stops the call with `response_mismatch` and sends
+nothing. After the steps, itda classifies a read again with the values filled
+in. If it now counts as a change, itda stops with `effect_changed` (exit 2)
+without sending it.
 
 ## `models`
 
-A model picks and renames fields from a JSON answer, so agents get small,
-stable records. When the answer is a list, each record is picked the same way.
-`itda draft page` writes one for every list it finds in a page's embedded
-data; `path` reaches into nested objects with dots (`item.headline`):
+A model picks and renames fields from a JSON answer, so agents get small, stable
+records. For a list answer, itda picks each record the same way.
+`itda draft page` writes one for every list it finds in a page's embedded data;
+`path` reaches into nested objects with dots (`item.headline`):
 
 ```yaml
 models:
@@ -639,8 +628,8 @@ operations:
 
 ## `pagination`
 
-A read that lists things can say how the site turns pages, so an agent can
-read on without ever seeing the site's own marker:
+A read that lists things can say how the site turns pages. The agent can then
+read on without seeing the site's own marker:
 
 ```yaml
 operations:
@@ -658,38 +647,36 @@ operations:
 | Field | Meaning |
 |---|---|
 | `style` | `page` (a page number), `offset` (how many records to skip) or `cursor` (a marker the site hands out). |
-| `next` | Where the next marker is in the answer: a JSON pointer such as `/meta/next_cursor` or `/data/notices/pageInfo/endCursor`, or `header:link` for the `rel="next"` address in the `Link` header. A page or offset read may leave it out: the next page is then the one after the current page, or the offset past the records returned, when the answer had records. |
+| `next` | Where the next marker is in the answer: a JSON pointer such as `/meta/next_cursor` or `/data/notices/pageInfo/endCursor`, or `header:link` for the `rel="next"` address in the `Link` header. A page or offset read may omit it. If the answer has records, the next marker is the next page number or the offset past those records. |
 | `more` | A JSON pointer that must hold `true` for another page to exist, such as `/data/notices/pageInfo/hasNextPage`. Optional. |
-| `send` | The input the marker goes back in: `{query: page}` or, for a JSON body, `{body: after}`. The input must be declared: an `int` for `page` and `offset`, a `string` with no default for `cursor`. |
+| `send` | The input the marker goes back in: `{query: page}` or, for a JSON body, `{body: after}`. Declare the input as an `int` for `page` and `offset`, or a `string` with no default for `cursor`. |
 
-When the answer says there is another page, the call returns `meta.next`,
-an opaque handle such as `ic_4f0a4207d04f4a0fb4e059d26bd54b6d`. The marker
-itself is kept on the user's computer for fifteen minutes, bound to the
-site, action, account, inputs and definition; `itda call ... --next
-<handle>` (over MCP, `next`) sends it back in the declared input. A
-`cursor` input is never shown to agents and cannot be set by them; `page`
-and `offset` inputs can still be given directly. A pointer that holds an
-address or a query string (`?page=2&per_page=10`) gives only the input's
-value from it, and only when that address is the same origin and path. A
-marker that would turn the read into something else, or an address
-elsewhere, is dropped. Only a read turns pages.
+When the answer says there is another page, the call returns `meta.next`, an
+opaque handle such as `ic_4f0a4207d04f4a0fb4e059d26bd54b6d`. itda keeps the
+marker on the user's computer for fifteen minutes, bound to the site, action,
+account, inputs and definition. `itda call ... --next <handle>` (over MCP,
+`next`) sends it back in the declared input. Agents never see or set a `cursor`
+input; they can still give `page` and `offset` inputs directly. For a pointer
+holding an address or query string (`?page=2&per_page=10`), itda extracts only
+the input's value, and only if the origin and path match. itda drops a marker
+that would change the read or point elsewhere. Only a read turns pages.
 
 `itda draft openapi` declares it when the document is plain about it: a
-`cursor`, `page_token` or `after` query parameter together with a
-`next_cursor`, `next_page_token` or `end_cursor` string in the answer; a
-`page` parameter, with `header:link` when the answer documents a `Link`
-header; an `offset` parameter. `itda draft har` does the same from the
-query a recorded read sent and the fields its answers had, and from a
-GraphQL `after` variable with `pageInfo.endCursor` in the answer. A GraphQL
-schema's connection (`after: String` in, `pageInfo { endCursor hasNextPage }`
-out) is drafted with `send: {body: after}`. A page whose links turn pages
-(`?page=2`) gets `style: page` on the reads that return its records.
+`cursor`, `page_token` or `after` query parameter together with a `next_cursor`,
+`next_page_token` or `end_cursor` string in the answer; a `page` parameter, with
+`header:link` when the answer documents a `Link` header; an `offset` parameter.
+`itda draft har` does the same from the query a recorded read sent and the
+fields its answers had, and from a GraphQL `after` variable with
+`pageInfo.endCursor` in the answer. itda drafts GraphQL schema connections
+(`after: String` in, `pageInfo { endCursor hasNextPage }` out) with
+`send: {body: after}`. Pages with pagination links (`?page=2`) get `style: page`
+on reads returning their records.
 
 ## Keep it working
 
-Sites change. `itda check` runs every read that needs no input (give inputs a
-`default` to include more) and reports, per action, whether the answer still
-matches its `response`:
+Sites change. `itda check` runs every read needing no input; give inputs a
+`default` to include more. It reports whether each action's answer still matches
+its `response`:
 
 ```console
 $ itda check board
@@ -702,14 +689,14 @@ verdict  signed_out: sign in again with itda login board
 1 ok, 1 failed, 2 skipped.
 ```
 
-Changes are never sent. Each site ends with one verdict (`ok`, `signed_out`,
-`site_changed`, `blocked` or `unreachable`) and the exit code follows it, as
-the [contract](agents.md) lists: 11 when a site no longer matches its
-definition, so a scheduled job can warn you before an agent runs into it.
-`itda check --all` checks every installed site and prints one verdict line
-each. An address the site answers with 404, 405 or 410 and a query it
-answers with errors count as `site_changed`; a read it refuses
-(`api_denied`) is named on its own line without deciding the site's verdict.
+itda sends no changes. Each site gets a verdict (`ok`, `signed_out`,
+`site_changed`, `blocked` or `unreachable`) and a matching exit code, per the
+[contract](agents.md). Code 11 means a site no longer matches its definition,
+letting a scheduled job warn you before an agent runs into it.
+`itda check --all` checks every installed site and prints one verdict line each.
+An address the site answers with 404, 405 or 410 and a query it answers with
+errors count as `site_changed`. itda lists a refused read (`api_denied`) on its
+own line; it does not affect the site's verdict.
 
 ### Draft a changed site again
 
@@ -728,22 +715,20 @@ A definition that `itda setup`, `itda draft ... --install` or `itda record
 }
 ```
 
-`pages` are the addresses the draft read, `description` the API description
-it found (an address, or the file given to `itda draft openapi`), `graphql`
-the endpoints it asked what they offer, and `recording` the HAR kept under
-the site when `itda draft har` or `itda record --save ... --install` had
-one. That copy keeps the shape of the recording and not its values: cookie,
-token and session values, private query and body fields and the answers of
-sign-in calls are blanked to `<redacted>` before it is written, since a
-refresh needs names and shapes only; `itda remove` deletes it with the site. `template` names the ready-made template a
-site came from (`gitlab`, `jira`...), with its API base in `base_url`, so a
-refresh fills the same template again and reads the page again when it still
-opens. `base_url`, `include` and `lang` are otherwise the
-choices the draft was made with, each left out when it was not given. Nothing
-in the file is a secret. `drafted` holds a hash of every operation as it was
-drafted, so a refresh can tell an operation you edited by hand from one it
-may replace. A definition installed with `itda add` has no sources and cannot
-be refreshed.
+`pages` lists addresses the draft read; `description` is the API description it
+found (an address or the file given to `itda draft openapi`); `graphql` lists
+endpoints it asked what they offer. `recording` is the HAR kept under the site
+when `itda draft har` or `itda record --save ... --install` had one. A refresh
+needs only names and shapes, so the copy keeps the recording's shape: cookie,
+token and session values, private query and body fields and sign-in call answers
+become `<redacted>` before saving. `itda remove` deletes the copy with the site.
+`template` names the site's ready-made template (`gitlab`, `jira`...), with its
+API base in `base_url`. A refresh fills that template again and rereads the page
+if it still opens. `base_url`, `include` and `lang` otherwise record the draft's
+choices; itda omits any you did not give. Nothing in the file is a secret.
+`drafted` holds each operation's original draft hash. A refresh uses it to
+distinguish hand-edited operations from those it may replace. A definition
+installed with `itda add` has no sources and cannot be refreshed.
 
 When a check says `site_changed`, draft the site again from those sources:
 
@@ -764,19 +749,17 @@ board.get-board     ok                 HTTP 200 131 ms
 verdict  ok: every read still matches the site
 ```
 
-The merge keeps the site's name, title and `base_url`, `defaults`, `auth`
-and the header comments as they are, and goes through the operations by
-name. One whose YAML differs from what the sources drafted last time was
-edited by hand and is kept as it is. One the new draft changed (a renamed
-column, a moved endpoint, a response check) takes the new version. One the
-sources no longer draft is dropped only when its read also failed in the
-check. One the draft now has is tried once and added when it answers.
-Approvals waiting for the site are withdrawn, as for any replaced
-definition. `-y` writes without asking; without it, nothing is written until
-you say yes. The site is checked right after and the verdict
-is printed, so the exit code says whether the new definition matches.
-Over MCP, `itda_manage` with `refresh` does the same after you confirm the
-diff in a form.
+The merge keeps the site's name, title and `base_url`, `defaults`, `auth` and
+the header comments as they are, and goes through the operations by name. YAML
+differing from the last source draft means hand edits. itda keeps that operation
+as is. One the new draft changed (a renamed column, a moved endpoint, a response
+check) takes the new version. itda drops what the sources no longer draft only
+if its read also failed the check. itda tries a new operation once and adds it
+if it answers. itda withdraws pending approvals for the site, as for any
+replaced definition. `-y` writes without asking; without it, itda writes only
+after you say yes. itda checks the site right after and prints the verdict. The
+exit code says whether the new definition matches. Over MCP, `itda_manage` with
+`refresh` does the same after you confirm the diff in a form.
 
 ## Checklist before sharing a definition
 

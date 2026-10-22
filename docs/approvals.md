@@ -17,53 +17,50 @@
    Approved. The agent can now run it once, with exactly these inputs.
    ```
 
-   `does` is the action's description from the site definition, and every
-   input follows; a value longer than 500 characters is cut, with its length.
-   `itda reject <id>`, or any answer but `y`, refuses it. `itda reject` also
-   withdraws an approval you already granted and the agent has not used.
-3. The agent calls again with `approval` set to the id. itda checks that the
-   request is the one you saw, marks the approval used, and sends it once.
+   `does` is the action's description from the site definition, followed by
+   every input. itda cuts values longer than 500 characters and shows their
+   length. `itda reject <id>`, or any answer but `y`, refuses it. `itda reject`
+   also withdraws an approval you already granted and the agent has not used.
+3. The agent calls again with `approval` set to the id. itda checks the request
+   matches what you saw. It marks the approval used and sends it once.
 
-While you have not answered, a call with the id gets `approval_pending`
-(exit 20) with the command to run, and the approval stays as it is: the agent
-waits instead of asking for a new one. A call with other inputs than the ones
-you saw withdraws the approval (`approval_expired` with `reason:
-inputs_changed`); an agent that wants the other inputs asks again and you see
-them.
+Until you answer, a call with the id gets `approval_pending` (exit 20) and the
+command to run. The approval stays unchanged; the agent waits instead of asking
+for a new one. A call with inputs other than those you saw withdraws the
+approval (`approval_expired` with `reason: inputs_changed`). To use those
+inputs, the agent asks again for you to review them.
 
 An approval covers one request: the site, action, account, every input, the
 definition (by hash) and the credential (by fingerprint). Changing any of them
-needs a new approval. It expires five minutes after it was requested, or
-five minutes after you approve it. It works once, and it is used up before
-anything is sent, so a failed change is not replayed. `itda logout`, `itda
-remove`, a new `itda login` and replacing a definition (`itda setup`, `itda
-refresh`, `itda add --force`, `itda draft ... --install --force`) withdraw every pending or
-granted approval for that site or account: what you reviewed is no longer
-what would be sent.
+needs a new approval. It expires five minutes after the request or five minutes
+after you approve it. itda uses an approval once, before sending anything, so it
+never replays a failed change. `itda logout`, `itda remove`, a new `itda login`
+and replacing a definition (`itda setup`, `itda refresh`, `itda add --force`,
+`itda draft ... --install --force`) withdraw all pending or granted approvals
+for that site or account: what you reviewed differs from what itda would send.
 
-Changes are never retried and never follow redirects. When the answer is lost
-after sending, or a GraphQL answer carries `errors` behind a 2xx, the call
-fails with `action_outcome_unknown` (exit 22): check the site before trying
-again. A change that never left the machine (the gate gave no turn, the name
-did not resolve, the connection was refused) keeps its network code and is
-reported as not sent.
+itda never retries changes or follows their redirects. If the answer is lost
+after sending or a GraphQL answer carries `errors` behind a 2xx, the call fails
+with `action_outcome_unknown` (exit 22). Check the site before trying again. A
+change that never left the machine (the gate gave no turn, the name did not
+resolve, the connection was refused) keeps its network code. itda reports it as
+not sent.
 
 ### Approving in your MCP client
 
-Clients that show you MCP elicitation forms can ask for the approval
-there, so you do not have to switch to a terminal:
+Clients with MCP elicitation forms can ask for approval there, without a switch
+to a terminal:
 
 ```sh
 itda mcp install claude-code --approve-in-client   # or set ITDA_APPROVE_IN_CLIENT=1
 ```
 
 When an agent asks for a change, the client shows you the same review
-`itda approve` prints, with an "Approve this change" box. Ticking it and
-accepting grants that one request, and the call goes on and runs it.
-Declining or closing the form rejects it, and the agent gets
-`approval_rejected`. Both decisions go into the audit log. When the client
-cannot show forms, nothing changes: the agent gets the approval id and you
-can still use `itda approve`.
+`itda approve` prints, with an "Approve this change" box. Ticking the box and
+accepting approves that one request. The call continues and runs it. Declining
+or closing the form rejects it, and the agent gets `approval_rejected`. Both
+decisions go into the audit log. If the client cannot show forms, nothing
+changes. The agent gets the approval id; you can still use `itda approve`.
 
 How the form reaches you depends on the protocol revision the client speaks.
 Up to 2025-11-25 itda sends the client a request and waits 290 seconds for
@@ -92,9 +89,9 @@ What each client showed, measured on 2026-10-22:
   tool call, the agent gets `approval_required` with the id, and you approve
   in a terminal. `--approve-in-client` changes nothing there.
 
-Turn this on only for clients that put elicitation forms in front of you.
-The form goes to the client application, never to the model, but a client
-that answered forms on its own would approve on its own.
+Turn this on only for clients that put elicitation forms in front of you. The
+form goes to the client application, never the model. A client that answers
+forms on its own would also approve on its own.
 
 ### Why a terminal
 
@@ -108,7 +105,7 @@ the data directory. See the [threat model](THREAT_MODEL.md).
 
 ## The audit log
 
-Every call, approval, rejection and change is appended to `audit.jsonl` in the
+itda appends every call, approval, rejection and change to `audit.jsonl` in the
 data directory:
 
 ```console
@@ -121,20 +118,19 @@ $ itda audit --verify
 The audit log is intact: 4 records in /home/you/.local/share/itda/audit.jsonl.
 ```
 
-- **Changes are written down first.** A `change_started` record is written
-  before the request goes out. If it cannot be written, the change is not
-  sent.
+- **Changes are written down first.** itda writes a `change_started` record
+  before sending the request. If itda cannot write it, it sends no change.
 - **Tampering shows.** Each record holds the hash of the one before it.
   Editing, deleting or reordering a line makes `itda audit --verify` name the
   first broken record, and `itda doctor` reports it.
 - **Safe to share.** Records keep input names and a digest of their values,
   never the values or any credential.
 
-- **A stopped process shows.** A `change_started` record with no `call`
-  record after it means the process stopped after the change was sent and
-  nobody knows whether the site applied it. `itda audit` lists those changes
-  at the end as "unknown outcome", `itda doctor` counts them under `changes`,
-  and `itda_manage audit` returns them under `unknown_outcome`. Check the site
+- **A stopped process shows.** A `change_started` record with no later `call`
+  record means the process stopped after sending the change. Nobody knows
+  whether the site applied it. `itda audit` lists those changes at the end as
+  "unknown outcome". `itda doctor` counts them under `changes`.
+  `itda_manage audit` returns them under `unknown_outcome`. Check the site
   before asking for the change again.
 
 `itda audit --json` prints the records for scripts.
