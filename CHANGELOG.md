@@ -22,6 +22,21 @@ change the definition format or the CLI.
   twice.
 - Requests queued in one process now take turns in order instead of polling
   the shared gate against each other.
+- A draft that sees a GraphQL endpoint (a recorded call to it, or a page
+  naming a same-origin `/graphql` path) asks it once, with the standard
+  introspection query, what it offers, and drafts one read per root `Query`
+  field whose arguments are scalars, enums or ids: the field name is the
+  action, the arguments are typed inputs, and the selection is the field's
+  scalars two levels deep, 24 at most. An optional argument that holds an
+  object or a list is left out and listed; a field that requires one is
+  listed instead. `Mutation` fields are listed in the notes and never
+  drafted. A site with introspection off is drafted from
+  its pages and calls alone. The query is sent as itda, read-only, with a
+  size cap, by `itda draft page`, `itda draft har`, `itda record` and
+  `itda setup`.
+- An optional input the agent leaves out now leaves the `json_template`
+  body too, instead of standing in as an empty string where a number or
+  null belongs; GraphQL variables typed `Int` or `Boolean` need that.
 
 ### Changed
 - The landing page on phones: lighter glass, the setup dialog left out of the
