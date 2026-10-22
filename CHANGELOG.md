@@ -390,6 +390,18 @@ change the definition format or the CLI.
   refused itda (`blocked_by_site`, exit 12), and `itda check` says
   `blocked`. Before, it was drafted as a read named after the challenge and
   checked as `ok`.
+- Drafts leave ad slots out of a page's records (an element whose class, id
+  or label marks it as an ad: `AdHolder`, `ad-*`, `sponsored`,
+  `aria-label="Sponsored"`): when ads share their classes with the records
+  beside them, the records' selector excludes the ad class. On amazon.com
+  the draft had picked the sponsored results, which are not there when the
+  first page is asked for by number.
+- The page input a draft adds when a page links to its next page (`page`,
+  `offset`, `start` and the like) has no default any more, so the read and
+  `itda check` ask for the address the draft saw until an agent or a page
+  handle asks for another page; the next page is still counted from 1, or
+  from 0 for an offset. Sending `page=1` made some sites answer with
+  different markup and the check fail.
 
 ## [0.4.0] - 2026-10-22
 

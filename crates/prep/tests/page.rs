@@ -517,7 +517,7 @@ fn a_card_grid_without_list_markup_lists_its_projects_and_reads_one() {
     let spec = spec_of(&draft);
     let list = spec.op("list-projects").unwrap();
     assert_eq!(list.desc, "List the projects on Projects");
-    assert_eq!(list.query["page"].default, Some(1.into()));
+    assert_eq!(list.query["page"].default, None);
     let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
     assert_eq!(html.items, "div.project-card");
     assert_eq!(html.fields["title"].selector, "h3");
@@ -553,7 +553,7 @@ fn rows_with_a_named_title_but_no_links_are_records_with_a_date_and_an_offset() 
     let spec = spec_of(&draft);
     let list = spec.op("get-search").unwrap();
     assert_eq!(list.desc, "List the results on Search results");
-    assert_eq!(list.query["offset"].default, Some(0.into()));
+    assert_eq!(list.query["offset"].default, None);
     assert_eq!(list.query["q"].default, Some("bicycle".into()));
     let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
     assert_eq!(html.items, "div.results > div.result");
@@ -678,7 +678,7 @@ fn links_that_differ_by_a_query_key_become_a_read_by_that_key() {
     let spec = spec_of(&draft);
     let list = spec.op("get-list").unwrap();
     assert_eq!(list.desc, "List the posts on Free board");
-    assert_eq!(list.query["offset"].default, Some(0.into()));
+    assert_eq!(list.query["offset"].default, None);
     let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
     assert_eq!(html.fields["writer"].selector, "span.writer");
     let one = spec.op("get-post").unwrap();
@@ -769,7 +769,26 @@ fn links_that_count_records_declare_an_offset() {
         ("offset", "")
     );
     assert_eq!(pagination.input(), ("start", false));
-    assert_eq!(list.query["start"].default, Some(0.into()));
+    assert_eq!(list.query["start"].default, None);
+}
+
+#[test]
+fn a_list_page_with_page_links_asks_for_the_drafted_address_until_told_a_page() {
+    let draft = from_pages(
+        &[page("https://intranet.example.co.kr/board", "board.html")],
+        &Options::default(),
+    )
+    .unwrap();
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    let board = spec.op("get-board").unwrap();
+    assert_eq!(board.query["page"].kind, "int");
+    assert_eq!(board.query["page"].default, None);
+    assert!(!board.query["page"].required);
+    let (url, _) = spec.build_request(board, &Default::default()).unwrap();
+    assert_eq!(url, "https://intranet.example.co.kr/board");
+    let second = [("page".to_owned(), "2".to_owned())].into_iter().collect();
+    let (url, _) = spec.build_request(board, &second).unwrap();
+    assert_eq!(url, "https://intranet.example.co.kr/board?page=2");
 }
 
 #[test]

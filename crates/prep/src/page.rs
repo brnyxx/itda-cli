@@ -775,7 +775,7 @@ fn page_actions(
 }
 
 /// The page's path inputs and its query string as inputs with defaults, plus
-/// a `page` input when the page links to its next page.
+/// an optional `page` input when the page links to its next page.
 /// `lists` says the read returns records, so it can turn pages with the
 /// key the page's links use; a read of a title or a whole payload has
 /// nothing to go on to.
@@ -806,10 +806,13 @@ fn page_inputs(entry: &mut Mapping, page: &Page, url: &url::Url, params: &[Strin
     }
     let mut pagination = None;
     if let Some(pages) = evidence::pagination(&page.html, url.as_str()) {
+        // No default: the read asks for the address it was drafted from until
+        // an agent or a page handle asks for another page. Some sites answer
+        // an explicit first page with different markup than the page the
+        // draft saw; the next page is still counted from the first.
         if !query.contains_key(pages.key.as_str()) {
             let mut field = Mapping::new();
             field.insert("type".into(), "int".into());
-            field.insert("default".into(), pages.default.into());
             query.insert(pages.key.clone().into(), Yaml::Mapping(field));
         }
         let counted = query

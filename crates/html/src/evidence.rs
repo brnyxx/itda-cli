@@ -103,9 +103,12 @@ fn generic_extraction(document: &Html) -> Option<Extraction> {
         if furniture(parent) {
             continue;
         }
+        let children: Vec<ElementRef<'_>> =
+            parent.children().filter_map(ElementRef::wrap).collect();
+        let without = ads_excluded(&children).unwrap_or_default();
         let mut groups: BTreeMap<String, Vec<ElementRef<'_>>> = BTreeMap::new();
-        for child in parent.children().filter_map(ElementRef::wrap) {
-            if RECORD_TAGS.contains(&child.value().name()) {
+        for child in children {
+            if RECORD_TAGS.contains(&child.value().name()) && !ad_slot(child) {
                 groups.entry(segment(child)).or_default().push(child);
             }
         }
@@ -116,7 +119,7 @@ fn generic_extraction(document: &Html) -> Option<Extraction> {
                 && (shape.contains('.') || (shape != "p" && shape != "a"))
                 && same_shape(&records)
             {
-                candidates.push((parent, shape, records));
+                candidates.push((parent, format!("{shape}{without}"), records));
             }
         }
     }
@@ -647,6 +650,59 @@ fn furniture_self(e: ElementRef<'_>) -> bool {
             .is_ok_and(|content| e.select(&content).next().is_none())
 }
 
+/// An advertising slot, by its own classes, id or label (`AdHolder`,
+/// `ad-banner`, `sponsored-post`, `aria-label="Sponsored"`): not one of the
+/// page's records, and on some sites only there for some requests.
+fn ad_slot(e: ElementRef<'_>) -> bool {
+    let value = e.value();
+    let labelled = ["aria-label", "data-label"].iter().any(|attr| {
+        value.attr(attr).is_some_and(|label| {
+            let lower = label.to_ascii_lowercase();
+            lower.contains("sponsored") || lower.contains("advertisement")
+        })
+    });
+    labelled || value.classes().chain(value.id()).any(ad_word)
+}
+
+fn ad_word(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    matches!(lower.as_str(), "ad" | "ads" | "advert")
+        || ["ad-", "ad_", "ads-", "ads_"]
+            .iter()
+            .any(|prefix| lower.starts_with(prefix))
+        || ["adholder", "sponsored", "advertisement"]
+            .iter()
+            .any(|word| lower.contains(word))
+}
+
+/// `:not(.class)` for every class that marks an ad among `elements`, so a
+/// selector for the records beside them leaves the ads out. `None` when an
+/// ad is marked only by its label and a class cannot leave it out.
+fn ads_excluded(elements: &[ElementRef<'_>]) -> Option<String> {
+    let mut classes: Vec<&str> = Vec::new();
+    for element in elements.iter().filter(|e| ad_slot(**e)) {
+        let marks: Vec<&str> = element
+            .value()
+            .classes()
+            .filter(|class| ad_word(class) && selector_word(class))
+            .collect();
+        if marks.is_empty() {
+            return None;
+        }
+        for class in marks {
+            if !classes.contains(&class) {
+                classes.push(class);
+            }
+        }
+    }
+    Some(
+        classes
+            .iter()
+            .map(|class| format!(":not(.{class})"))
+            .collect(),
+    )
+}
+
 /// `tag.class` with the first class a selector can use, else just `tag`.
 fn segment(element: ElementRef<'_>) -> String {
     let tag = element.value().name();
@@ -868,6 +924,7 @@ fn record_extraction(document: &Html) -> Option<Extraction> {
             }
             let class = element.value().classes().find(|class| {
                 class.len() <= 40
+                    && !ad_word(class)
                     && class
                         .chars()
                         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
@@ -884,6 +941,14 @@ fn record_extraction(document: &Html) -> Option<Extraction> {
         }
     }
     for items in candidates {
+        let Ok(selector) = Selector::parse(&items) else {
+            continue;
+        };
+        let matched: Vec<ElementRef<'_>> = document.select(&selector).take(40).collect();
+        let Some(without) = ads_excluded(&matched) else {
+            continue;
+        };
+        let items = format!("{items}{without}");
         let Ok(selector) = Selector::parse(&items) else {
             continue;
         };
@@ -2020,6 +2085,48 @@ mod tests {
         let value = extraction.extract(html, BASE).unwrap();
         assert_eq!(value["items"][1]["title"], "Second");
         assert_eq!(value["items"][1]["link"], "https://example.test/n/2");
+    }
+
+    #[test]
+    fn ad_slots_beside_the_records_are_left_out() {
+        let titles = |html: &str| -> (String, Vec<String>) {
+            let extraction = infer_extraction(html, BASE).unwrap();
+            let value = extraction.extract(html, BASE).unwrap();
+            let titles = value["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["title"].as_str().unwrap().to_owned())
+                .collect();
+            (extraction.items, titles)
+        };
+        let books = ["Book 1", "Book 2", "Book 3", "Book 4"];
+        // Results that share their classes with the ads between them, the ads
+        // marked by one more class that sorts first.
+        let row = |class: &str, title: &str| {
+            format!("<div class='{class}'><h2><a href='/dp/{title}'>{title}</a></h2></div>")
+        };
+        let mut slots = String::new();
+        for (n, book) in books.iter().enumerate() {
+            slots += &row("sg-col gsx-anchor AdHolder", &format!("Sponsored pick {n}"));
+            slots += &row("sg-col gsx-anchor", book);
+        }
+        let html = format!("<main><div class='slot'>{slots}</div></main>");
+        let (items, found) = titles(&html);
+        assert!(items.ends_with(":not(.AdHolder)"), "{items}");
+        assert_eq!(found, books);
+
+        let cards = html.replace("sg-col gsx-anchor", "result-card");
+        let (items, found) = titles(&cards);
+        assert_eq!(items, "div.result-card:not(.AdHolder)");
+        assert_eq!(found, books);
+
+        for word in ["AdHolder", "ad-banner", "ads", "sponsored-post"] {
+            assert!(ad_word(word), "{word}");
+        }
+        for word in ["add-to-cart", "header", "badge", "load-more", "lead"] {
+            assert!(!ad_word(word), "{word}");
+        }
     }
 
     #[test]
