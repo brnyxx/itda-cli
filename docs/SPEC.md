@@ -85,8 +85,9 @@ Field and input names go through the same checks as a hand-written
 definition: a name that looks like a credential is left out and listed. A
 hidden form field that is not a token keeps its value as a default, since the
 form always sends it; nothing else from the page is copied. A page drawn by
-scripts shows little to a plain fetch; the draft says so and points at
-recording the site instead.
+scripts shows little to a plain fetch; `itda draft page` says so and points
+at recording the site instead, and `itda setup` first watches the page load
+in your browser (below).
 
 ## Start from the software a site runs
 
@@ -159,6 +160,25 @@ the terminal: the token a drafted header `auth` entry refers to, and the
 browser session for a `browser` one. They go to the system keyring under
 `<site>/default`, never on screen, so `itda login` is not needed until a
 token expires.
+
+`itda setup` runs a shorter form of this by itself when the page shows itda
+nothing but a title and carries scripts that could fetch something (a script
+file or a preloaded module, or an inline script that imports a module or
+mentions `fetch`, `XMLHttpRequest`, `graphql` or `api`; a page without them
+goes straight to the question below): it opens
+the same kind of window on the page, waits
+until the network has been quiet for two seconds (ten at most), scrolls once
+to the bottom, waits again, closes the window and drafts from what the page
+loaded on its own, the way `itda draft har` does, trying the page's own
+address first so what the page itself shows is never lost to a busier API
+elsewhere. It says what it saw in one line (`Watched the page load: 12
+calls, 3 reads drafted.`, counting the reads beyond a title check) and only
+asks you to record when no such read came out. Nothing in the window is clicked or
+typed, and nothing it signed in with is kept, since nobody signed in; a page
+whose scripts go to a sign-in page stops with `auth_required`, as a redirect
+does. `--no-record` skips the window as well, `--watch-only` watches but
+never asks you to record. A site whose software is recognised (above) gets
+its template instead and is not watched.
 
 A recording saved from the browser's developer tools works the same way:
 open the Network tab, use the site, save it with "Save all as HAR" (Chrome,

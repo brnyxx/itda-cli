@@ -101,11 +101,18 @@ agent gets that software's real API from a ready-made template
 it, and what the page itself shows joins it. `itda setup --as jira` forces a
 template; `--no-template` reads the page like any other.
 
+A page drawn by scripts shows itda only a title, so itda opens your browser
+on it for a few seconds, watches what the page loads by itself and drafts
+from those calls; nothing is clicked or typed, and the window closes on its
+own. Only a page that still shows nothing, or needs a sign-in, asks you to
+use the site in your browser while itda watches.
+
 Once an agent is connected, you can also just ask it: "set up
 news.ycombinator.com for me". It calls `itda_setup`, the site is looked at,
 drafted and tried the same way, and its actions appear as tools in the same
-conversation; when a read says to sign in, `itda_login` opens your own
-browser and the agent only sees the account id.
+conversation (a scripted page opens briefly in a browser window on your
+screen); when a read says to sign in, `itda_login` opens your own browser
+and the agent only sees the account id.
 
 Or skip the terminal and hand this to Claude Code, Cursor or Codex, with the
 address of a site you use:

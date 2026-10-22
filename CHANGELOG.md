@@ -74,6 +74,26 @@ change the definition format or the CLI.
   inputs with defaults and no response check yet.
 - The `page` input follows the link marked `rel="next"` and starts at 0 for
   `offset` and `start`.
+- `itda setup` watches what a page drawn by scripts loads by itself before
+  asking anyone to record. When the page shows itda nothing but a title,
+  carries scripts that could fetch something (a script file or a preloaded
+  module, or an inline script that imports a module or mentions `fetch`,
+  `XMLHttpRequest`, `graphql` or `api`) and a
+  browser is installed, it opens the browser on the page in the same fresh
+  profile recording uses, waits until the network has been quiet for two
+  seconds (ten at most), scrolls once to the bottom, waits again, closes the
+  window and drafts from the recording the way `itda draft har` does, the
+  page's own address first so what the page itself shows is never lost to a
+  busier API elsewhere. One line says what it saw (`Watched the page load:
+  12 calls, 3 reads drafted.`, in English or Korean, counting the reads
+  beyond a title check); only when no such read came out does it ask to
+  record as before. Nothing in the window is clicked or typed, nothing it signed in
+  with is kept, and a page whose scripts go to a sign-in page stops with the
+  same `auth_required` words a redirect gets. `--no-record` skips the window
+  too; a new `--watch-only` watches but never asks to record, for scripts.
+  A site whose software is recognised gets its template instead and is not
+  watched. `itda_setup` over MCP does the same, and says in its description
+  and its result that a window opens briefly on the user's screen.
 - Five MCP tools so an agent never needs a terminal to set a site up or
   look after it: `itda_setup` (look at a page as itda, draft, try every
   read once, keep what works; the site's actions become tools in the same
@@ -84,10 +104,11 @@ change the definition format or the CLI.
   per site, as `itda check --json`), `itda_sites` (what is set up, with
   the last check's time and verdict, now kept in `specs/<site>/check.json`)
   and `itda_manage` (`remove` and `resume` after the person confirms in a
-  form, `approvals`, `audit`). `itda_setup` never records and never keeps
-  a credential; pages that need a sign-in or scripts are refused with the
-  command to run instead. The server instructions, `AGENTS.md` and the
-  skill say when to call them.
+  form, `approvals`, `audit`). `itda_setup` never asks anyone to record and
+  never keeps a credential; pages that need a sign-in, or still show nothing
+  after the watched load above, are refused with the command to run
+  instead. The server instructions, `AGENTS.md` and the skill say when to
+  call them.
 - A new `itda-setup` crate holds the steps behind `itda setup`, `itda login
   --browser`, `itda check` and the installed sites, with the questions
   answered through a trait and progress reported through a callback, so the

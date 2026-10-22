@@ -51,7 +51,7 @@ site up or look after it:
 
 | Tool | Use |
 |---|---|
-| `itda_setup` | Set a site up from the address of a page: look at the page as itda, draft, try every read once, keep what works. The site's actions become tools in the same session: the server sends `notifications/tools/list_changed` (it declares `tools.listChanged`) and the next `tools/list` has them. Pages that need a sign-in or are drawn by scripts are refused with the command you should run instead; itda never records from here. |
+| `itda_setup` | Set a site up from the address of a page: look at the page as itda, draft, try every read once, keep what works. The site's actions become tools in the same session: the server sends `notifications/tools/list_changed` (it declares `tools.listChanged`) and the next `tools/list` has them. A page drawn by scripts opens briefly in a browser window on your screen so itda can watch what it loads by itself (nothing is clicked or typed). Pages that need a sign-in, or still show nothing, are refused with the command you should run instead; itda never asks you to record from here. |
 | `itda_login` | Open your own browser so you can sign in to a site, exactly like `itda login <site> --browser`; the session is kept in the keyring and the agent only sees the account id. A client that shows forms asks you first; the definition must name the cookie that shows a sign-in, since nobody presses Enter. |
 | `itda_check` | `itda check` for one site, or every site when none is named: the verdict per site and what to do, as `itda check --json` prints them. |
 | `itda_sites` | What is set up, with reads, changes and the last check's time and verdict. |
