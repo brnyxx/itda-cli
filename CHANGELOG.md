@@ -362,7 +362,15 @@ change the definition format or the CLI.
 - `itda mcp --site <name>` serves one site only: its actions are the only
   tools, `itda_setup` is refused, and the other management tools stay inside
   it.
-
+- Two more ways to install, from the next release on. Every release carries
+  one MCP Bundle per platform (`itda-<target>.mcpb`): open it and Claude
+  Desktop installs itda with its tools, no terminal needed; approving a
+  change still happens in a terminal with `itda approve`. The bundle is
+  packed by `cargo xtask mcpb` from the release archives, with a manifest
+  that follows the MCPB spec (`manifest_version` 0.3, `server.type`
+  `binary`, `itda mcp` as the command). A winget manifest for 0.4.0
+  (`manifests/b/brnyxx/itda/`) is ready to submit to winget-pkgs and is not
+  submitted yet.
 - Five MCP tools so an agent never needs a terminal to set a site up or
   look after it: `itda_setup` (look at a page as itda, draft, try every
   read once, keep what works; the site's actions become tools in the same

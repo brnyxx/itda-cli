@@ -172,6 +172,13 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/brnyxx/itda-cli/re
 `cargo install --git https://github.com/brnyxx/itda-cli itda-cli`로 소스에서
 빌드해도 됩니다.
 
+터미널 없이 Claude Desktop에서: [macOS (Apple silicon)](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-aarch64-apple-darwin.mcpb),
+[macOS (Intel)](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-apple-darwin.mcpb),
+[Windows](https://github.com/brnyxx/itda-cli/releases/latest/download/itda-x86_64-pc-windows-msvc.mcpb) 중 내 컴퓨터에 맞는 번들을 받아서
+열면 됩니다. Claude Desktop이 itda와 도구를 설치하고, 대화 안에서 "내가-쓰는-사이트.example
+써 줘"라고 하면 사이트가 세팅됩니다. 변경 승인은 여전히 터미널의 `itda approve`에서
+하니, 변경까지 쓰려면 명령도 설치하세요.
+
 `itda` 뒤에 내가 쓰는 사이트 주소를 쓰면 됩니다. 내 컴퓨터의 에이전트 앱을 찾아
 Enter 한 번에 연결합니다. 한국어 환경이면 한국어로 말합니다. 그냥 `itda`만 치면
 주소를 물어보고, 스크립트에서는 `itda setup <주소>`에 옵션을 줍니다.
