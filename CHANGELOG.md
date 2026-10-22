@@ -17,6 +17,18 @@ change the definition format or the CLI.
   still frame under reduced motion, and leaves the plain glow without WebGL.
 - The hero lost its badge and chips; the binary, platform and licence line
   moved to the footer.
+- The landing page is laid out as a desktop. The hero stacks windows that
+  can be dragged: the first run, the actions it found, the setup progress,
+  an about box and a clock. Sections open with a numbered eyebrow and a
+  centred headline, every box is a window with a title bar and a dither
+  texture, and the risk comparison is two windows side by side, the
+  browser-driving agent's lane next to itda's.
+- The sky is now a living network: nodes spring home through a slow current,
+  threads join neighbours, packets of light run node to node and along the
+  handoff between the website and agent hubs. The cursor is a node too:
+  nearby nodes gather and orbit it, its motion leaves a wake, threads run
+  from it, and a click sends a ring through the field. Node count follows
+  the viewport, with a lower cap on touch screens.
 - The landing page's components now speak the same language as the sky:
   smoked-glass panels with a chrome hairline and faint scanlines, chrome
   headlines with a holographic accent, glossy pill buttons, Aqua-style

@@ -66,3 +66,38 @@ if (ko && switcher) {
     history.replaceState(null, "", url);
   });
 }
+
+// The desktop: windows come to the front when touched and can be dragged
+// around on wide screens. The clock shows the viewer's own time.
+const clock = document.querySelector("[data-clock]");
+if (clock) {
+  const tick = () => { clock.textContent = new Date().toLocaleTimeString("en-GB"); };
+  tick();
+  setInterval(tick, 1000);
+}
+const wins = [...document.querySelectorAll("[data-win]")];
+let zTop = 10;
+const drag = window.matchMedia("(min-width: 961px) and (pointer: fine)");
+for (const win of wins) {
+  win.addEventListener("pointerdown", (e) => {
+    win.style.zIndex = String(++zTop);
+    if (!drag.matches || e.target.closest("a, button, pre")) return;
+    const sx = e.clientX, sy = e.clientY;
+    const ox = parseFloat(win.style.getPropertyValue("--dx")) || 0;
+    const oy = parseFloat(win.style.getPropertyValue("--dy")) || 0;
+    win.classList.add("dragging");
+    const move = (ev) => {
+      win.style.setProperty("--dx", `${ox + ev.clientX - sx}px`);
+      win.style.setProperty("--dy", `${oy + ev.clientY - sy}px`);
+    };
+    const up = () => {
+      win.classList.remove("dragging");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    window.addEventListener("pointermove", move, { passive: true });
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  });
+}
