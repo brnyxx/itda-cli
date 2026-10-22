@@ -411,13 +411,13 @@ pub(crate) fn operations(
     }
     if !dropped.is_empty() {
         notes.push(format!(
-            "{path}: drafted {} without the argument in brackets, which holds an object or a list; add it to json_template by hand if agents need it.",
+            "{path}: drafted {} without the bracketed object or list argument; add it to json_template by hand if agents need it.",
             list(&dropped)
         ));
     }
     if !credentials.is_empty() {
         notes.push(format!(
-            "{path}: left out {}; they take a credential, which comes from sign-in, never from the agent.",
+            "{path}: left out {}; they take a credential from sign-in, never from the agent.",
             list(&credentials)
         ));
     }
@@ -429,7 +429,7 @@ pub(crate) fn operations(
     }
     if !nothing_to_read.is_empty() {
         notes.push(format!(
-            "{path}: left out {}; no plain field to read was found under it.",
+            "{path}: left out {}; found no plain field to read under it.",
             list(&nothing_to_read)
         ));
     }
@@ -446,7 +446,7 @@ pub(crate) fn operations(
             .collect();
         if !changes.is_empty() {
             notes.push(format!(
-                "{path}: {mutation_type} lists {} changes ({}). A schema does not say what a change does, so none is drafted; record yourself using the site to draft the ones you need.",
+                "{path}: {mutation_type} lists {} changes ({}). A schema does not say what changes do, so itda drafts none. Record yourself using the site to draft the ones you need.",
                 changes.len(),
                 list(&changes)
             ));

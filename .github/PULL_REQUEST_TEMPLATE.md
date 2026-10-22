@@ -2,7 +2,7 @@
 
 ## Before and after
 
-What a reader sees before this change, and what they see after it.
+What a reader sees before and after this change.
 
 ## How
 

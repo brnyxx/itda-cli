@@ -34,7 +34,7 @@ impl Class {
     pub fn remedy(self) -> &'static str {
         match self {
             Class::Cloudflare | Class::BotManager | Class::Captcha | Class::Unknown => {
-                "The website refused automated access. Requests to it are paused. Check in your browser whether this use is allowed, then resume or use the site's official API."
+                "The website refused automated access. itda paused requests to it. Check in your browser if this use is allowed, then resume or use the site's official API."
             }
             Class::RateLimit => {
                 "Wait for Retry-After or the reset time before a bounded read retry."

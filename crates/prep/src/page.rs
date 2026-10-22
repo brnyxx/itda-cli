@@ -69,7 +69,7 @@ pub fn from_pages_and_description(
     let (parts, described) = page_parts_with_description(pages, description, options)?;
     if parts.operations.is_empty() {
         return Err(usage(
-            "No actions could be drafted",
+            "Could not draft any actions",
             "Check that the pages are under the site's address, or loosen --include.",
         ));
     }
@@ -113,7 +113,7 @@ fn merge_description(
         Ok(api) => api,
         Err(error) => {
             parts.notes.push(format!(
-                "{url} could not be read as an API description ({}); drafted from the pages alone.",
+                "Could not read {url} as an API description ({}); drafted from the pages alone.",
                 error.msg
             ));
             return None;
@@ -160,11 +160,11 @@ fn merge_description(
         let inputs = credential_inputs(op);
         parts.notes.push(match inputs.as_slice() {
             [one] => format!(
-                "{}: left out; its input {one} is a credential, which goes in auth, never through the agent.",
+                "{}: left out; credential input {one} goes in auth, never through the agent.",
                 label(op)
             ),
             many => format!(
-                "{}: left out; its inputs {} are credentials, which go in auth, never through the agent.",
+                "{}: left out; credential inputs {} go in auth, never through the agent.",
                 label(op),
                 many.join(", ")
             ),
@@ -339,14 +339,14 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
                     format!("{label}: the sign-in form; left out. `itda login {site}` signs in through it.")
                 } else {
                     format!(
-                        "{label}: a sign-in form; left out. Sign in with `itda login {site} --browser` once the definition is installed."
+                        "{label}: a sign-in form; left out. Sign in with `itda login {site} --browser` after installing the definition."
                     )
                 });
                 continue;
             }
             if form.multipart {
                 notes.push(format!(
-                    "{label}: skipped; it uploads files, which drafts do not cover yet."
+                    "{label}: skipped; drafts do not cover file uploads yet."
                 ));
                 continue;
             }
@@ -771,24 +771,24 @@ fn page_actions(
         entry.insert(
             "evidence".into(),
             format!(
-                "{label} has a `{}`; no repeated records were found",
+                "{label} has a `{}`; found no repeated records",
                 title.selector
             )
             .into(),
         );
         notes.push(if evidence::script_shell(&page.html) {
             format!(
-                "{label}: the page is drawn by scripts, so only its title is checked. Record yourself using it with `itda record` to draft the calls it makes."
+                "{label}: scripts draw the page, so itda checks only its title. Record yourself using it with `itda record` to draft the calls it makes."
             )
         } else {
             format!(
-                "{label}: no table, list, embedded data or main content was found; only the title is checked. Add html fields for what agents should read."
+                "{label}: found no table, list, embedded data or main content; itda checks only the title. Add html fields for what agents should read."
             )
         });
     } else {
         entry.insert("evidence".into(), format!("{label} was fetched").into());
         notes.push(format!(
-            "{label}: no title, records or embedded data were found; add a response check by hand."
+            "{label}: found no title, records or embedded data; add a response check by hand."
         ));
         return vec![entry];
     }
@@ -1143,7 +1143,7 @@ fn detail_action(
         }
     }
     notes.push(format!(
-        "GET {}: reads one record where the list's links go, with no response check yet; run it once with an id, then declare what the page shows.",
+        "GET {}: reads one record at the list's links, with no response check yet; run it once with an id, then declare what the page shows.",
         detail.shape()
     ));
     entry
@@ -1264,7 +1264,7 @@ fn listing_action(
     let model_name = model_name(models, &slug(&singular(what)), Yaml::Mapping(model));
     entry.insert("model".into(), model_name.into());
     notes.push(format!(
-        "{label}: the {what} come from the {} payload at {}; the `{}` model keeps {} fields of each, add or rename them as agents need.",
+        "{label}: {what} come from the {} payload at {}. The `{}` model keeps {} fields each; add or rename them as agents need.",
         listing.key,
         listing.pointer,
         entry
@@ -1937,7 +1937,7 @@ fn form_action(
             Yaml::Sequence(vec![Yaml::Mapping(step)]),
         );
         notes.push(format!(
-            "{label}: {} come from {} through a preflight step, read fresh before each change.",
+            "{label}: a preflight step reads {} fresh from {} before each change.",
             tokens.join(", "),
             page.path()
         ));

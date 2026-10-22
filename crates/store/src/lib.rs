@@ -141,7 +141,7 @@ impl Store {
                 return Err(AppError::new(
                     itda_types::Code::Runtime,
                     format!(
-                        "The local database was written by a newer version ({} schema {version})",
+                        "A newer version wrote the local database ({} schema {version})",
                         migration.component
                     ),
                     "Update itda, or move the data directory aside.",

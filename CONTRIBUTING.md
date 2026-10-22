@@ -43,8 +43,8 @@ feat: add same-site checks based on the public suffix list
 
 - One crate, feature or fix per pull request. Aim for under about 500 changed
   lines, not counting `Cargo.lock` and test fixtures. Split anything larger.
-- When one change depends on another, open them as a stack: each pull request
-  targets the branch of the one before it, and they merge in order.
+- For dependent changes, open a stack of pull requests. Each targets the
+  previous request's branch; they merge in order.
 - Branch names follow the commit type: `feat/net-gate`, `fix/redirect-origin`.
 - The description says what a reader sees before and after the change, then how.
 
@@ -63,13 +63,13 @@ The easiest contribution is a site. Two kinds live in the repository:
   and the one confirming request that recognise it. A test fills every
   template and runs the install checks on it.
 
-A good definition reads public data or uses the site's documented API, gives
-every read a `response` check and a `model`, keeps changes to the few an agent
-needs, and links each action's documentation in `evidence`. It never works
-around a block or imitates a browser; see [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+A good definition reads public data or uses the site's documented API. Every
+read has a `response` check and a `model`. It keeps only the few changes an
+agent needs and links each action's docs in `evidence`. It never works around a
+block or imitates a browser; see [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 Before opening the pull request, run `itda add sites/<name>.yaml` and
-`itda check <name>` against the real site and paste the check's summary into
-the description.
+`itda check <name>` against the real site and paste the check's summary into the
+description.
 
 ## Issues and questions
 
@@ -88,8 +88,9 @@ the description.
 `README.ko.md` and the Korean strings in `site/i18n.js` follow `README.md` and
 `site/index.html`. A pull request that changes the English text updates the
 Korean text too, or says in its description that it does not. New elements on
-the landing page get a `data-i18n` key with a Korean entry. The animated
-diagrams are built by `python3 assets/src/flow.py`, which holds both languages.
+the landing page get a `data-i18n` key with a Korean entry.
+`python3 assets/src/flow.py` builds the animated diagrams and holds both
+languages.
 
 ## Checks
 
@@ -104,9 +105,9 @@ CI runs the same checks on Linux, macOS and Windows.
 
 ## Code derived from Hycli
 
-A file that contains code derived from Hycli says so in its header comment,
-names the original file and describes what changed. Keep that header when you
-edit the file.
+A file that contains code derived from Hycli says so in its header comment. The
+header names the original file and describes what changed. Keep that header when
+you edit the file.
 
 ## Versions
 
@@ -122,18 +123,17 @@ itda is before 1.0, so the version says this:
 
 Each change that users will notice gets a line in `CHANGELOG.md` under
 `Unreleased`, in one of `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
-`Security`, each heading at most once. `cargo xtask check-changelog` (run by
-CI) checks that, that the newest release heading matches the workspace
-version, and that `site/index.html` and `docs/quickstart.md` print the same
-version.
+`Security`. Each heading appears at most once. `cargo xtask check-changelog`
+(run by CI) checks that. It also checks that the newest release heading,
+`site/index.html` and `docs/quickstart.md` carry the workspace version.
 
 ## Releasing
 
 1. Move the `Unreleased` notes in CHANGELOG.md under the new version with the
-   date, bump `version` in the root Cargo.toml, and update the version shown
-   in `site/index.html` and `docs/quickstart.md`. `cargo xtask check-changelog`
+   date. Bump `version` in the root Cargo.toml and update the version shown in
+   `site/index.html` and `docs/quickstart.md`. `cargo xtask check-changelog`
    passes when the four agree.
 2. On GitHub, open Actions → Release → Run workflow, and enter the tag, such as
-   `v0.2.0`. The workflow builds every platform, creates the tag and publishes
-   the release with the installers. Leave the default `dry-run` to build
+   `v0.2.0`. The workflow builds every platform. It creates the tag and
+   publishes the release with installers. Leave the default `dry-run` to build
    without publishing.

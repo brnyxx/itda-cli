@@ -216,7 +216,7 @@ pub fn from_har(text: &[u8], options: &Options) -> AppResult<Draft> {
 
 pub(crate) fn no_operations() -> itda_types::error::AppError {
     usage(
-        "No operations could be drafted",
+        "Could not draft any operations",
         "Check that the recording has API calls on this address, or loosen --include.",
     )
 }
@@ -415,10 +415,10 @@ fn parts_at(
     if query_signed_in && let Some(key) = &query_session {
         notes.push(match &login {
             Some(_) => format!(
-                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in; it is kept in the keyring, never in the definition. Run `itda login {site}` once after installing."
+                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in. It is kept in the keyring, never in the definition. Run `itda login {site}` once after installing."
             ),
             None => format!(
-                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in; it is kept in the keyring, never in the definition. Add the sign-in form to the auth entry as `login`, then run `itda login {site}`."
+                "Actions with auth: session carry the {key} query parameter the site hands out at sign-in. It is kept in the keyring, never in the definition. Add the sign-in form to the auth entry as `login`, then run `itda login {site}`."
             ),
         });
     } else if !signed_in.is_empty() {
@@ -427,7 +427,7 @@ fn parts_at(
         ));
     } else if cookies {
         notes.push(
-            "The site sends cookies, but none look like a sign-in; if actions report auth_required, add an auth entry with kind: browser."
+            "The site's cookies do not look like a sign-in; if actions report auth_required, add an auth entry with kind: browser."
                 .into(),
         );
     }
@@ -452,7 +452,7 @@ fn parts_at(
         }
         if call.multipart {
             notes.push(format!(
-                "{label}: skipped; it uploads files, which drafts do not cover yet."
+                "{label}: skipped; drafts do not cover file uploads yet."
             ));
             continue;
         }
@@ -601,12 +601,12 @@ fn parts_at(
                     headers.insert(header.clone().into(), "{{step.page.token}}".into());
                     entry.insert("headers".into(), Yaml::Mapping(headers));
                     notes.push(format!(
-                        "{label}: {header} comes from the {meta} tag on {} through a preflight step, read fresh before each call.",
+                        "{label}: a preflight step reads {header} fresh from the {meta} tag on {} before each call.",
                         page.path()
                     ));
                 }
                 None => notes.push(format!(
-                    "{label}: left out the {header} header; no page recorded before it had a csrf meta tag, so add a preflight step that reads it."
+                    "{label}: left out the {header} header because no earlier recorded page had a csrf meta tag; add a preflight step to read it."
                 )),
             }
         }
@@ -649,7 +649,7 @@ fn parts_at(
             );
             if !graphql.complex.is_empty() {
                 notes.push(format!(
-                    "{label} ({name}): left out the variables {}, which hold objects or lists; add them to json_template by hand.",
+                    "{label} ({name}): left out the object or list variables {}; add them to json_template by hand.",
                     graphql.complex.iter().cloned().collect::<Vec<_>>().join(", ")
                 ));
             }
@@ -684,8 +684,12 @@ fn parts_at(
                 steps.push(Yaml::Mapping(step));
                 entry.insert("preflight".into(), Yaml::Sequence(steps));
                 notes.push(format!(
-                    "{label}: {} come from {} through a preflight step, read fresh before each change{}.",
-                    call.form_tokens.iter().cloned().collect::<Vec<_>>().join(", "),
+                    "{label}: a preflight step reads {} fresh from {} before each change{}.",
+                    call.form_tokens
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     page.path(),
                     if page.query().is_some() {
                         "; add the query that page needs to the step's path"

@@ -76,7 +76,7 @@ operations:
       format: json
       required_pointers: [/key, /name]
   - name: pages
-    desc: List pages, in one space when a space key is given, optionally by exact title
+    desc: List pages, optionally by space key and exact title
     method: GET
     path: /rest/api/content
     effect: read
@@ -93,7 +93,7 @@ operations:
       format: json
       extract_pointer: /results
   - name: blog-posts
-    desc: List blog posts, in one space when a space key is given
+    desc: List blog posts, optionally from one space by space key
     method: GET
     path: /rest/api/content
     effect: read

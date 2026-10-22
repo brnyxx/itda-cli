@@ -133,7 +133,7 @@ pub(crate) fn openapi_parts(
     }
     if operations.is_empty() {
         return Err(usage(
-            "No operations could be drafted",
+            "Could not draft any operations",
             "Check the document's paths, or loosen --include.",
         ));
     }
@@ -237,7 +237,7 @@ fn auth_entries(
             (Some("http"), _, Some(s)) if s == "bearer" => ("Authorization".into(), "Bearer "),
             (kind, _, _) => {
                 notes.push(format!(
-                    "Security scheme {scheme} ({}) is not supported yet; operations that need only it get no auth.",
+                    "itda cannot yet use security scheme {scheme} ({}); operations that need only it get no auth.",
                     kind.unwrap_or("unknown")
                 ));
                 continue;

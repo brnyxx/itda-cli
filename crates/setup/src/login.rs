@@ -219,7 +219,7 @@ pub async fn form(
     let form = itda_html::evidence::sign_in_form(&html, &form_page.url, user_field, password_field)
         .ok_or_else(|| {
             usage(
-                format!("No sign-in form was found on {}", form_page.url),
+                format!("itda found no sign-in form on {}", form_page.url),
                 "Give the address of the page with the user name and password fields.",
             )
         })?;

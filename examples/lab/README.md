@@ -1,12 +1,11 @@
 # The intranet lab
 
-Self-hosted software behind a sign-in, so itda's sign-in paths are tested
-against real software rather than fixtures: Gitea, Redmine, WordPress,
-MediaWiki, a small legacy intranet written for the lab, and three uglier cases
-built the harder ways (a board inside an iframe, a table a script draws from an
-XHR, a session carried in the URL). Every public-site number itda reports is
-measured; this is where the numbers for "the old intranet behind a login" come
-from.
+The lab tests itda's sign-in paths against self-hosted software behind a sign-in
+rather than fixtures: Gitea, Redmine, WordPress, MediaWiki, a small legacy
+intranet written for the lab, and three uglier cases built the harder ways (a
+board inside an iframe, a table a script draws from an XHR, a session carried in
+the URL). Every public-site number itda reports is measured; this is where the
+numbers for "the old intranet behind a login" come from.
 
 Nothing here is published anywhere. Images are pinned by digest in
 `compose.yaml`, every port binds to 127.0.0.1, and the only account is
@@ -79,15 +78,15 @@ second call with the same approval is refused, the read shows the change,
 `itda audit --verify` passes and names the approval and the change, `itda
 check` says `ok`.
 
-The three uglier cases have their own tests. `framed`, `scripted` and
-`urltoken` run from the reviewed definition to an approved change the same way,
-and `urltoken` also has a setup test that signs in and keeps the `?sid=`
-session; `scripted` has a test that drives the browser watch, which needs
-`ITDA_TEST_BROWSER` set to a Chrome or Chromium binary (it is skipped without
-one) and runs on Unix only. The one itda cannot do today, `framed` from the
-shell, is written for the behaviour we want and marked `#[ignore = "setup does
-not sign in from a shell frame that redirects to a login"]`; `cargo test ... --
---ignored` shows it failing with the exact reason in the comment above it.
+The three uglier cases have their own tests. `framed`, `scripted` and `urltoken`
+run from the reviewed definition to an approved change the same way. `urltoken`
+also tests setup, signing in and keeping the `?sid=` session. `scripted` tests
+the browser watch on Unix only; it needs `ITDA_TEST_BROWSER` set to a Chrome or
+Chromium binary and skips the test without one. The one itda cannot do today,
+`framed` from the shell, is written for the behaviour we want and marked
+`#[ignore = "setup does not sign in from a shell frame that redirects to a login"]`.
+`cargo test ... -- --ignored` shows it failing with the exact reason in the
+comment above it.
 
 Sessions are sealed under each test's data directory (`vault.sealed`), with
 one master key per directory in the real system keyring, under `itda` /
@@ -121,49 +120,49 @@ branch (frame following and query sessions, `b35a612`, are in it). These three
 are the uglier ones, alongside the five earlier services.
 
 - **framed (8086).** `itda setup http://127.0.0.1:8086/` drafts one read,
-  `home`, of the shell's `<h1>` ("사내 인트라넷") and nothing else. Frame
-  following reaches a shell's own frames, and `itda draft page
-  http://127.0.0.1:8086/` sees the iframe and says so ("`/`: shows /frame/board
-  in a frame that was not read"): the frame answers `303` to `/frame/login`, a
-  redirect itda will not follow because it is a credential path, and setup does
-  not sign in from a shell whose frame wants a login, so the board two iframes
-  down is still never reached. Pointed at the frame instead, `itda setup
-  http://127.0.0.1:8086/frame/list --user lab` sees the redirect to the sign-in,
-  signs in through the form (2 cookies) and drafts the board the same way the
-  intranet is drafted: a list of ten records, a per-notice read, and a post with
-  a `_csrf` preflight. The reviewed `specs/framed.yaml` targets the frame: a read
-  answers with the notices (25 across three pages, ten per page), a post waits
-  for an approval and, once approved, lands once (a 303 to the new notice,
-  reported as landed); a second call with the same approval is refused, and
-  `itda audit --verify` and `itda check` pass. Signing in from the shell's own
-  frame is left for a follow-up.
+  `home`, of the shell's `<h1>` ("사내 인트라넷") and nothing else. Frame following
+  reaches a shell's own frames. `itda draft page http://127.0.0.1:8086/` sees
+  the iframe and says so ("`/`: shows /frame/board in a frame that was not
+  read"). The frame answers `303` to `/frame/login`, a redirect itda will not
+  follow because it is a credential path. Setup does not sign in from a shell
+  whose frame wants a login, so it still never reaches the board two iframes
+  down. Pointed at the frame instead,
+  `itda setup http://127.0.0.1:8086/frame/list --user lab` sees the redirect to
+  the sign-in and signs in through the form (2 cookies). It drafts the board the
+  same way as the intranet: a list of ten records, a per-notice read, and a post
+  with a `_csrf` preflight. The reviewed `specs/framed.yaml` targets the frame.
+  A read returns the notices (25 across three pages, ten per page). A post waits
+  for approval, then lands once (a 303 to the new notice, reported as landed).
+  itda refuses a second call with the same approval; `itda audit --verify` and
+  `itda check` pass. Signing in from the shell's own frame is left for a
+  follow-up.
 - **scripted (8087).** `itda setup http://127.0.0.1:8087/board --watch-only`
-  opens a browser, watches the page load (2 calls, 1 read drafted) and drafts
-  `list-notices` from the `GET /api/notices` the script makes by itself; the
-  read then answers with records. No post happens while itda only watches, so
-  the reviewed `specs/scripted.yaml` adds it by hand: `POST /api/notices` with
-  the session cookie and the `X-CSRF-Token` read from `<meta name="csrf-token">`
-  in a preflight step. With that, a post waits for an approval and lands once
-  (HTTP 201 with the created notice); `itda audit --verify` and `itda check`
-  pass. This case passes today, through the automatic browser watch.
+  opens a browser and watches the page load (2 calls, 1 read drafted). It drafts
+  `list-notices` from the script's own `GET /api/notices` call; the read then
+  returns records. No post happens while itda only watches, so the reviewed
+  `specs/scripted.yaml` adds it by hand: `POST /api/notices` with the session
+  cookie and the `X-CSRF-Token` read from `<meta name="csrf-token">` in a
+  preflight step. With that, a post waits for approval and lands once (HTTP 201
+  with the created notice). `itda audit --verify` and `itda check` pass. This
+  case passes today, through the automatic browser watch.
 - **urltoken (8088).** `itda setup http://127.0.0.1:8088/notices --user lab`
   sees the redirect to the sign-in and signs in through the form. The site
-  answers with a redirect to `/notices?sid=<token>` and sets no cookie; itda
-  reads the `sid` out of the redirect and drafts a `kind: browser` session with
-  `value_from: query:sid`, with `sid` dropped from the operations' inputs. The
-  drafted `list-notices` then answers with ten records, each `link` showing
-  `?sid=[private]` (the value is redacted). The reviewed `specs/urltoken.yaml`
-  adds a per-notice read and names the write `post-notice`: a read answers with
-  the notices, a post waits for an approval and, once approved, lands once (a
-  303 to the new notice at `/notices/{id}?sid=[private]`, reported as landed); a
-  second call with the same approval is refused, the `sid` never appears in the
-  audit log, and `itda audit --verify` and `itda check` pass.
+  redirects to `/notices?sid=<token>` and sets no cookie. itda reads `sid` from
+  the redirect, drafts a `kind: browser` session with `value_from: query:sid`,
+  and removes `sid` from the operations' inputs. The drafted `list-notices` then
+  returns ten records, each `link` showing `?sid=[private]` (itda redacts the
+  value). The reviewed `specs/urltoken.yaml` adds a per-notice read and names
+  the write `post-notice`. A read returns the notices. A post waits for
+  approval, then lands once (a 303 to the new notice at
+  `/notices/{id}?sid=[private]`, reported as landed). itda refuses a second call
+  with the same approval. The `sid` never appears in the audit log;
+  `itda audit --verify` and `itda check` pass.
 
-The test suite below encodes these outcomes: the framed, scripted and urltoken
-cases run to an approved change, with the browser watch and the url-token setup
-checked too, while the one the product cannot do today - signing in from a
-shell whose frame redirects to a login - is written for the behaviour we want
-and marked `#[ignore]` with that reason.
+The test suite below encodes these outcomes. The framed, scripted and urltoken
+cases run to an approved change, and it checks the browser watch and the
+url-token setup too. The one the product cannot do today, signing in from a
+shell whose frame redirects to a login, is written for the behaviour we want and
+marked `#[ignore]` with that reason.
 
 ## What it does not cover
 

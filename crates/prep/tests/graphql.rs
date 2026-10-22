@@ -170,7 +170,7 @@ fn a_schema_becomes_one_read_per_query_field_that_takes_plain_inputs() {
     let notes = draft.notes.join("\n");
     assert!(
         notes.contains(
-            "drafted searchNotices (filter), noticesByIds (ids) without the argument in brackets"
+            "drafted searchNotices (filter), noticesByIds (ids) without the bracketed object or list argument"
         ),
         "{notes}"
     );
@@ -186,7 +186,10 @@ fn a_schema_becomes_one_read_per_query_field_that_takes_plain_inputs() {
         notes.contains("left out purgeCache; the name says it changes something"),
         "{notes}"
     );
-    assert!(notes.contains("left out empty; no plain field"), "{notes}");
+    assert!(
+        notes.contains("left out empty; found no plain field"),
+        "{notes}"
+    );
     assert!(
         notes.contains("Mutation lists 2 changes (createNotice, deleteNotice)"),
         "{notes}"
