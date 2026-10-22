@@ -379,3 +379,307 @@ fn the_lab_definitions_are_valid() {
         assert!(login.path.starts_with('/'));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Three uglier intranets: the board inside an iframe (`framed`, 8086), a table
+// a script draws from an XHR (`scripted`, 8087), and a session carried in the
+// URL (`urltoken`, 8088). Each is measured in examples/lab/README.md. The
+// url-token session and the direct-frame board both run through a reviewed
+// definition now (b35a612 landed frame following and query sessions). The one
+// left is signing in from a shell whose frame redirects to a login; that test
+// states the behaviour we want and is marked `#[ignore]` with the reason.
+// ---------------------------------------------------------------------------
+
+/// Install a reviewed ugly-case definition, sign in through its form, run its
+/// read, and take its change from `approval_required` to landed-once, then
+/// verify the audit log and `itda check`. Shared by the framed and scripted
+/// reviewed-definition tests: their specs differ (an HTML frame, a JSON
+/// portal), but the path through itda is the same.
+fn reviewed_change_flow(site: &str, read: &str, change: &str) {
+    let home = home();
+    let added = itda(
+        &home,
+        &["add", spec_path(site).to_str().unwrap(), "--force"],
+    );
+    assert!(added.status.success(), "{}", text(&added));
+    let refused = itda_with_stdin(&home, &["login", site, "--user", USER], "not-the-password");
+    assert_eq!(refused.status.code(), Some(10), "{}", text(&refused));
+    let login = itda_with_stdin(&home, &["login", site, "--user", USER], PASSWORD);
+    assert!(login.status.success(), "{}", text(&login));
+    assert!(text(&login).contains("Signed in"), "{}", text(&login));
+    assert!(!text(&login).contains(PASSWORD));
+
+    let read_out = itda(&home, &["call", &format!("{site}.{read}"), "--json"]);
+    assert!(
+        read_out.status.success(),
+        "read failed: {}",
+        text(&read_out)
+    );
+    let before = json(&read_out);
+    assert!(
+        before["data"]["items"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty()),
+        "{before}"
+    );
+
+    let title = format!("lab test {}", &itda_types::util::id()[..8]);
+    let call: Vec<String> = vec![
+        "call".into(),
+        format!("{site}.{change}"),
+        "--title".into(),
+        title.clone(),
+        "--body".into(),
+        "written by the lab test".into(),
+        "--json".into(),
+    ];
+    let call: Vec<&str> = call.iter().map(String::as_str).collect();
+    let waiting = itda(&home, &call);
+    assert_eq!(waiting.status.code(), Some(20), "{}", text(&waiting));
+    let id = json(&waiting)["approval"].as_str().unwrap().to_owned();
+    let approved = approve_in_a_terminal(&home, &id);
+    assert!(approved.contains("Approved"), "{approved}");
+
+    let mut with_approval = call.clone();
+    with_approval.extend(["--approval", &id]);
+    let landed = itda(&home, &with_approval);
+    assert!(landed.status.success(), "change failed: {}", text(&landed));
+    assert_eq!(json(&landed)["status"], "ok");
+    let again = itda(&home, &with_approval);
+    assert_eq!(again.status.code(), Some(21), "{}", text(&again));
+
+    let after = itda(&home, &["call", &format!("{site}.{read}"), "--json"]);
+    assert!(
+        String::from_utf8_lossy(&after.stdout)
+            .to_lowercase()
+            .contains(&title.to_lowercase()),
+        "the change did not land: {}",
+        text(&after)
+    );
+
+    let audit = json(&itda(&home, &["audit", "--verify", "--json"]));
+    assert_eq!(audit["status"], "ok", "{audit}");
+    let check = itda(&home, &["check", site]);
+    assert!(check.status.success(), "{}", text(&check));
+    assert!(text(&check).contains("verdict  ok"), "{}", text(&check));
+
+    let _ = itda(&home, &["logout", site]);
+    forget_master_key(&home);
+    std::fs::remove_dir_all(home).ok();
+}
+
+/// A read action's name on an installed site, the first with `effect: read`.
+fn first_read(home: &Path, site: &str) -> Option<String> {
+    let listed = json(&itda(home, &["ls", site, "--json"]));
+    listed[0]["actions"]
+        .as_array()?
+        .iter()
+        .find(|a| a["effect"] == "read")
+        .and_then(|a| a["name"].as_str().map(str::to_owned))
+}
+
+#[test]
+fn framed_from_the_reviewed_definition_to_an_approved_change() {
+    if lab_is_on() {
+        reviewed_change_flow("framed", "list-notices", "post-notice");
+    }
+}
+
+// Frame following (b35a612) reaches a shell's own frames, but the framed
+// board sits behind a sign-in: `itda setup http://127.0.0.1:8086/` follows
+// the `/frame/board` iframe, which answers 303 to `/frame/login`. itda will
+// not follow a redirect to a sign-in page (it is a credential path), so the
+// frame is noted-but-not-read and setup never signs in from a shell whose
+// frame wants a login; it still drafts only the shell's `<h1>`. Signing in
+// from a frame's login redirect is orchestration in `setup::run`, not inside
+// the frames code, so it is left for a follow-up.
+#[test]
+#[ignore = "setup does not sign in from a shell frame that redirects to a login"]
+fn framed_setup_from_the_shell_reaches_the_board() {
+    if !lab_is_on() {
+        return;
+    }
+    let home = home();
+    let setup = itda_with_stdin(
+        &home,
+        &[
+            "setup",
+            "http://127.0.0.1:8086/",
+            "--name",
+            "framed",
+            "--user",
+            USER,
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        PASSWORD,
+    );
+    assert!(setup.status.success(), "{}", text(&setup));
+    let read = first_read(&home, "framed").expect("a drafted read");
+    let called = json(&itda(&home, &["call", &format!("framed.{read}"), "--json"]));
+    assert!(
+        called["data"]["items"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty()),
+        "setup from the shell should reach the framed board: {called}"
+    );
+    let _ = itda(&home, &["logout", "framed"]);
+    forget_master_key(&home);
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[test]
+fn scripted_from_the_reviewed_definition_to_an_approved_change() {
+    if lab_is_on() {
+        reviewed_change_flow("scripted", "list-notices", "post-notice");
+    }
+}
+
+/// The browser `ITDA_TEST_BROWSER` names, wrapped to run headless; `None` when
+/// the variable is not set. The scripted-watch path opens a real browser, so
+/// the test needs one, the same way the browser crate's own tests do.
+#[cfg(unix)]
+fn headless_browser(dir: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let binary = std::env::var_os("ITDA_TEST_BROWSER").filter(|b| !b.is_empty())?;
+    let wrapper = dir.join("browser");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nexec '{}' --headless=new --no-sandbox --no-proxy-server \"$@\"\n",
+            binary.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    Some(wrapper)
+}
+
+// The scripted portal draws its table from an XHR, so `itda setup --watch-only`
+// opens a browser, watches `GET /api/notices` and drafts the list read by
+// itself. Passes today; skipped without a browser to drive.
+#[cfg(unix)]
+#[test]
+fn scripted_setup_watches_the_xhr_and_drafts_the_list() {
+    if !lab_is_on() {
+        return;
+    }
+    let home = home();
+    let Some(browser) = headless_browser(&home) else {
+        eprintln!("skipped: set ITDA_TEST_BROWSER to run");
+        return;
+    };
+    let setup = command(
+        &home,
+        &[
+            "setup",
+            "http://127.0.0.1:8087/board",
+            "--name",
+            "scripted",
+            "--watch-only",
+            "--client",
+            "none",
+            "--yes",
+        ],
+    )
+    .env("ITDA_BROWSER", browser.to_str().unwrap())
+    .output()
+    .unwrap();
+    let said = text(&setup);
+    assert!(setup.status.success(), "{said}");
+    assert!(said.contains("Watched the page load"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/scripted/spec.yaml")).unwrap();
+    assert!(spec.contains("path: /api/notices"), "{spec}");
+    let called = json(&itda(
+        &home,
+        &["call", "scripted.list-notices", "--page", "1", "--json"],
+    ));
+    assert!(
+        called["data"]["items"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty()),
+        "{called}"
+    );
+    forget_master_key(&home);
+    std::fs::remove_dir_all(home).ok();
+}
+
+// `itda setup http://127.0.0.1:8088/notices --user lab` sees the redirect to
+// the sign-in, signs in through the form, reads the `sid` out of the sign-in's
+// redirect to `/notices?sid=<token>` (the site sets no cookie) and drafts a
+// kind: browser session with `value_from: query:sid`; `sid` is dropped from
+// the operation inputs. A drafted read then answers with records, with the
+// `sid` appended to the request and redacted from the result.
+#[test]
+fn urltoken_setup_carries_the_url_session_token() {
+    if !lab_is_on() {
+        return;
+    }
+    let home = home();
+    let setup = itda_with_stdin(
+        &home,
+        &[
+            "setup",
+            "http://127.0.0.1:8088/notices",
+            "--name",
+            "urltoken",
+            "--user",
+            USER,
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        PASSWORD,
+    );
+    assert!(
+        setup.status.success(),
+        "setup should carry the url token: {}",
+        text(&setup)
+    );
+    let read = first_read(&home, "urltoken").expect("a drafted read");
+    let called = json(&itda(
+        &home,
+        &["call", &format!("urltoken.{read}"), "--json"],
+    ));
+    assert!(
+        called["data"]["items"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty()),
+        "{called}"
+    );
+    let _ = itda(&home, &["logout", "urltoken"]);
+    forget_master_key(&home);
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[test]
+fn urltoken_from_the_reviewed_definition_to_an_approved_change() {
+    if lab_is_on() {
+        reviewed_change_flow("urltoken", "list-notices", "post-notice");
+    }
+}
+
+#[test]
+fn the_ugly_lab_definitions_are_valid() {
+    for (site, read, change) in [
+        ("framed", "list-notices", "post-notice"),
+        ("scripted", "list-notices", "post-notice"),
+        ("urltoken", "list-notices", "post-notice"),
+    ] {
+        let bytes = std::fs::read(spec_path(site)).unwrap();
+        let spec = itda_spec::parse(&bytes).unwrap();
+        assert_eq!(spec.site.name, site);
+        itda_policy::validate_spec(&spec).unwrap();
+        assert!(spec.op(read).is_ok());
+        assert!(spec.op(change).is_ok());
+        let login = spec
+            .auth
+            .iter()
+            .find_map(|auth| auth.login.as_ref())
+            .unwrap();
+        assert!(login.path.starts_with('/'));
+    }
+}

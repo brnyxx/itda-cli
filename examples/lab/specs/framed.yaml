@@ -1,0 +1,77 @@
+# The framed board in the lab (http://127.0.0.1:8086, intranet/framed.py):
+# the notices table lives two iframes deep, so `itda setup http://127.0.0.1:8086/`
+# finds only the shell. Point setup at the frame itself
+# (`itda setup http://127.0.0.1:8086/frame/list --user lab`) and it signs in and
+# drafts the board the same way the intranet does; this is that draft, reviewed:
+# the list read got a response check and the write form a name that says what it
+# does. Signing in from the shell (whose `/frame/board` iframe redirects to a
+# login itda will not follow) is not wired up yet, so point setup at the frame.
+spec_version: 1
+site:
+  name: framed
+  title: Framed intranet (lab)
+  base_url: http://127.0.0.1:8086
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:FRAMED_SESSION
+    login:
+      path: /frame/login
+      user: username
+      password: password
+operations:
+  - name: list-notices
+    desc: List the notices, newest first, ten per page
+    method: GET
+    path: /frame/list
+    auth: session
+    effect: read
+    evidence: GET /frame/list renders table#notices with one tr.notice per notice; anonymous readers are sent to /frame/login
+    query:
+      page: {type: int, default: 1}
+    pagination:
+      style: page
+      send: {query: page}
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+      html:
+        items: "tr.notice"
+        fields:
+          id: {selector: td.id, required: true}
+          title: {selector: td.title a, required: true}
+          link: {selector: td.title a, attribute: href, absolute_url: true}
+          author: {selector: td.author}
+          date: {selector: td.date}
+        limit: 50
+  - name: view-notice
+    desc: Read one notice by its number
+    method: GET
+    path: /frame/notices/{id}
+    auth: session
+    effect: read
+    evidence: the records of GET /frame/list link to /frame/notices/{id}
+    params:
+      id: {type: int, required: true}
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+  - name: post-notice
+    desc: Post a notice
+    method: POST
+    path: /frame/notices
+    auth: session
+    effect: write
+    evidence: the write form on /frame/list posts _csrf, title and body to /frame/notices and answers with a redirect to the notice
+    preflight:
+      - name: form
+        path: /frame/list
+        extract:
+          csrf: css:input[name="_csrf"]@value
+    body:
+      form:
+        title: {type: string, required: true}
+        body: {type: string}
+        _csrf: {type: string, default: "{{step.form.csrf}}"}

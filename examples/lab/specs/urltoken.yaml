@@ -1,0 +1,72 @@
+# The url-token board in the lab (http://127.0.0.1:8088, intranet/urltoken.py):
+# it keeps no cookie. The sign-in answers with a redirect to /notices?sid=<token>
+# and every link and form carries the sid; a request without a valid one is sent
+# to /login. `itda setup http://127.0.0.1:8088/notices --user lab` now signs in,
+# reads the sid out of the sign-in redirect and drafts a kind: browser session
+# whose value_from is query:sid; this is that draft, reviewed: the list read got
+# a response check, the write form a name that says what it does, and the
+# per-notice read was added. The sid is sealed in the keyring, appended to every
+# request's query and redacted from results, errors and the audit log.
+spec_version: 1
+site:
+  name: urltoken
+  title: Url-token intranet (lab)
+  base_url: http://127.0.0.1:8088
+auth:
+  - name: session
+    kind: browser
+    value_from: query:sid
+    login:
+      path: /login
+      user: username
+      password: password
+operations:
+  - name: list-notices
+    desc: List the notices, newest first, ten per page
+    method: GET
+    path: /notices
+    auth: session
+    effect: read
+    evidence: GET /notices renders table#notices with one tr.notice per notice; a request without a valid sid is sent to /login
+    query:
+      page: {type: int, default: 1}
+    pagination:
+      style: page
+      send: {query: page}
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+      html:
+        items: "tr.notice"
+        fields:
+          id: {selector: td.id, required: true}
+          title: {selector: td.title a, required: true}
+          link: {selector: td.title a, attribute: href, absolute_url: true}
+          author: {selector: td.author}
+          date: {selector: td.date}
+        limit: 50
+  - name: view-notice
+    desc: Read one notice by its number
+    method: GET
+    path: /notices/{id}
+    auth: session
+    effect: read
+    evidence: the records of GET /notices link to /notices/{id}
+    params:
+      id: {type: int, required: true}
+    response:
+      format: html
+      required_html_fields:
+        - {selector: "h1#board"}
+  - name: post-notice
+    desc: Post a notice
+    method: POST
+    path: /notices
+    auth: session
+    effect: write
+    evidence: the write form on /notices posts title and body to /notices and answers with a redirect to the new notice
+    body:
+      form:
+        title: {type: string, required: true}
+        body: {type: string}
