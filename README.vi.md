@@ -106,6 +106,11 @@ hợp nào; `itda draft page` hoặc `itda record` nói chúng đã bỏ gì.
   introspection: một lượt đọc cho mỗi operation hoặc trường truy vấn.
 - Trang web chạy GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
   WordPress, Gitea hoặc Forgejo: API riêng của chúng, từ một mẫu có sẵn.
+- Tệp vào và tệp ra: một liên kết mà trang đánh dấu là tệp đính kèm trở thành
+  một lượt đọc lưu tệp trên máy của bạn và trả về đường dẫn, kích thước và
+  hash, không bao giờ trả về nội dung. Một biểu mẫu có ô chọn tệp trở thành
+  một thay đổi gửi tệp bạn chỉ định; bạn phê duyệt nó theo tên, kích thước và
+  hash.
 - Bất cứ gì bạn tự ghi lại khi dùng, trong trình duyệt hoặc dưới dạng tệp HAR.
 
 **Chạy được sau khi bạn ghi lại**

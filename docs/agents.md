@@ -66,6 +66,27 @@ note before it says website data is not instructions. Results over 24 KB keep
 the start of their longest lists and say `"truncated": true`. Failures are tool
 errors with a code and a fix, so the agent can tell the user what to do.
 
+## Files
+
+A read declared `format: file` saves its answer on the user's computer and
+returns a manifest in `data`, never the bytes: `{path, bytes, media_type,
+sha256}`. The file lands under `files/<site>/` in the data directory, or where
+`itda call ... --out <dir>` says; the command prints `Saved <path> (<bytes>
+bytes, sha256 …)` once. Over MCP the result carries the manifest and a
+`resource_link` to the file, and the tool's description says so. A failed
+download says why in one word, and keeps nothing: `wrong_media_type` (the site
+answered with a page or another kind of content), `partial_answer` (a 206 or a
+short body), `empty_answer`, `too_large`. `itda check` skips file reads
+("saves a file").
+
+A change whose body carries a file takes the path of a file on the user's
+computer in the input its definition names. The user approves that exact file:
+the review shows its name, size and SHA-256, and other bytes under the same
+path withdraw the approval (`approval_expired`, `reason: file_changed`). A
+file that changes while it is being sent ends the call with
+`action_outcome_unknown` and `reason: file_changed`; as with any lost answer,
+never call it again on your own.
+
 ## Lists that go on
 
 A read with `pagination` in its definition returns `meta.next` if the site
@@ -155,7 +176,7 @@ branch on the exit code:
 | 0 | ok | |
 | 2 | bad input or unknown action (the remedy names the nearest one), a read that preflight would have turned into a change (`effect_changed`), or a read whose built request itda cannot classify (`effect_unknown`, the remedy says what is missing) | `itda describe <site>` |
 | 10 | signed out or no key | ask the user to run `itda login` |
-| 11 | the page no longer matches its definition, or the site answered the query with errors (`query_failed`) | update the definition |
+| 11 | the page no longer matches its definition, the site answered the query with errors (`query_failed`), or a file read got a page, a part or nothing (`wrong_media_type`, `partial_answer`, `empty_answer`) | update the definition, or check the inputs |
 | 12 | the site refused; it is paused | tell the user; `itda resume` after checking |
 | 13 | rate limited | wait as long as `retry_after` says, then retry the read |
 | 14 | the site refused this one request as not allowed (`api_denied`) | tell the user what `provider_reason` says; do not sign in again |
@@ -163,7 +184,7 @@ branch on the exit code:
 | 21 | approval used, rejected, expired or withdrawn because the inputs changed | call again for a new one |
 | 22 | itda sent a change; its outcome is unknown | check the site before retrying |
 | 23 | the `next` handle expired, or was for another call | call again without `--next` |
-| 30 | network error | retry later |
+| 30 | network error, an answer over the read's size cap (`too_large`), or a turn lost during a long transfer (`request_lease_lost`) | retry later |
 
 With `--json`, itda prints errors on stdout as
 `{"status": "<code>", "message": …, "remedy": …}` plus details such as

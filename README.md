@@ -105,6 +105,10 @@ Every line here is true of the code today. `itda setup` says which case it met;
   endpoint that answers introspection: one read per operation or query field.
 - Sites that run GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
   WordPress, Gitea or Forgejo: their own API, from a ready-made template.
+- Files in and files out: a link the page labels as an attachment becomes a
+  read that saves the file on your computer and returns its path, size and
+  hash, never the bytes. A form with a file control becomes a change that
+  sends a file you name; you approve it by name, size and hash.
 - Anything you recorded yourself using, in your browser or as a HAR file.
 
 **Works after you record it**

@@ -49,6 +49,7 @@ window.ITDA_I18N["ko"] = {
   "scope.y5b": "프레임으로 짜인 페이지, 프레임이 따로 로그인을 요구해도",
   "scope.y6": "사이트가 내놓은 OpenAPI 설명이나 GraphQL 엔드포인트",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "첨부 파일: 내려받기는 내 컴퓨터에 저장, 보내기는 내가 지정한 파일을 해시로 허락한 뒤에",
   "scope.y8": "내가 직접 쓰는 모습을 녹화한 것이면 무엇이든",
   "scope.rec": "녹화하면 됩니다",
   "scope.r1": "그냥 가져오면 아무것도 안 보이고 스스로 불러오는 것도 없는 페이지. 내가 클릭하거나 검색하거나 로그인한 뒤에야 가져오는 것",

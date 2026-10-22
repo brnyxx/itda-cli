@@ -63,6 +63,7 @@ window.ITDA_I18N["ja"] = {
   "scope.y5b": "フレームで組まれたページ。フレームが別にサインインを求めても",
   "scope.y6": "サイトが公開している OpenAPI 説明や GraphQL エンドポイント",
   "scope.y7": "GitLab、Jira、Confluence、Redmine、Discourse、MediaWiki、WordPress、Gitea",
+  "scope.y8b": "添付ファイル: ダウンロードはあなたのコンピューターに保存、送信はあなたが指定したファイルをハッシュで承認した後に",
   "scope.y8": "あなたが自分で使う様子を記録したものなら何でも",
   "scope.rec": "記録すれば動く",
   "scope.r1": "通常の取得では内容を読み取れず、自動でも何も読み込まないページ。クリック、検索、サインインの操作後にのみデータを取得するもの",

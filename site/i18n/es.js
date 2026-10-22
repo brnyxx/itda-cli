@@ -63,6 +63,7 @@ window.ITDA_I18N["es"] = {
   "scope.y5b": "Páginas hechas de marcos, incluso cuando un marco pide su propio inicio de sesión",
   "scope.y6": "Una descripción OpenAPI o un endpoint GraphQL que publique el sitio",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "Adjuntos: una descarga guardada en tu ordenador, un archivo que tú indicas enviado después de aprobarlo por su hash",
   "scope.y8": "Cualquier cosa que te hayas grabado usando",
   "scope.rec": "funciona después de grabarlo",
   "scope.r1": "Una página que no muestra nada con una descarga simple y no carga nada por sí sola. Solo descarga datos después de que haces clic, buscas o inicias sesión",

@@ -32,7 +32,27 @@ inputs, the agent asks again for you to review them.
 
 An approval covers one request: the site, action, account, every input, the
 definition (by hash) and the credential (by fingerprint). Changing any of them
-needs a new approval. It expires five minutes after the request or five minutes
+needs a new approval.
+
+A change that sends a file shows the file instead of the path input, by name,
+size and SHA-256:
+
+```console
+$ itda approve 4c0d0f2e6b3b4ad8a0c1d9e7f5a2b3c4
+attach-file wants to change Sandbox intranet (sandbox) as account default:
+  does         Attach a file to a notice
+  request      POST http://127.0.0.1:8787/board/42/attach
+  file         plan.csv (8 bytes, sha256 3a1f0c…)
+  memo         Q4 plan
+Approve this change? [y/N] y
+```
+
+The approval is for those bytes. If the file under that path changes before
+the agent calls again, the approval is withdrawn (`approval_expired` with
+`reason: file_changed`) and the agent asks for a new one. If it changes while
+itda is sending it, the send stops and the call ends with
+`action_outcome_unknown` and `reason: file_changed`. The audit log records the
+hash of the file a change sent, never its path or contents. It expires five minutes after the request or five minutes
 after you approve it. itda uses an approval once, before sending anything, so it
 never replays a failed change. `itda logout`, `itda remove`, a new `itda login`
 and replacing a definition (`itda setup`, `itda refresh`, `itda add --force`,

@@ -63,6 +63,7 @@ window.ITDA_I18N["fr"] = {
   "scope.y5b": "Pages faites de cadres, même quand un cadre demande sa propre connexion",
   "scope.y6": "Une description OpenAPI ou un point d'accès GraphQL publié par le site",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "Pièces jointes : un téléchargement enregistré sur votre ordinateur, un fichier que vous désignez envoyé après votre approbation par hachage",
   "scope.y8": "Tout ce que vous avez enregistré en l'utilisant vous-même",
   "scope.rec": "marche après enregistrement",
   "scope.r1": "Une page qui ne montre rien à une simple récupération et ne charge rien d'elle-même. Elle ne récupère quelque chose qu'après un clic, une recherche ou une connexion",

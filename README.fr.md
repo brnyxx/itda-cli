@@ -115,6 +115,12 @@ côté.
 - Sites qui tournent sous GitLab, Jira, Confluence, Redmine, Discourse,
   MediaWiki, WordPress, Gitea ou Forgejo : leur propre API, à partir d'un modèle
   tout prêt.
+- Fichiers entrants et sortants : un lien que la page présente comme pièce
+  jointe devient une lecture qui enregistre le fichier sur votre ordinateur et
+  renvoie son chemin, sa taille et son hachage, jamais les octets. Un
+  formulaire avec un champ de fichier devient une modification qui envoie un
+  fichier que vous désignez ; vous l'approuvez par son nom, sa taille et son
+  hachage.
 - Tout ce que vous avez enregistré en l'utilisant vous-même, dans votre
   navigateur ou sous forme de fichier HAR.
 

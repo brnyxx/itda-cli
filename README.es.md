@@ -114,6 +114,11 @@ se encontró; `itda draft page` o `itda record` dicen qué dejaron fuera.
   de consulta.
 - Sitios que ejecutan GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
   WordPress, Gitea o Forgejo: su propia API, desde una plantilla ya hecha.
+- Archivos de entrada y de salida: un enlace que la página marca como adjunto
+  se convierte en una lectura que guarda el archivo en tu ordenador y devuelve
+  su ruta, tamaño y hash, nunca los bytes. Un formulario con un campo de
+  archivo se convierte en un cambio que envía un archivo que tú indicas; lo
+  apruebas por nombre, tamaño y hash.
 - Cualquier cosa que te hayas grabado usando, en tu navegador o como archivo
   HAR.
 

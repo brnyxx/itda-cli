@@ -113,6 +113,11 @@ weggelassen haben.
 - Sites, die GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
   WordPress, Gitea oder Forgejo betreiben: deren eigene API, aus einer fertigen
   Vorlage.
+- Dateien herein und heraus: ein Link, den die Seite als Anhang kennzeichnet,
+  wird zu einem Lesevorgang, der die Datei auf Ihrem Computer speichert und
+  ihren Pfad, ihre Größe und ihren Hash zurückgibt, nie die Bytes. Ein
+  Formular mit einem Dateifeld wird zu einer Änderung, die eine von Ihnen
+  benannte Datei sendet; Sie geben sie nach Name, Größe und Hash frei.
 - Alles, was Sie selbst beim Benutzen aufgezeichnet haben, im Browser oder als
   HAR-Datei.
 

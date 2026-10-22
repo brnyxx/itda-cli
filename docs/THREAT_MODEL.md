@@ -13,6 +13,7 @@ from the roadmap that are not built yet.
 - The user's accounts on those websites (what a change can do to them)
 - The user's local network (what a request can reach)
 - The record of what was done (audit trail)
+- Files on disk: attachments itda saved, and files the user sends
 
 ## Threats and controls
 
@@ -27,6 +28,8 @@ from the roadmap that are not built yet.
 | Malicious or altered spec pack | Registry supply chain | itda refuses unsafe specs before install and names the problems | Signed packs, hash-locked installs, re-consent when a pack asks for more |
 | Local HTTP API abuse | A web page calls localhost | No local server exists yet | Off by default, token required, `Origin` and `Host` checks |
 | Audit tampering | Hiding what was done | The audit log is append-only and hash-chained. `itda audit --verify` names the first changed record. itda logs changes before sending. If a process stops before recording an outcome, `itda audit` and `itda doctor` show the change as unknown. itda reports a change that never left the machine as not sent. | Signed checkpoints kept outside the device |
+| A site answers a file read with something else | A sign-in page, an error page or a part of the file in place of the attachment | itda streams a file read to a temporary name and seals it only when the status, media type, size and completeness match the definition; an HTML answer counts only when the site marks it an attachment. Nothing is kept from a failed answer. The name comes from the site's `Content-Disposition` or the address, reduced to plain characters, so it never leaves `files/<site>/` (or `--out`) or replaces a file there. The manifest carries the file's size and SHA-256; the agent gets the manifest and a link, never the bytes. | |
+| A file other than the one approved is sent | An agent swaps the file after approval, or the file changes while it is being sent | The approval names the file by name, size and SHA-256 and is bound to that hash; other bytes under the same path withdraw it. itda streams the file from one open handle, checks size and modification time before each chunk and the hash at the end, and aborts the send on a mismatch (`action_outcome_unknown`, `reason: file_changed`). The audit log records the hash. A body that carries a file is always a change, and goes only to the site's own origin. | |
 | Breaking a site's rules | Automating a site that refuses it, or hitting it with many requests at once | Honest user agent. All itda processes sharing a data directory send one request at a time per site, about 1.2 seconds apart; definitions can increase this gap, not reduce it. Reads wait out a short `Retry-After` once; a longer one stops the call. A block or challenge pauses the site until the user resumes it. | Pack metadata for terms and robots.txt |
 
 ## Out of scope
