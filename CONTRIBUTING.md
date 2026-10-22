@@ -108,10 +108,31 @@ A file that contains code derived from Hycli says so in its header comment,
 names the original file and describes what changed. Keep that header when you
 edit the file.
 
+## Versions
+
+itda is before 1.0, so the version says this:
+
+- **Minor** (`0.5.0` → `0.6.0`): new behaviour, and any change a person or an
+  agent has to adapt to (a renamed command or tool, a new exit code, a field
+  that is no longer accepted, a definition that now needs a different key).
+  Every change that touches `docs/SPEC.md` is a minor bump.
+- **Patch** (`0.5.0` → `0.5.1`): fixes only. Nothing new to learn.
+- **1.0.0** comes when the site definition format, the exit codes and the MCP
+  tools have gone one minor release without a change people had to adapt to.
+
+Each change that users will notice gets a line in `CHANGELOG.md` under
+`Unreleased`, in one of `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
+`Security`, each heading at most once. `cargo xtask check-changelog` (run by
+CI) checks that, that the newest release heading matches the workspace
+version, and that `site/index.html` and `docs/quickstart.md` print the same
+version.
+
 ## Releasing
 
-1. Move the `Unreleased` notes in CHANGELOG.md under the new version and bump
-   `version` in the root Cargo.toml.
+1. Move the `Unreleased` notes in CHANGELOG.md under the new version with the
+   date, bump `version` in the root Cargo.toml, and update the version shown
+   in `site/index.html` and `docs/quickstart.md`. `cargo xtask check-changelog`
+   passes when the four agree.
 2. On GitHub, open Actions → Release → Run workflow, and enter the tag, such as
    `v0.2.0`. The workflow builds every platform, creates the tag and publishes
    the release with the installers. Leave the default `dry-run` to build

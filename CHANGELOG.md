@@ -9,6 +9,11 @@ change the definition format or the CLI.
 
 ### Added
 
+- `cargo xtask check-changelog`, run by CI: the changelog has one of each
+  section per release, the newest release matches the workspace version, and
+  the landing page and quickstart print the same version. CONTRIBUTING.md
+  says what a minor and a patch version mean before 1.0.
+
 - Sign in with a password, without a browser: a `login` block on a `browser`
   credential names the site's sign-in page and its user and password fields,
   and `itda login <site> --user me` reads the page as itda, fills the form
@@ -139,6 +144,94 @@ change the definition format or the CLI.
   scripts: `extract: {build_id: "ssr:__NEXT_DATA__#/buildId"}`, so a token
   or build id that only lives there reaches the action's path or inputs.
   Only a string, number or boolean counts.
+
+- `AGENTS.md` and `skills/itda/SKILL.md` tell coding agents how to use itda:
+  discover actions, run reads, treat website text as data, wait for `itda
+  approve`, never retry a lost change, run `itda check` first when something
+  stops working. The MCP server's instructions say the same, shorter.
+- `itda feedback` prints a link to a new GitHub issue with the version, the
+  platform and the doctor checks filled in (never the data directory path)
+  and opens it; `--no-open` only prints. It sends nothing itself.
+- `itda check` ends each site with a verdict and what to do: `ok`,
+  `signed_out`, `site_changed`, `blocked` or `unreachable`. The exit code
+  follows the worst verdict, and `--json` carries it as `verdict` and per
+  site under `sites`.
+
+### Changed
+
+- `itda draft page` and `itda setup` on a page that refuses itda say what the
+  gate saw instead of `error[internal]: <url> answered HTTP 403`: the host is
+  behind Cloudflare, runs a bot manager or asks for a captcha
+  (`blocked_by_site`, exit 12), or limits how often it is read, with the wait
+  it asked for when it named one (`site_rate_limited`, exit 13), in English
+  or Korean. A captcha served with HTTP 200 is reported the same way, and a
+  page that sends itda on to a sign-in page says so (`auth_required`, exit
+  10) and points at recording.
+- A `Retry-After: 0`, or a date already past, no longer counts as a rate
+  limit: a site that sends it with every page is read as itself.
+- The landing page on phones: lighter glass, the setup dialog left out of the
+  hero stack, full-width buttons, tighter rhythm, terminal lines wrapped on
+  anything narrower than the two-column layout, and the sky drawn smaller
+  with the cursor effect only while a finger is down.
+- The landing page and both READMEs carry a prompt to hand to an agent: paste
+  it into Claude Code, Cursor or Codex with a site's address and the agent
+  installs itda, runs `itda setup <address> --client <app> -y` and starts
+  using the site.
+
+- The landing page has a living sky behind the whole page: liquid chrome
+  with striped, colour-split reflections and a holographic sheen, a wire
+  grid running to the horizon, and a field of points and threads that gather
+  around the cursor, with a website on the left and an agent on the right
+  (`site/sky.js`, three.js from cdnjs). It follows the scroll, draws one
+  still frame under reduced motion, and leaves the plain glow without WebGL.
+- The hero lost its badge and chips; the binary, platform and licence line
+  moved to the footer.
+- The landing page is laid out as a desktop. The hero stacks windows that
+  can be dragged: the first run, the actions it found, the setup progress,
+  an about box and a clock. Sections open with a numbered eyebrow and a
+  centred headline, every box is a window with a title bar and a dither
+  texture, and the risk comparison is two windows side by side, the
+  browser-driving agent's lane next to itda's.
+- The sky is now a living network: nodes spring home through a slow current,
+  threads join neighbours, packets of light run node to node and along the
+  handoff between the website and agent hubs. The cursor is a node too:
+  nearby nodes gather and orbit it, its motion leaves a wake, threads run
+  from it, and a click sends a ring through the field. Node count follows
+  the viewport, with a lower cap on touch screens.
+- The landing page's components now speak the same language as the sky:
+  smoked-glass panels with a chrome hairline and faint scanlines, chrome
+  headlines with a holographic accent, glossy pill buttons, Aqua-style
+  window lights on the terminal, and chrome coins for the step numbers.
+- `itda <address>` sets that site up, and `itda github` (or npm, crates-io,
+  pypi) adds the ready-made site and connects the agent apps found on this
+  computer; the README's one line is the one line you type. The tagline and
+  the landing page say so.
+
+- `action_outcome_unknown` now says that itda never resends a change on its
+  own, and the runtime tests prove it against a server that drops the
+  connection after taking the request.
+- A bare `itda` in a terminal says what it is and asks for one address, then
+  runs `itda setup` on it, so the first run is: type `itda`, paste, Enter.
+- `itda setup` finds the agent apps on this computer (Claude Desktop, Claude
+  Code, Cursor, Codex, or a project with a `.vscode` folder) and connects them
+  all after one Enter; the numbered list only appears when none is found.
+- `itda setup` asks whether the site needs a sign-in only when the page it
+  fetched has a password form; a page without one is used as it is.
+- The installer ends with "Open a new terminal window and type: itda".
+- At the first prompt, a ready-made site's name (`github`, `npm`, `crates-io`,
+  `pypi`) installs that site and connects the agent apps found on this
+  computer.
+- After adding itda to Claude Desktop on macOS, itda offers to restart the app
+  when it is open, or says that opening it is enough; for Claude Code it runs
+  `claude mcp add` itself when `claude` is on the PATH.
+- `itda doctor` lists the agent apps whose settings already start itda.
+
+### Removed
+
+- The `browser-fetch` and `browser` transports and the `derived` credential
+  kind, left over from the port: no code ran them, and a definition that named
+  them was accepted and then refused at run time. `itda add` now refuses them
+  with the field named.
 
 ### Fixed
 
@@ -280,98 +373,6 @@ change the definition format or the CLI.
   and one that does not parse leaves the page draft as it is. The
   header comment and each merged action's `evidence` name where it came from,
   and `itda setup` says what it read in one line.
-
-### Removed
-
-- The `browser-fetch` and `browser` transports and the `derived` credential
-  kind, left over from the port: no code ran them, and a definition that named
-  them was accepted and then refused at run time. `itda add` now refuses them
-  with the field named.
-
-### Changed
-
-- `itda draft page` and `itda setup` on a page that refuses itda say what the
-  gate saw instead of `error[internal]: <url> answered HTTP 403`: the host is
-  behind Cloudflare, runs a bot manager or asks for a captcha
-  (`blocked_by_site`, exit 12), or limits how often it is read, with the wait
-  it asked for when it named one (`site_rate_limited`, exit 13), in English
-  or Korean. A captcha served with HTTP 200 is reported the same way, and a
-  page that sends itda on to a sign-in page says so (`auth_required`, exit
-  10) and points at recording.
-- A `Retry-After: 0`, or a date already past, no longer counts as a rate
-  limit: a site that sends it with every page is read as itself.
-- The landing page on phones: lighter glass, the setup dialog left out of the
-  hero stack, full-width buttons, tighter rhythm, terminal lines wrapped on
-  anything narrower than the two-column layout, and the sky drawn smaller
-  with the cursor effect only while a finger is down.
-- The landing page and both READMEs carry a prompt to hand to an agent: paste
-  it into Claude Code, Cursor or Codex with a site's address and the agent
-  installs itda, runs `itda setup <address> --client <app> -y` and starts
-  using the site.
-
-- The landing page has a living sky behind the whole page: liquid chrome
-  with striped, colour-split reflections and a holographic sheen, a wire
-  grid running to the horizon, and a field of points and threads that gather
-  around the cursor, with a website on the left and an agent on the right
-  (`site/sky.js`, three.js from cdnjs). It follows the scroll, draws one
-  still frame under reduced motion, and leaves the plain glow without WebGL.
-- The hero lost its badge and chips; the binary, platform and licence line
-  moved to the footer.
-- The landing page is laid out as a desktop. The hero stacks windows that
-  can be dragged: the first run, the actions it found, the setup progress,
-  an about box and a clock. Sections open with a numbered eyebrow and a
-  centred headline, every box is a window with a title bar and a dither
-  texture, and the risk comparison is two windows side by side, the
-  browser-driving agent's lane next to itda's.
-- The sky is now a living network: nodes spring home through a slow current,
-  threads join neighbours, packets of light run node to node and along the
-  handoff between the website and agent hubs. The cursor is a node too:
-  nearby nodes gather and orbit it, its motion leaves a wake, threads run
-  from it, and a click sends a ring through the field. Node count follows
-  the viewport, with a lower cap on touch screens.
-- The landing page's components now speak the same language as the sky:
-  smoked-glass panels with a chrome hairline and faint scanlines, chrome
-  headlines with a holographic accent, glossy pill buttons, Aqua-style
-  window lights on the terminal, and chrome coins for the step numbers.
-- `itda <address>` sets that site up, and `itda github` (or npm, crates-io,
-  pypi) adds the ready-made site and connects the agent apps found on this
-  computer; the README's one line is the one line you type. The tagline and
-  the landing page say so.
-
-### Added
-
-- `AGENTS.md` and `skills/itda/SKILL.md` tell coding agents how to use itda:
-  discover actions, run reads, treat website text as data, wait for `itda
-  approve`, never retry a lost change, run `itda check` first when something
-  stops working. The MCP server's instructions say the same, shorter.
-- `itda feedback` prints a link to a new GitHub issue with the version, the
-  platform and the doctor checks filled in (never the data directory path)
-  and opens it; `--no-open` only prints. It sends nothing itself.
-- `itda check` ends each site with a verdict and what to do: `ok`,
-  `signed_out`, `site_changed`, `blocked` or `unreachable`. The exit code
-  follows the worst verdict, and `--json` carries it as `verdict` and per
-  site under `sites`.
-
-### Changed
-
-- `action_outcome_unknown` now says that itda never resends a change on its
-  own, and the runtime tests prove it against a server that drops the
-  connection after taking the request.
-- A bare `itda` in a terminal says what it is and asks for one address, then
-  runs `itda setup` on it, so the first run is: type `itda`, paste, Enter.
-- `itda setup` finds the agent apps on this computer (Claude Desktop, Claude
-  Code, Cursor, Codex, or a project with a `.vscode` folder) and connects them
-  all after one Enter; the numbered list only appears when none is found.
-- `itda setup` asks whether the site needs a sign-in only when the page it
-  fetched has a password form; a page without one is used as it is.
-- The installer ends with "Open a new terminal window and type: itda".
-- At the first prompt, a ready-made site's name (`github`, `npm`, `crates-io`,
-  `pypi`) installs that site and connects the agent apps found on this
-  computer.
-- After adding itda to Claude Desktop on macOS, itda offers to restart the app
-  when it is open, or says that opening it is enough; for Claude Code it runs
-  `claude mcp add` itself when `claude` is on the PATH.
-- `itda doctor` lists the agent apps whose settings already start itda.
 
 ## [0.4.0] - 2026-10-22
 

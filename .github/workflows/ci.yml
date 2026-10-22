@@ -30,6 +30,9 @@ jobs:
         run: cargo fmt --all --check
       - name: Layers
         run: cargo xtask check-layers
+      - name: Changelog
+        if: runner.os == 'Linux'
+        run: cargo xtask check-changelog
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
