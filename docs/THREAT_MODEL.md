@@ -26,7 +26,7 @@ from the roadmap that are not built yet.
 | Malicious or altered spec pack | Registry supply chain | Unsafe specs refused before install with named problems | Signed packs, hash-locked installs, re-consent when a pack asks for more |
 | Local HTTP API abuse | A web page calls localhost | No local server exists yet | Off by default, token required, `Origin` and `Host` checks |
 | Audit tampering | Hiding what was done | Append-only, hash-chained audit log; `itda audit --verify` names the first changed record; changes are logged before sending | Signed checkpoints kept outside the device |
-| Breaking a site's rules | Automating a site that refuses it | Honest user agent; block or challenge pauses the site until the user resumes it | Pack metadata for terms and robots.txt |
+| Breaking a site's rules | Automating a site that refuses it, or hitting it with many requests at once | Honest user agent; one request at a time per site, spaced about 1.2 seconds apart by every itda process on the same data directory, with a definition able to ask for more room but not less; a short `Retry-After` is waited out once for reads, a longer one stops the call; block or challenge pauses the site until the user resumes it | Pack metadata for terms and robots.txt |
 
 ## Out of scope
 

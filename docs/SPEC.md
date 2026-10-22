@@ -181,6 +181,17 @@ operations:
 language). Headers that imitate a browser (`sec-*`, client hints) are refused;
 see [HONEST_CLIENT.md](HONEST_CLIENT.md).
 
+`defaults.interval` is the least time between two requests to the site,
+written as `2s` or `500ms`. itda sends one request at a time to a site and
+leaves about 1.2 seconds between them on its own; a definition can ask for
+more room (up to 30 seconds), never for less. Use it when the site's terms
+name a rate, or when `itda check` keeps running into `site_rate_limited`.
+
+```yaml
+defaults:
+  interval: 2s
+```
+
 ## `operations`
 
 Each operation is one action, called as `itda call <site>.<name>`.

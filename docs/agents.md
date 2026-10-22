@@ -101,7 +101,7 @@ branch on the exit code:
 | 10 | signed out or no key | ask the user to run `itda login` |
 | 11 | the page no longer matches its definition | update the definition |
 | 12 | the site refused; it is paused | tell the user; `itda resume` after checking |
-| 13 | rate limited | wait |
+| 13 | rate limited | wait as long as `retry_after` says, then retry the read |
 | 20 | needs approval, or changes are off | ask the user to run `itda approve <id>` |
 | 21 | approval used, rejected, expired or for other inputs | call again for a new one |
 | 22 | a change was sent but its outcome is unknown | check the site before retrying |

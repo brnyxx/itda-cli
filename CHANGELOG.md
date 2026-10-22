@@ -7,6 +7,22 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- `defaults.interval` in a site definition asks for more time between
+  requests to that site (`2s`, `500ms`, up to 30 s). itda's own pace, one
+  request at a time per site about 1.2 seconds apart, is the floor; a
+  definition can only slow it down. A value that is not a time is refused
+  by `itda add`.
+- A site that answers a read with 429 or 503 and a `Retry-After` of ten
+  seconds or less gets that wait, once, and the read is tried again. A longer
+  wait stops the read with `site_rate_limited`, `itda check` reports the site
+  as `blocked`, and the error, the check result (`retry_after_s`) and the MCP
+  server instructions say how long the site asked for. A change is never sent
+  twice.
+- Requests queued in one process now take turns in order instead of polling
+  the shared gate against each other.
+
 ### Changed
 
 - The landing page has a living sky behind the whole page: liquid chrome
