@@ -23,6 +23,11 @@
 //! With an audit log, every call is recorded with its outcome, and a change
 //! is recorded before it is sent: if that record cannot be written, the
 //! change is not sent.
+//!
+//! A change may name the read that shows it landed (`confirm`). When its
+//! answer is lost, the runtime runs that read once, as a read, and reports
+//! `landed`, `not_found` or `unknown` next to `action_outcome_unknown`. It
+//! never resends the change; see `check_outcome`.
 pub mod audit;
 mod pagination;
 mod preflight;
@@ -34,7 +39,7 @@ use itda_policy::{
 use itda_spec::{Operation, Spec, interpolate_template_str};
 use itda_types::{
     error::{AppError, AppResult, usage},
-    json::resolve_pointer,
+    json::{resolve_all, resolve_pointer},
     url::{same_site_origin, validate_url},
     util,
 };
@@ -97,6 +102,18 @@ pub struct Meta {
     pub next: Option<String>,
 }
 
+/// What the confirming read said about a change whose answer was lost.
+#[derive(Clone, Debug, Serialize)]
+pub struct OutcomeCheck {
+    /// The read that was run.
+    pub read: String,
+    /// `landed`, `not_found` or `unknown`.
+    pub result: &'static str,
+    /// Why the read failed, when it did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 impl Runtime {
     pub fn new(net: Arc<Network>, vault: Arc<Vault>) -> Self {
         Self {
@@ -129,7 +146,17 @@ impl Runtime {
 
     pub async fn call(&self, spec: &Spec, call: Call) -> AppResult<Envelope> {
         let mut reclassified = None;
-        let result = self.run(spec, &call, &mut reclassified).await;
+        let mut result = self.run(spec, &call, &mut reclassified).await;
+        let mut check = None;
+        if let Err(error) = &mut result
+            && error.public_code == "action_outcome_unknown"
+            && let Ok(op) = spec.op(&call.action)
+            && let Some(confirm) = &op.confirm
+        {
+            let outcome = self.check_outcome(spec, op, confirm, &call).await;
+            describe_outcome(error, &outcome);
+            check = Some(outcome);
+        }
         if let Some(log) = &self.audit {
             let mut event = self.event(spec, &call, "call");
             if let Some(reason) = reclassified {
@@ -147,6 +174,10 @@ impl Runtime {
                         event.approval = id.to_owned();
                     }
                 }
+            }
+            if let Some(check) = &check {
+                event.outcome_check = check.result.into();
+                event.confirm_read = check.read.clone();
             }
             // The call already happened; a failed record must not hide its
             // result. Changes were recorded before they were sent.
@@ -173,6 +204,50 @@ impl Runtime {
             inputs: call.args.clone(),
             ..audit::Event::default()
         }
+    }
+
+    /// Run the read `confirm` names once, with its defaults and the change's
+    /// account, and look for the change's input in its answer. This is a
+    /// read like any other: it waits for its turn at the gate and pauses the
+    /// site on a block. Only the first page is read. Nothing is resent.
+    async fn check_outcome(
+        &self,
+        spec: &Spec,
+        op: &Operation,
+        confirm: &itda_spec::Confirm,
+        call: &Call,
+    ) -> OutcomeCheck {
+        let read = Call {
+            action: confirm.read.clone(),
+            account: call.account.clone(),
+            ..Call::default()
+        };
+        let outcome = |result: &'static str, error: Option<String>| OutcomeCheck {
+            read: confirm.read.clone(),
+            result,
+            error,
+        };
+        // The read is run like any read: one whose rendered request asks
+        // for a change goes the way of a change, and so is never sent here.
+        let mut reclassified = None;
+        let envelope = match self.run(spec, &read, &mut reclassified).await {
+            Ok(envelope) => envelope,
+            Err(error) => return outcome("unknown", Some(error.public_code)),
+        };
+        let expected = confirm.matching.input().and_then(|(_, name)| {
+            call.args.get(name).cloned().or_else(|| {
+                op.input(name)
+                    .and_then(|param| param.default.as_ref())
+                    .map(util::plain)
+            })
+        });
+        let Some(expected) = expected else {
+            return outcome("unknown", Some("input_missing".into()));
+        };
+        let found = resolve_all(&envelope.data, &confirm.matching.pointer)
+            .into_iter()
+            .any(|value| util::plain(value).trim() == expected.trim());
+        outcome(if found { "landed" } else { "not_found" }, None)
     }
 
     /// `reclassified` is set when a declared read was treated as a change
@@ -370,6 +445,28 @@ impl Runtime {
                             value: reason.into(),
                         });
                     }
+                    // The same change was sent before, its answer was lost,
+                    // and the confirming read showed it landed: the person
+                    // sees that before deciding to send it again.
+                    let landed = self.audit.as_ref().and_then(|log| {
+                        log.landed_before(
+                            &spec.site.name,
+                            &op.name,
+                            &request.account_id,
+                            &call.args,
+                        )
+                        .ok()
+                        .flatten()
+                    });
+                    if let Some(previous) = &landed {
+                        inputs.push(ReviewInput {
+                            label: "note".into(),
+                            value: format!(
+                                "A change with these inputs was sent at {} and {} showed it landed. Approving sends it again.",
+                                previous.at, previous.confirm_read
+                            ),
+                        });
+                    }
                     let review = approvals
                         .request_approval(
                             execution,
@@ -399,6 +496,16 @@ impl Runtime {
                         "Ask the user to run `itda approve {}`, then call again with approval {}.",
                         review.id, review.id
                     );
+                    if let Some(previous) = landed {
+                        error = error.with("previous_outcome", "landed");
+                        error.msg.push_str(&format!(
+                            "; the same change was sent at {} and {} showed it landed",
+                            previous.at, previous.confirm_read
+                        ));
+                        error.remedy.push_str(
+                            " Tell the user the earlier one landed, so they can decline this one.",
+                        );
+                    }
                     return Err(error);
                 }
                 Some(id) => approvals.consume(id, &execution).await?,
@@ -798,6 +905,38 @@ fn graphql_errors(response: &itda_net::Response) -> bool {
         .is_some_and(|errors| !errors.is_empty())
 }
 
+/// Put what the confirming read said next to `action_outcome_unknown`: in
+/// the message, the remedy and `outcome_check`. The read's answer itself is
+/// not passed on, only whether the record was in it.
+fn describe_outcome(error: &mut AppError, check: &OutcomeCheck) {
+    let sent = if error.msg == error.public_code {
+        "the change was sent and its answer was lost".to_owned()
+    } else {
+        error.msg.clone()
+    };
+    let read = &check.read;
+    (error.msg, error.remedy) = match check.result {
+        "landed" => (
+            format!("{sent}; {read} shows the change landed"),
+            "The change is in: tell the user it landed and do not ask for it again.".into(),
+        ),
+        "not_found" => (
+            format!("{sent}; {read} does not show the change"),
+            "The site shows no trace of the change. itda never resends on its own; if the user still wants it, call again and they review a new approval.".into(),
+        ),
+        _ => (
+            format!(
+                "{sent}; the confirming read {read} failed too ({})",
+                check.error.as_deref().unwrap_or("unknown")
+            ),
+            error.remedy.clone(),
+        ),
+    };
+    if let Ok(value) = serde_json::to_value(check) {
+        error.extra.insert("outcome_check".into(), value);
+    }
+}
+
 /// Every input must be declared and not filled by a preflight step or by the
 /// previous page's answer; required ones and types are checked when the
 /// request is built.
@@ -809,16 +948,7 @@ fn check_inputs(op: &Operation, args: &BTreeMap<String, String>) -> AppResult<()
                 "Pass the meta.next handle as next instead.",
             ));
         }
-        let declared = op
-            .params
-            .get(name)
-            .or_else(|| op.query.get(name))
-            .or_else(|| {
-                op.body
-                    .as_ref()
-                    .and_then(|body| body.inputs().find(|(n, _)| *n == name).map(|(_, p)| p))
-            })
-            .is_some_and(|param| !param.from_step());
+        let declared = op.input(name).is_some_and(|param| !param.from_step());
         if !declared {
             let declared: Vec<&str> = op
                 .params

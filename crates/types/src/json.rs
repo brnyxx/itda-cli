@@ -44,10 +44,49 @@ pub fn resolve_pointer<'a>(value: &'a Value, pointer: &str) -> Option<&'a Value>
     }
 }
 
+/// Every value a pointer reaches when `*` stands for each element of a
+/// list (or each value of an object): `/items/*/title` is the title of every
+/// item. Without a `*` it is [`resolve_pointer`] with at most one result.
+pub fn resolve_all<'a>(value: &'a Value, pointer: &str) -> Vec<&'a Value> {
+    let Some((head, tail)) = pointer.split_once("/*") else {
+        return resolve_pointer(value, pointer).into_iter().collect();
+    };
+    if !tail.is_empty() && !tail.starts_with('/') {
+        return Vec::new();
+    }
+    let Some(list) = resolve_pointer(value, head) else {
+        return Vec::new();
+    };
+    let elements: Vec<&Value> = match list {
+        Value::Array(items) => items.iter().collect(),
+        Value::Object(map) => map.values().collect(),
+        _ => return Vec::new(),
+    };
+    elements
+        .into_iter()
+        .flat_map(|element| resolve_all(element, tail))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_star_reaches_every_element_of_a_list() {
+        let value = json!({"items": [{"title": "a"}, {"title": "b"}, {}], "one": {"title": "c"}});
+        let titles: Vec<&str> = resolve_all(&value, "/items/*/title")
+            .into_iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert_eq!(titles, ["a", "b"]);
+        assert_eq!(resolve_all(&value, "/one/title"), [&json!("c")]);
+        assert_eq!(resolve_all(&value, "/*/title"), [&json!("c")]);
+        assert!(resolve_all(&value, "/items/*/missing").is_empty());
+        assert!(resolve_all(&value, "/items/*x").is_empty());
+        assert!(resolve_all(&value, "/none/*/title").is_empty());
+    }
 
     #[test]
     fn pointers_resolve_standard_and_slash_containing_keys() {

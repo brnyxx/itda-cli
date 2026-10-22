@@ -65,7 +65,7 @@ operations:
     path: /notices
     auth: session
     effect: write
-    evidence: the write form on /notices/new posts _csrf, title and body to /notices and answers with a redirect to the notice
+    evidence: the write form on /notices/new posts _csrf, title and body to /notices and answers with a redirect to the notice; GET /notices lists the new notice under title, so list-notices confirms it after a lost answer
     preflight:
       - name: form
         path: /notices/new
@@ -76,3 +76,6 @@ operations:
         title: {type: string, required: true}
         body: {type: string}
         _csrf: {type: string, default: "{{step.form.csrf}}"}
+    confirm:
+      read: list-notices
+      match: {pointer: /items/*/title, from: body.title}

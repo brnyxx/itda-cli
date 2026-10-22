@@ -114,5 +114,13 @@
   "query_missing": "{site} aceptó el inicio de sesión, pero no entregó el parámetro de consulta {name} que nombra su definición",
   "query_missing_fix": "Revisa value_from en la entrada auth de la definición; la clave debe aparecer en la redirección del inicio de sesión o en los enlaces de la primera página después de él.",
   "session_saved_query": "Sesión iniciada. itda selló el valor de sesión {name} de {site}/{account} bajo el directorio de datos con una clave en el llavero del sistema. Va en la dirección de cada petición al sitio; los agentes solo ven el id de la cuenta.",
-  "nothing_works": "Ninguna lectura funcionó; itda no guardó nada. Prueba `itda record {url}` y usa el sitio mientras observa."
+  "nothing_works": "Ninguna lectura funcionó; itda no guardó nada. Prueba `itda record {url}` y usa el sitio mientras observa.",
+  "outcome_landed": "El sitio no respondió, pero {read} muestra que el cambio se aplicó. Ya está hecho; no lo pidas de nuevo.",
+  "outcome_not_found": "El sitio no respondió y {read} no muestra el cambio. Si aún lo quieres, pídelo de nuevo y revisa la nueva aprobación; itda nunca reenvía por su cuenta.",
+  "outcome_unknown": "El sitio no respondió y la lectura de confirmación {read} también falló ({error}). Revisa el sitio antes de pedir el cambio de nuevo.",
+  "lost_answers": "{n} cambio(s) cuya respuesta se perdió tras el envío:",
+  "lost_landed": "{read} mostró que se aplicó",
+  "lost_not_found": "{read} no lo mostró",
+  "lost_unknown": "la lectura de confirmación {read} también falló",
+  "lost_unchecked": "sin lectura de confirmación; revisa el sitio"
 }

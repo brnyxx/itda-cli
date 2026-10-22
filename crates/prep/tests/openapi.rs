@@ -55,6 +55,8 @@ fn openapi3_becomes_a_valid_reviewed_draft() {
         "read-only fields are not inputs"
     );
     assert_eq!(operation_effect(create, &BTreeMap::new()), Effect::Write);
+    // GET /pets declares /items but not what a pet looks like: no confirm.
+    assert!(create.confirm.is_none(), "{}", draft.yaml);
 
     let delete = spec.op("delete-pet").unwrap();
     assert!(delete.auth.is_empty(), "oauth is not supported yet");

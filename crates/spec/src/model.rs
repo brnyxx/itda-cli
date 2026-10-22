@@ -167,6 +167,47 @@ pub struct Operation {
     /// [`Pagination`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pagination: Option<Pagination>,
+    /// For a change: the read that shows it landed, run once when the
+    /// change's answer is lost; see [`Confirm`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<Confirm>,
+}
+
+/// The read that confirms a change landed. When a change is sent and its
+/// answer is lost (`action_outcome_unknown`), itda runs this read once, as a
+/// read, and says whether the record is there. It never resends the change.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Confirm {
+    /// A read in the same definition whose answer lists the record, run
+    /// with its defaults and no other inputs.
+    pub read: String,
+    /// How to spot the record in the read's answer.
+    #[serde(rename = "match")]
+    pub matching: Match,
+}
+
+/// One value in the read's answer compared, as text, with one input of the
+/// change: `{pointer: /items/*/title, from: body.title}`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Match {
+    /// A JSON pointer into the read's answer as itda returns it (after
+    /// `extract_pointer` and `model`); `*` stands for every element of a
+    /// list.
+    pub pointer: String,
+    /// The change's input the value must equal: `body.title`, `query.q` or
+    /// `params.id`.
+    pub from: String,
+}
+
+impl Match {
+    /// Where the input is declared (`params`, `query` or `body`) and its
+    /// name, when `from` has that shape.
+    pub fn input(&self) -> Option<(&str, &str)> {
+        let (place, name) = self.from.split_once('.')?;
+        (matches!(place, "params" | "query" | "body") && !name.is_empty()).then_some((place, name))
+    }
 }
 
 /// How a read turns pages. The marker for the next page is found in the
@@ -264,6 +305,18 @@ pub struct ResponseExpectation {
 }
 
 impl Operation {
+    /// The declared input `name`, wherever it is declared.
+    pub fn input(&self, name: &str) -> Option<&Param> {
+        self.params
+            .get(name)
+            .or_else(|| self.query.get(name))
+            .or_else(|| {
+                self.body
+                    .as_ref()
+                    .and_then(|body| body.inputs().find(|(n, _)| *n == name).map(|(_, p)| p))
+            })
+    }
+
     /// The input a pagination marker goes back in, when the read turns pages.
     pub fn pagination_input(&self) -> Option<&str> {
         self.pagination.as_ref().map(|p| p.input().0)

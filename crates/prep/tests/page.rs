@@ -85,6 +85,16 @@ fn a_board_page_becomes_a_list_a_search_a_post_and_a_feed() {
     let body = write.body.as_ref().unwrap();
     assert!(body.form["title"].required);
     assert!(body.form["_csrf"].from_step());
+    // The board lists what the form posts, by title: the change names it.
+    let confirm = write.confirm.as_ref().unwrap();
+    assert_eq!(confirm.read, "get-board");
+    assert_eq!(confirm.matching.pointer, "/items/*/title");
+    assert_eq!(confirm.matching.from, "body.title");
+    assert!(
+        write.evidence.contains("GET /board lists it under title"),
+        "{}",
+        write.evidence
+    );
     assert_eq!(write.preflight[0].path, "/board?page=1");
     assert_eq!(
         write.preflight[0].extract["csrf"],

@@ -378,6 +378,33 @@ fn the_lab_definitions_are_valid() {
             .unwrap();
         assert!(login.path.starts_with('/'));
     }
+    // Every reviewed definition, the uglier cases too, is valid and names
+    // the read that confirms its change after a lost answer.
+    let dir = spec_path("x").parent().unwrap().to_path_buf();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "yaml") {
+            continue;
+        }
+        let spec = itda_spec::parse(&std::fs::read(&path).unwrap()).unwrap();
+        itda_policy::validate_spec(&spec).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let changes: Vec<&itda_spec::Operation> = spec
+            .operations
+            .iter()
+            .filter(|op| op.effect == itda_spec::Effect::Write)
+            .collect();
+        assert!(!changes.is_empty(), "{}", path.display());
+        for change in changes {
+            let confirm = change
+                .confirm
+                .as_ref()
+                .unwrap_or_else(|| panic!("{}: {} has no confirm", path.display(), change.name));
+            assert_eq!(
+                spec.op(&confirm.read).unwrap().effect,
+                itda_spec::Effect::Read
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -554,6 +581,100 @@ fn scripted_from_the_reviewed_definition_to_an_approved_change() {
     if lab_is_on() {
         reviewed_change_flow("scripted", "list-notices", "post-notice");
     }
+}
+
+// The lossy portal (8089) saves a post and then drops the connection before
+// any answer. itda sends the change once, gets `action_outcome_unknown`, and
+// runs the read `confirm` names: the new title is in the list, so the check
+// says `landed`. Asking for the same change again tells the person so.
+#[test]
+fn lossy_a_lost_answer_is_confirmed_by_the_list_and_never_resent() {
+    if !lab_is_on() {
+        return;
+    }
+    let (site, read, change) = ("lossy", "list-notices", "post-notice");
+    let home = home();
+    let added = itda(
+        &home,
+        &["add", spec_path(site).to_str().unwrap(), "--force"],
+    );
+    assert!(added.status.success(), "{}", text(&added));
+    let login = itda_with_stdin(&home, &["login", site, "--user", USER], PASSWORD);
+    assert!(login.status.success(), "{}", text(&login));
+
+    let before = json(&itda(&home, &["call", &format!("{site}.{read}"), "--json"]));
+    let count_before = before["data"]["items"].as_array().unwrap().len();
+
+    let title = format!("lab test {}", &itda_types::util::id()[..8]);
+    let call: Vec<String> = vec![
+        "call".into(),
+        format!("{site}.{change}"),
+        "--title".into(),
+        title.clone(),
+        "--body".into(),
+        "written by the lab test".into(),
+        "--json".into(),
+    ];
+    let call: Vec<&str> = call.iter().map(String::as_str).collect();
+    let waiting = itda(&home, &call);
+    assert_eq!(waiting.status.code(), Some(20), "{}", text(&waiting));
+    let id = json(&waiting)["approval"].as_str().unwrap().to_owned();
+    let approved = approve_in_a_terminal(&home, &id);
+    assert!(approved.contains("Approved"), "{approved}");
+
+    let mut with_approval = call.clone();
+    with_approval.extend(["--approval", &id]);
+    let lost = itda(&home, &with_approval);
+    assert_eq!(lost.status.code(), Some(22), "{}", text(&lost));
+    let envelope = json(&lost);
+    assert_eq!(envelope["status"], "action_outcome_unknown");
+    assert_eq!(envelope["outcome_check"]["read"], read);
+    assert_eq!(envelope["outcome_check"]["result"], "landed", "{envelope}");
+
+    // The change is on the board exactly once.
+    let after = json(&itda(&home, &["call", &format!("{site}.{read}"), "--json"]));
+    let titles: Vec<&str> = after["data"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n["title"].as_str())
+        .collect();
+    assert_eq!(
+        titles.iter().filter(|t| **t == title).count(),
+        1,
+        "{titles:?}"
+    );
+    assert_eq!(
+        after["data"]["items"].as_array().unwrap().len(),
+        count_before + 1
+    );
+
+    // Asking again: a new approval that says the first one landed.
+    let again = itda(&home, &call);
+    assert_eq!(again.status.code(), Some(20), "{}", text(&again));
+    assert_eq!(json(&again)["previous_outcome"], "landed");
+    let pending = json(&itda(&home, &["approvals", "--json"]));
+    let note = pending[0]["inputs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["label"] == "note")
+        .unwrap();
+    assert!(
+        note["value"].as_str().unwrap().contains("showed it landed"),
+        "{note}"
+    );
+    let rejected = itda(&home, &["reject", pending[0]["id"].as_str().unwrap()]);
+    assert!(rejected.status.success());
+
+    let audit = json(&itda(&home, &["audit", "--verify", "--json"]));
+    assert_eq!(audit["status"], "ok", "{audit}");
+    let shown = text(&itda(&home, &["audit"]));
+    assert!(shown.contains("list-notices showed it landed"), "{shown}");
+
+    let _ = itda(&home, &["logout", site]);
+    forget_master_key(&home);
+    std::fs::remove_dir_all(home).ok();
 }
 
 /// The browser `ITDA_TEST_BROWSER` names, wrapped to run headless; `None` when

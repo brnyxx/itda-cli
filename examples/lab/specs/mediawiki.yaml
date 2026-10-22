@@ -39,7 +39,7 @@ operations:
     path: /api.php
     auth: session
     effect: write
-    evidence: "api.php action=edit with a csrf token from action=query&meta=tokens creates or replaces the page and answers {edit: {result: Success}}"
+    evidence: "api.php action=edit with a csrf token from action=query&meta=tokens creates or replaces the page and answers {edit: {result: Success}}; allpages lists it under title, so list-pages confirms it after a lost answer"
     preflight:
       - name: tokens
         path: /api.php?action=query&meta=tokens&format=json
@@ -56,3 +56,6 @@ operations:
     response:
       format: json
       required_pointers: [/edit/result]
+    confirm:
+      read: list-pages
+      match: {pointer: /*/title, from: body.title}

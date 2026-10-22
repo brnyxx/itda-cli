@@ -1900,7 +1900,34 @@ fn audit(home: &Path, limit: usize, verify: bool, as_json: bool) -> AppResult<Ex
     if !unfinished.is_empty() {
         println!("\n{}", unfinished_words(&unfinished));
     }
+    let lost: Vec<_> = log
+        .lost_answers()?
+        .into_iter()
+        .filter(|r| recent.iter().any(|shown| shown.seq == r.seq))
+        .collect();
+    if !lost.is_empty() {
+        println!("\n{}", lost_words(&lost));
+    }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Changes among the records shown whose answer was lost after sending,
+/// each with what the confirming read said.
+fn lost_words(lost: &[itda_runtime::audit::Record]) -> String {
+    let mut lines = vec![text::tf("lost_answers", &[("n", &lost.len().to_string())])];
+    for r in lost {
+        let said = match r.outcome_check.as_str() {
+            "landed" => text::tf("lost_landed", &[("read", &r.confirm_read)]),
+            "not_found" => text::tf("lost_not_found", &[("read", &r.confirm_read)]),
+            "unknown" => text::tf("lost_unknown", &[("read", &r.confirm_read)]),
+            _ => text::t("lost_unchecked").to_owned(),
+        };
+        lines.push(format!(
+            "  {}.{} (record {}, approval {}): {said}",
+            r.site, r.action, r.seq, r.approval
+        ));
+    }
+    lines.join("\n")
 }
 
 /// Changes that were about to be sent when the process stopped: nobody

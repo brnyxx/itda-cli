@@ -235,6 +235,27 @@ fn check_operation(
             "only a read turns pages; a change is sent once",
         );
     }
+    if let Some(confirm) = &op.confirm {
+        if operation_effect(op, &Default::default()) == Effect::Read {
+            out.add(
+                "data_invalid",
+                format!("{id}.confirm"),
+                "only a change names the read that confirms it",
+            );
+        }
+        if let Some(read) = sp.operations.iter().find(|o| o.name == confirm.read)
+            && operation_effect(read, &Default::default()) != Effect::Read
+        {
+            out.add(
+                "data_invalid",
+                format!("{id}.confirm.read"),
+                format!(
+                    "{} would change the site; a confirming read only reads",
+                    confirm.read
+                ),
+            );
+        }
+    }
     if let Some(pagination) = &op.pagination
         && pagination.next != "header:link"
         && !pagination.next.is_empty()

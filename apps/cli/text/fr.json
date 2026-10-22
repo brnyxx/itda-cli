@@ -114,5 +114,13 @@
   "query_missing": "{site} a accepté la connexion, mais n'a pas fourni le paramètre de requête {name} nommé dans sa définition",
   "query_missing_fix": "Vérifiez value_from dans l'entrée auth de la définition ; la clé doit apparaître dans la redirection de connexion ou dans les liens de la première page qui suit.",
   "session_saved_query": "Connecté. itda a scellé la valeur de session {name} de {site}/{account} dans le répertoire de données avec une clé dans le trousseau du système. Elle s'ajoute à l'adresse de chaque requête vers le site ; les agents ne voient que l'identifiant du compte.",
-  "nothing_works": "Aucune lecture n'a fonctionné ; itda n'a rien conservé. Essayez `itda record {url}` et utilisez le site pendant qu'il observe."
+  "nothing_works": "Aucune lecture n'a fonctionné ; itda n'a rien conservé. Essayez `itda record {url}` et utilisez le site pendant qu'il observe.",
+  "outcome_landed": "Le site n'a pas répondu, mais {read} montre que la modification a été appliquée. Elle est en place ; ne la redemandez pas.",
+  "outcome_not_found": "Le site n'a pas répondu et {read} ne montre pas la modification. Si vous la voulez toujours, redemandez-la et vérifiez la nouvelle approbation ; itda ne renvoie jamais de lui-même.",
+  "outcome_unknown": "Le site n'a pas répondu et la lecture de confirmation {read} a échoué aussi ({error}). Vérifiez le site avant de redemander la modification.",
+  "lost_answers": "{n} modification(s) dont la réponse a été perdue après l'envoi :",
+  "lost_landed": "{read} a montré qu'elle a été appliquée",
+  "lost_not_found": "{read} ne l'a pas montrée",
+  "lost_unknown": "la lecture de confirmation {read} a échoué aussi",
+  "lost_unchecked": "pas de lecture de confirmation ; vérifiez le site"
 }

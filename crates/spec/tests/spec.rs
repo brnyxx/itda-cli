@@ -424,6 +424,145 @@ operations:
 }
 
 #[test]
+fn a_change_may_name_the_read_that_confirms_it() {
+    let good = parse(
+        r#"
+spec_version: 1
+site: {name: board, base_url: https://board.example}
+operations:
+  - name: list-notices
+    method: GET
+    path: /api/notices
+    effect: read
+    evidence: doc
+    query:
+      q: {type: string}
+    response: {format: json, required_pointers: [/items]}
+  - name: create-notice
+    method: POST
+    path: /api/notices
+    effect: write
+    evidence: doc
+    body:
+      json:
+        title: {type: string, required: true}
+    confirm:
+      read: list-notices
+      match: {pointer: /items/*/title, from: body.title}
+"#,
+    );
+    assert!(good.validate().is_empty(), "{:?}", good.validate());
+    let confirm = good.op("create-notice").unwrap().confirm.as_ref().unwrap();
+    assert_eq!(confirm.read, "list-notices");
+    assert_eq!(confirm.matching.pointer, "/items/*/title");
+    assert_eq!(confirm.matching.input(), Some(("body", "title")));
+    assert!(good.op("list-notices").unwrap().confirm.is_none());
+    // Written back as given, under `match`.
+    let text = serde_norway::to_string(&good).unwrap();
+    assert!(text.contains("match:"), "{text}");
+    assert!(text.contains("from: body.title"), "{text}");
+    assert_eq!(text.matches("confirm:").count(), 1, "{text}");
+
+    let bad = parse(
+        r#"
+spec_version: 1
+site: {name: board, base_url: https://board.example}
+operations:
+  - name: list
+    method: GET
+    path: /items
+    effect: read
+    evidence: doc
+    confirm:
+      read: list
+      match: {pointer: /items/*/title, from: body.title}
+  - name: one
+    method: GET
+    path: /items/{id}
+    params: {id: {type: int}}
+    effect: read
+    evidence: doc
+  - name: a
+    method: POST
+    path: /items
+    effect: write
+    evidence: doc
+    body: {json: {title: {type: string, required: true}}}
+    confirm:
+      read: nowhere
+      match: {pointer: items.title, from: title}
+  - name: b
+    method: POST
+    path: /items
+    effect: write
+    evidence: doc
+    body:
+      json:
+        title: {type: string}
+        token: {type: string, default: "{{step.form.token}}"}
+        flag: {type: bool, required: true}
+    confirm:
+      read: a
+      match: {pointer: /items/*/title, from: body.title}
+  - name: c
+    method: POST
+    path: /items
+    effect: write
+    evidence: doc
+    body: {json: {title: {type: string, required: true}}}
+    confirm:
+      read: one
+      match: {pointer: /title, from: body.other}
+  - name: d
+    method: POST
+    path: /items
+    effect: write
+    evidence: doc
+    body:
+      json:
+        title: {type: string, required: true}
+        token: {type: string, default: "{{step.form.token}}"}
+        flag: {type: bool, required: true}
+    confirm:
+      read: list
+      match: {pointer: /items/*/token, from: body.token}
+  - name: e
+    method: POST
+    path: /items
+    effect: write
+    evidence: doc
+    body:
+      json:
+        flag: {type: bool, required: true}
+    confirm:
+      read: list
+      match: {pointer: /items/*/flag, from: body.flag}
+"#,
+    );
+    let details: Vec<String> = bad
+        .validate()
+        .into_iter()
+        .map(|issue| format!("{}: {}", issue.field, issue.detail))
+        .collect();
+    let text = details.join("\n");
+    for expected in [
+        "operations.list.confirm: only a change names the read that confirms it",
+        "operations.list.confirm: read must name another operation",
+        "operations.a.confirm: read names nowhere, which is not defined",
+        "operations.a.confirm: match.pointer must be a JSON pointer starting with /",
+        "operations.a.confirm: match.from must name an input as params.<name>, query.<name> or body.<name>",
+        "operations.b.confirm: a is not a read",
+        "operations.b.confirm: match.from names title, which the change may be sent without",
+        "operations.c.confirm: one needs id and a confirming read runs with its defaults alone",
+        "operations.c.confirm: match.from names other, which is not declared under body",
+        "operations.d.confirm: match.from names token, which a preflight step fills",
+        "operations.e.confirm: match.from names flag, whose type bool cannot be compared",
+    ] {
+        assert!(text.contains(expected), "{expected}\n{text}");
+    }
+}
+
+#[test]
 fn preflight_extracts_from_embedded_data_with_a_key_and_a_pointer() {
     let good = parse(
         r#"

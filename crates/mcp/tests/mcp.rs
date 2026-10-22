@@ -947,6 +947,178 @@ async fn a_server_pinned_to_one_site_stays_inside_it() {
     std::fs::remove_dir_all(home).ok();
 }
 
+// ---- A change whose answer is lost, confirmed by its read ----
+
+/// A site that keeps every POST and then drops the connection without an
+/// answer, while its GET lists what it kept.
+async fn lossy_site() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let kept: Arc<std::sync::Mutex<Vec<String>>> = Arc::default();
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut raw = Vec::new();
+            let mut buffer = [0u8; 4096];
+            let request = loop {
+                let n = socket.read(&mut buffer).await.unwrap_or(0);
+                if n == 0 {
+                    break String::from_utf8_lossy(&raw).into_owned();
+                }
+                raw.extend_from_slice(&buffer[..n]);
+                let text = String::from_utf8_lossy(&raw).into_owned();
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let length: usize = head
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse().unwrap_or(0))
+                        })
+                        .unwrap_or(0);
+                    if body.len() >= length {
+                        break text;
+                    }
+                }
+            };
+            if request.starts_with("POST") {
+                let body = request.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
+                if let Ok(json) = serde_json::from_str::<Value>(body)
+                    && let Some(title) = json["title"].as_str()
+                {
+                    kept.lock().unwrap().push(title.to_owned());
+                }
+                drop(socket);
+                continue;
+            }
+            let items: Vec<Value> = kept
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|title| json!({"title": title}))
+                .collect();
+            let body = json!({"items": items}).to_string();
+            let answer = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(answer.as_bytes()).await;
+            let _ = socket.shutdown().await;
+        }
+    });
+    base
+}
+
+/// The fixture with a `create-item` change that names `list-items` as the
+/// read showing a new item.
+fn confirming_spec(base: &str) -> itda_spec::Spec {
+    let mut value = serde_json::to_value(spec(base)).unwrap();
+    value["operations"].as_array_mut().unwrap().push(json!({
+        "name": "create-item", "desc": "Add an item", "method": "POST", "path": "/items",
+        "effect": "write", "evidence": "doc",
+        "body": {"json": {"title": {"type": "string", "required": true}}},
+        "confirm": {"read": "list-items", "match": {"pointer": "/items/*/title", "from": "body.title"}}
+    }));
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn a_lost_change_comes_back_with_its_outcome_check_and_in_the_audit() {
+    let base = lossy_site().await;
+    let home = std::env::temp_dir().join(format!("itda-mcp-lossy-{}", itda_types::util::id()));
+    let dir = home.join("specs/fixture");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.json"),
+        serde_json::to_vec(&serde_json::to_value(confirming_spec(&base)).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let store = Store::in_memory().unwrap();
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let net = Arc::new(Network::new(gate, true));
+    let vault = Arc::new(Vault::open(store.clone(), Arc::new(MemoryStore::default())).unwrap());
+    let approvals = Arc::new(itda_policy::Approvals::open(store).unwrap());
+    let audit = Arc::new(itda_runtime::audit::AuditLog::new(home.join("audit.jsonl")));
+    let runtime = Arc::new(
+        Runtime::new(net.clone(), vault.clone())
+            .with_approvals(approvals.clone())
+            .with_audit(audit.clone()),
+    );
+    let context = Arc::new(itda_setup::Context {
+        home: home.clone(),
+        net,
+        vault,
+        approvals: approvals.clone(),
+        audit,
+        runtime: runtime.clone(),
+        lang: "en".into(),
+    });
+    let server = Server::new(
+        runtime,
+        Catalog::new(vec![confirming_spec(&base)]),
+        Some(Mode::Direct),
+    )
+    .with_setup(context);
+    let mut client = Client::start(server).await;
+
+    let first = client
+        .call("fixture.create-item", json!({"title": "hello"}))
+        .await;
+    assert_eq!(first["structuredContent"]["status"], "approval_required");
+    let id = first["structuredContent"]["approval"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    approvals.claim(&id).await.unwrap();
+    let lost = client
+        .call(
+            "fixture.create-item",
+            json!({"title": "hello", "approval": id}),
+        )
+        .await;
+    assert_eq!(lost["isError"], true, "{lost}");
+    let content = &lost["structuredContent"];
+    assert_eq!(content["status"], "action_outcome_unknown");
+    assert_eq!(content["outcome_check"]["read"], "list-items");
+    assert_eq!(content["outcome_check"]["result"], "landed");
+    assert!(
+        content["remedy"]
+            .as_str()
+            .unwrap()
+            .contains("do not ask for it again"),
+        "{content}"
+    );
+    // Only the match result travels, never the read's answer.
+    assert!(!lost.to_string().contains("\"items\""), "{lost}");
+
+    let audit = client
+        .call("itda_manage", json!({"action": "audit", "site": "fixture"}))
+        .await;
+    let unknown = audit["structuredContent"]["unknown_outcome"]
+        .as_array()
+        .unwrap();
+    assert_eq!(unknown.len(), 1, "{audit}");
+    assert_eq!(unknown[0]["action"], "create-item");
+    assert_eq!(unknown[0]["approval"], id.as_str());
+    assert_eq!(unknown[0]["check"]["result"], "landed");
+    assert_eq!(unknown[0]["check"]["read"], "list-items");
+    assert!(
+        unknown[0]["outcome"]
+            .as_str()
+            .unwrap()
+            .contains("answer was lost")
+    );
+
+    // Asking for the same change again tells the agent the first one landed.
+    let again = client
+        .call("fixture.create-item", json!({"title": "hello"}))
+        .await;
+    assert_eq!(again["structuredContent"]["status"], "approval_required");
+    assert_eq!(again["structuredContent"]["previous_outcome"], "landed");
+    std::fs::remove_dir_all(home).ok();
+}
+
 // ---- Protocol 2026-07-28: forms come back as results ----
 
 /// A client on protocol 2026-07-28: no handshake, every request carries its

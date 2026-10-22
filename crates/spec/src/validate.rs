@@ -185,6 +185,9 @@ impl Spec {
                 if let Some(pagination) = &op.pagination {
                     check_pagination(op, pagination, &id, &mut out);
                 }
+                if let Some(confirm) = &op.confirm {
+                    check_confirm(self, op, confirm, &id, &mut out);
+                }
                 let path_names = path_vars(&op.path);
                 for n in &path_names {
                     if !op.params.contains_key(n) {
@@ -372,5 +375,116 @@ fn check_pagination(
             "a cursor input is filled from the previous answer: not required, no default".into(),
             "Declare it as {type: string}",
         );
+    }
+}
+
+/// A `confirm` block names a read of the same definition that runs on its
+/// defaults alone, a pointer into its answer and one input of the change to
+/// compare with. Whether the read really reads is for the policy layer.
+fn check_confirm(
+    spec: &Spec,
+    op: &crate::model::Operation,
+    confirm: &crate::model::Confirm,
+    id: &str,
+    out: &mut Vec<Issue>,
+) {
+    let field = format!("{id}.confirm");
+    let mut add = |detail: String, remedy: &str| {
+        out.push(Issue {
+            field: field.clone(),
+            detail,
+            remedy: remedy.into(),
+        });
+    };
+    if op.effect == crate::Effect::Read {
+        add(
+            "only a change names the read that confirms it".into(),
+            "Remove confirm from the read",
+        );
+    }
+    match spec.operations.iter().find(|o| o.name == confirm.read) {
+        None => add(
+            format!("read names {}, which is not defined", confirm.read),
+            "Name a read in the same definition",
+        ),
+        Some(read) if read.name == op.name => add(
+            "read must name another operation".into(),
+            "Name the read that lists the record",
+        ),
+        Some(read) => {
+            if read.effect != crate::Effect::Read {
+                add(
+                    format!("{} is not a read", confirm.read),
+                    "Name an operation with effect: read",
+                );
+            }
+            let needs: Vec<&str> = read
+                .params
+                .keys()
+                .chain(
+                    read.query
+                        .iter()
+                        .chain(read.body.iter().flat_map(|b| b.inputs()))
+                        .filter(|(_, p)| p.required && p.default.is_none())
+                        .map(|(n, _)| n),
+                )
+                .map(String::as_str)
+                .collect();
+            if !needs.is_empty() {
+                add(
+                    format!(
+                        "{} needs {} and a confirming read runs with its defaults alone",
+                        confirm.read,
+                        needs.join(", ")
+                    ),
+                    "Give the inputs a default or name another read",
+                );
+            }
+        }
+    }
+    let pointer = &confirm.matching.pointer;
+    if !pointer.starts_with('/') || pointer.len() > 512 {
+        add(
+            "match.pointer must be a JSON pointer starting with /".into(),
+            "Example: pointer: /items/*/title",
+        );
+    }
+    match confirm.matching.input() {
+        None => add(
+            "match.from must name an input as params.<name>, query.<name> or body.<name>".into(),
+            "Example: from: body.title",
+        ),
+        Some((place, name)) => {
+            let declared = match place {
+                "params" => op.params.get(name),
+                "query" => op.query.get(name),
+                _ => op
+                    .body
+                    .as_ref()
+                    .and_then(|body| body.inputs().find(|(n, _)| *n == name).map(|(_, p)| p)),
+            };
+            match declared {
+                None => add(
+                    format!("match.from names {name}, which is not declared under {place}"),
+                    "Name one of the change's inputs",
+                ),
+                Some(param) if param.from_step() => add(
+                    format!("match.from names {name}, which a preflight step fills"),
+                    "Compare an input the agent gives",
+                ),
+                Some(param) if !param.required && param.default.is_none() => add(
+                    format!("match.from names {name}, which the change may be sent without"),
+                    "Make the input required or give it a default",
+                ),
+                Some(param) if !matches!(param.kind.as_str(), "string" | "int" | "float") => add(
+                    format!(
+                        "match.from names {name}, whose type {} cannot be compared",
+                        param.kind
+                    ),
+                    "Compare a string or number input",
+                ),
+                Some(_) => {}
+            }
+        }
     }
 }

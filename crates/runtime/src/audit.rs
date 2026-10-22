@@ -33,6 +33,10 @@ pub struct Event {
     /// `ok` or the error code.
     pub outcome: String,
     pub http_status: u16,
+    /// For a change whose answer was lost: what the confirming read said,
+    /// `landed`, `not_found` or `unknown`, and the read's name.
+    pub outcome_check: String,
+    pub confirm_read: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -58,12 +62,27 @@ pub struct Record {
     pub outcome: String,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub http_status: u16,
+    /// What the confirming read said after a lost answer: `landed`,
+    /// `not_found` or `unknown`. Empty when no read was run.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub outcome_check: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub confirm_read: String,
     pub prev: String,
     pub hash: String,
 }
 
 fn is_zero(value: &u16) -> bool {
     *value == 0
+}
+
+/// A digest of the input values, so two calls with the same inputs can be
+/// told apart from two with different ones without keeping the values.
+fn inputs_digest(inputs: &BTreeMap<String, String>) -> AppResult<String> {
+    if inputs.is_empty() {
+        return Ok(String::new());
+    }
+    Ok(util::hash(&serde_json::to_vec(inputs)?))
 }
 
 impl Record {
@@ -104,13 +123,11 @@ impl AuditLog {
             account: event.account,
             approval: event.approval,
             inputs: event.inputs.keys().cloned().collect(),
-            inputs_digest: if event.inputs.is_empty() {
-                String::new()
-            } else {
-                util::hash(&serde_json::to_vec(&event.inputs)?)
-            },
+            inputs_digest: inputs_digest(&event.inputs)?,
             outcome: event.outcome,
             http_status: event.http_status,
+            outcome_check: event.outcome_check,
+            confirm_read: event.confirm_read,
             prev: last.map(|r| r.hash).unwrap_or_default(),
             hash: String::new(),
         };
@@ -161,6 +178,53 @@ impl AuditLog {
             }
         }
         Ok(open)
+    }
+
+    /// Changes that were sent and whose answer was lost: `call` records
+    /// ending in `action_outcome_unknown`, with what the confirming read
+    /// said when the change named one.
+    pub fn lost_answers(&self) -> AppResult<Vec<Record>> {
+        Ok(self
+            .records()?
+            .into_iter()
+            .filter(|record| record.kind == "call" && record.outcome == "action_outcome_unknown")
+            .collect())
+    }
+
+    /// The last time `action` on `site` as `account` with exactly `inputs`
+    /// was sent (a `change_started` record), when its answer was lost and
+    /// the confirming read showed it landed. Calls that sent nothing (an
+    /// approval asked for, pending or used up) do not count as a later
+    /// attempt; a later send with the same inputs does, whatever came of it.
+    pub fn landed_before(
+        &self,
+        site: &str,
+        action: &str,
+        account: &str,
+        inputs: &BTreeMap<String, String>,
+    ) -> AppResult<Option<Record>> {
+        let digest = inputs_digest(inputs)?;
+        let records = self.records()?;
+        let Some(sent) = records.iter().rev().find(|record| {
+            record.kind == "change_started"
+                && record.site == site
+                && record.action == action
+                && record.account == account
+                && record.inputs_digest == digest
+        }) else {
+            return Ok(None);
+        };
+        Ok(records
+            .iter()
+            .find(|record| {
+                record.seq > sent.seq
+                    && record.kind == "call"
+                    && record.site == site
+                    && record.action == action
+                    && record.approval == sent.approval
+            })
+            .filter(|record| record.outcome_check == "landed")
+            .cloned())
     }
 
     /// The number of records when the chain is intact, or the first record
@@ -274,6 +338,91 @@ mod tests {
         let open = log.unfinished_changes().unwrap();
         assert_eq!(open.len(), 1);
         assert_eq!((open[0].seq, open[0].approval.as_str()), (3, "two"));
+        std::fs::remove_dir_all(log.path().parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn a_lost_answer_keeps_what_the_confirming_read_said() {
+        let log = log();
+        let started = |title: &str, approval: &str| Event {
+            kind: "change_started",
+            approval: approval.into(),
+            outcome: "sending".into(),
+            http_status: 0,
+            ..event(title)
+        };
+        let lost = |title: &str, approval: &str, check: &str| Event {
+            approval: approval.into(),
+            outcome: "action_outcome_unknown".into(),
+            http_status: 0,
+            outcome_check: check.into(),
+            confirm_read: "list-items".into(),
+            ..event(title)
+        };
+        let unsent = |title: &str, approval: &str, outcome: &str| Event {
+            approval: approval.into(),
+            outcome: outcome.into(),
+            http_status: 0,
+            ..event(title)
+        };
+        let inputs = |title: &str| BTreeMap::from([("title".to_owned(), title.to_owned())]);
+        log.append(started("a", "one")).unwrap();
+        log.append(lost("a", "one", "landed")).unwrap();
+        // A replay with the used approval and a new request send nothing.
+        log.append(unsent("a", "one", "approval_expired")).unwrap();
+        log.append(unsent("a", "", "approval_required")).unwrap();
+        log.append(started("b", "two")).unwrap();
+        log.append(lost("b", "two", "not_found")).unwrap();
+        log.append(started("c", "three")).unwrap();
+        log.append(lost("c", "three", "landed")).unwrap();
+        // Sent again and answered: the person decided about the first one.
+        log.append(started("c", "four")).unwrap();
+        log.append(Event {
+            approval: "four".into(),
+            ..event("c")
+        })
+        .unwrap();
+        let lost = log.lost_answers().unwrap();
+        assert_eq!(lost.len(), 3);
+        assert_eq!(lost[0].outcome_check, "landed");
+        assert_eq!(lost[0].confirm_read, "list-items");
+        let text = std::fs::read_to_string(log.path()).unwrap();
+        assert!(text.contains("\"outcome_check\":\"landed\""), "{text}");
+
+        let found = log
+            .landed_before("fixture", "create-item", "", &inputs("a"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.seq, 2);
+        assert!(
+            log.landed_before("fixture", "create-item", "", &inputs("b"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            log.landed_before("fixture", "create-item", "", &inputs("c"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            log.landed_before("fixture", "create-item", "me", &inputs("a"))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(log.verify().unwrap(), 10);
+        std::fs::remove_dir_all(log.path().parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn records_written_before_the_outcome_check_still_verify() {
+        let log = log();
+        let first = log.append(event("a")).unwrap();
+        // A record from a log written before `outcome_check` existed has no
+        // such field; its hash covers what it has.
+        let text = std::fs::read_to_string(log.path()).unwrap();
+        assert!(!text.contains("outcome_check"), "{text}");
+        assert_eq!(first.outcome_check, "");
+        assert_eq!(log.verify().unwrap(), 1);
         std::fs::remove_dir_all(log.path().parent().unwrap()).ok();
     }
 

@@ -114,5 +114,13 @@
   "query_missing": "{site} đã chấp nhận đăng nhập, nhưng không đưa ra tham số truy vấn {name} mà định nghĩa nêu tên",
   "query_missing_fix": "Kiểm tra value_from trong mục auth của định nghĩa; khóa phải xuất hiện trong lần chuyển hướng sau đăng nhập hoặc trên các liên kết của trang đầu tiên sau đó.",
   "session_saved_query": "Đã đăng nhập. itda đã mã hóa và lưu giá trị phiên {name} của {site}/{account} trong thư mục dữ liệu bằng khóa lưu trong keyring của hệ thống. Giá trị này được gắn vào địa chỉ của mỗi yêu cầu gửi đến trang web; agent chỉ thấy ID tài khoản.",
-  "nothing_works": "Không có thao tác đọc nào chạy được; itda không giữ lại gì. Hãy thử `itda record {url}` và dùng trang web trong khi itda quan sát."
+  "nothing_works": "Không có thao tác đọc nào chạy được; itda không giữ lại gì. Hãy thử `itda record {url}` và dùng trang web trong khi itda quan sát.",
+  "outcome_landed": "Trang web không trả lời, nhưng {read} cho thấy thay đổi đã được áp dụng. Nó đã có trên trang web; đừng yêu cầu lại.",
+  "outcome_not_found": "Trang web không trả lời và {read} không cho thấy thay đổi. Nếu vẫn muốn, hãy yêu cầu lại và xem xét phê duyệt mới; itda không bao giờ tự gửi lại.",
+  "outcome_unknown": "Trang web không trả lời và lượt đọc xác nhận {read} cũng thất bại ({error}). Hãy kiểm tra trang web trước khi yêu cầu lại thay đổi.",
+  "lost_answers": "{n} thay đổi bị mất câu trả lời sau khi gửi:",
+  "lost_landed": "{read} cho thấy đã được áp dụng",
+  "lost_not_found": "{read} không cho thấy nó",
+  "lost_unknown": "lượt đọc xác nhận {read} cũng thất bại",
+  "lost_unchecked": "không có lượt đọc xác nhận; hãy kiểm tra trang web"
 }
