@@ -5,6 +5,7 @@
 //! that is what a request to the server looks like. A frame on another
 //! origin is only named, never fetched.
 use crate::login::Session;
+use crate::{Refusal, Refused};
 use itda_html::evidence;
 use itda_net::{Network, Request};
 use itda_prep::Page;
@@ -23,6 +24,33 @@ pub const MAX_DEPTH: usize = 2;
 pub struct Framed {
     pub pages: Vec<Page>,
     pub followed: Vec<String>,
+    /// A same-origin frame answered with a redirect to a sign-in page, so it
+    /// could not be read without a session: the gate's view of that redirect
+    /// (the frame's path and the sign-in page it leads to). The caller signs
+    /// in and follows again with the session, the way the top-level page
+    /// would.
+    pub sign_in: Option<Refused>,
+}
+
+impl Framed {
+    /// The paths of the frames that answered with a sign-in, for the draft's
+    /// note: the frame was shown, led to a sign-in and so was not read.
+    pub fn sign_in_paths(&self) -> Vec<String> {
+        match &self.sign_in {
+            Some(Refused {
+                kind: Refusal::SignInRedirect { path, .. },
+                ..
+            }) => vec![path.clone()],
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// One frame page as itda: the page itself, or the gate's view of a redirect
+/// to a sign-in that itda reads only with a session.
+enum Fetched {
+    Page(Page),
+    SignIn(Refused),
 }
 
 /// Whether the page is a shell whose content is in frames on its own
@@ -69,8 +97,15 @@ pub async fn follow(net: &Network, page: &Page, session: Option<&Session>) -> Ap
             continue;
         }
         seen.push(shown.clone());
-        let Some(frame) = fetch(net, &url, session).await else {
-            continue;
+        let frame = match fetch(net, &url, session).await {
+            Some(Fetched::Page(page)) => page,
+            Some(Fetched::SignIn(refused)) => {
+                // The frame wants a sign-in; note it once so the caller can
+                // sign in and follow again with the session.
+                framed.sign_in.get_or_insert(refused);
+                continue;
+            }
+            None => continue,
         };
         let frame = Page {
             url: match session_key {
@@ -108,8 +143,11 @@ pub async fn follow(net: &Network, page: &Page, session: Option<&Session>) -> Ap
 }
 
 /// One frame page as itda: a bounded GET with the session, when there is
-/// one, that answers with HTML on the same origin. Anything else is `None`.
-async fn fetch(net: &Network, url: &str, session: Option<&Session>) -> Option<Page> {
+/// one, that answers with HTML on the same origin. A frame that answers with
+/// a redirect to a sign-in page is reported as [`Fetched::SignIn`], the same
+/// detection the top-level page uses, so the caller can sign in and read it.
+/// Anything else is `None`.
+async fn fetch(net: &Network, url: &str, session: Option<&Session>) -> Option<Fetched> {
     let Ok(parsed) = url::Url::parse(url) else {
         return None;
     };
@@ -128,6 +166,13 @@ async fn fetch(net: &Network, url: &str, session: Option<&Session>) -> Option<Pa
         request.headers.push(("cookie".into(), cookies.to_owned()));
     }
     let response = net.fetch(request).await.ok()?;
+    // The net layer does not follow a redirect to a sign-in (its path is a
+    // credential path); the gate reads it here so the caller treats the
+    // frame as the top-level page would.
+    if let Some(refused) = crate::refusal(url, &response) {
+        return matches!(refused.kind, Refusal::SignInRedirect { .. })
+            .then_some(Fetched::SignIn(refused));
+    }
     if !response.successful() || !response.header("content-type").contains("html") {
         return None;
     }
@@ -135,10 +180,10 @@ async fn fetch(net: &Network, url: &str, session: Option<&Session>) -> Option<Pa
     if landed.origin() != parsed.origin() {
         return None;
     }
-    Some(Page {
+    Some(Fetched::Page(Page {
         url: response.url,
         html: String::from_utf8_lossy(&response.bytes).into_owned(),
-    })
+    }))
 }
 
 #[cfg(test)]

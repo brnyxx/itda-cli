@@ -2850,6 +2850,164 @@ async fn a_framed_portal_is_drafted_through_its_same_origin_frames() {
     std::fs::remove_dir_all(home).ok();
 }
 
+/// A shell whose same-origin frame answers with a 303 to a sign-in form, the
+/// shape of the `framed` lab intranet. `draft page` names the frame as
+/// leading to a sign-in, and `setup` reaches the sign-in instead of drafting
+/// only the shell's title: without a user name it names the sign-in, and with
+/// one it signs in through the form (stopped here only where the session
+/// cannot be kept, before any password is sent). The records-drafting proof,
+/// which needs a writable session store, is the lab test
+/// `framed_setup_from_the_shell_reaches_the_board`.
+async fn serve_framed_login() -> String {
+    use axum::{
+        http::{HeaderMap, StatusCode},
+        response::{Html, IntoResponse, Redirect},
+    };
+    fn signed_in(headers: &HeaderMap) -> bool {
+        headers
+            .get("cookie")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|c| c.contains("SID=lab"))
+    }
+    let router = Router::new()
+        .route(
+            "/",
+            get(|| async {
+                Html("<title>Portal</title><iframe src='/frame/board' name='main'></iframe>")
+            }),
+        )
+        .route(
+            "/frame/board",
+            get(|headers: HeaderMap| async move {
+                if !signed_in(&headers) {
+                    return Redirect::to("/frame/login?next=%2Fframe%2Fboard").into_response();
+                }
+                Html(
+                    "<title>Board</title><h1>Notices</h1>
+                     <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                     <tr class='notice'><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+                     <tr class='notice'><td>1</td><td><a href='/n/1'>First</a></td></tr></table>",
+                )
+                .into_response()
+            }),
+        )
+        .route(
+            "/frame/login",
+            get(|| async {
+                Html("<title>Sign in</title><form method='post' action='/frame/login'><input type='hidden' name='next' value='/frame/board'><input name='username'><input type='password' name='password'></form>")
+            })
+            .post(|| async {
+                ([("set-cookie", "SID=lab; Path=/")], Redirect::to("/frame/board"))
+            }),
+        )
+        .route(
+            "/n/2",
+            get(|headers: HeaderMap| async move {
+                if !signed_in(&headers) {
+                    return StatusCode::UNAUTHORIZED.into_response();
+                }
+                Html("<title>Second</title><article><h1>Second</h1><p>body</p></article>")
+                    .into_response()
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn draft_page_names_a_frame_that_leads_to_a_sign_in() {
+    let home = home();
+    let base = serve_framed_login().await;
+    let en = [("ITDA_LANG", "en")];
+    let printed = itda(&home, &["draft", "page", &format!("{base}/")], &en).await;
+    assert!(printed.status.success(), "{printed:?}");
+    // The frame was not read, but the note says it leads to a sign-in rather
+    // than only that it was not read.
+    let said = String::from_utf8_lossy(&printed.stderr);
+    assert!(
+        said.contains("/frame/board in a frame that answers with a sign-in"),
+        "{said}"
+    );
+    assert!(said.contains("itda setup --user"), "{said}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn setup_signs_in_from_a_shell_frame_that_redirects_to_a_login() {
+    let home = home();
+    let base = serve_framed_login().await;
+    let english = [("ITDA_LANG", "en")];
+
+    // Without anyone to sign in, the shell no longer drafts only its title:
+    // the frame's redirect to a sign-in is named, the way the top-level
+    // page's would be.
+    let refused = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/"),
+            "--name",
+            "framed",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &english,
+    )
+    .await;
+    assert!(!refused.status.success());
+    let said = String::from_utf8_lossy(&refused.stderr);
+    assert!(said.contains("sends itda to a sign-in page"), "{said}");
+    assert!(said.contains("/frame/board"), "{said}");
+
+    // With a user name, the password is read from stdin; where secrets are
+    // read-only (the tests' environment store) nothing is sent anywhere,
+    // which proves the frame's redirect reached the sign-in path.
+    let mut command = Command::new(env!("CARGO_BIN_EXE_itda"));
+    command
+        .args([
+            "setup",
+            &format!("{base}/"),
+            "--name",
+            "framed",
+            "--user",
+            "lab",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ])
+        .env("ITDA_HOME", &home)
+        .env("ITDA_ALLOW_LOCAL", "1")
+        .env("ITDA_SECRET_STORE", "env")
+        .env("ITDA_LANG", "en")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let output = tokio::task::spawn_blocking(move || {
+        use std::io::Write;
+        let mut child = command.spawn().unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"secret-word\n")
+            .unwrap();
+        child.wait_with_output().unwrap()
+    })
+    .await
+    .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("read-only"), "{said}");
+    assert!(!said.contains("secret-word"));
+    assert!(!home.join("specs/framed").exists());
+    std::fs::remove_dir_all(home).ok();
+}
+
 fn install_query_session(home: &Path, base: &str) {
     let dir = home.join("specs/portal");
     std::fs::create_dir_all(&dir).unwrap();

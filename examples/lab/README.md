@@ -82,11 +82,8 @@ The three uglier cases have their own tests. `framed`, `scripted` and `urltoken`
 run from the reviewed definition to an approved change the same way. `urltoken`
 also tests setup, signing in and keeping the `?sid=` session. `scripted` tests
 the browser watch on Unix only; it needs `ITDA_TEST_BROWSER` set to a Chrome or
-Chromium binary and skips the test without one. The one itda cannot do today,
-`framed` from the shell, is written for the behaviour we want and marked
-`#[ignore = "setup does not sign in from a shell frame that redirects to a login"]`.
-`cargo test ... -- --ignored` shows it failing with the exact reason in the
-comment above it.
+Chromium binary and skips the test without one. `framed` has a setup test too:
+it signs in from the shell's own frame and reads the board through it.
 
 Sessions are sealed under each test's data directory (`vault.sealed`), with
 one master key per directory in the real system keyring, under `itda` /
@@ -119,23 +116,24 @@ Run on this machine against the lab above, with the itda binary built from this
 branch (frame following and query sessions, `b35a612`, are in it). These three
 are the uglier ones, alongside the five earlier services.
 
-- **framed (8086).** `itda setup http://127.0.0.1:8086/` drafts one read,
-  `home`, of the shell's `<h1>` ("사내 인트라넷") and nothing else. Frame following
-  reaches a shell's own frames. `itda draft page http://127.0.0.1:8086/` sees
-  the iframe and says so ("`/`: shows /frame/board in a frame that was not
-  read"). The frame answers `303` to `/frame/login`, a redirect itda will not
-  follow because it is a credential path. Setup does not sign in from a shell
-  whose frame wants a login, so it still never reaches the board two iframes
-  down. Pointed at the frame instead,
-  `itda setup http://127.0.0.1:8086/frame/list --user lab` sees the redirect to
-  the sign-in and signs in through the form (2 cookies). It drafts the board the
-  same way as the intranet: a list of ten records, a per-notice read, and a post
-  with a `_csrf` preflight. The reviewed `specs/framed.yaml` targets the frame.
-  A read returns the notices (25 across three pages, ten per page). A post waits
-  for approval, then lands once (a 303 to the new notice, reported as landed).
-  itda refuses a second call with the same approval; `itda audit --verify` and
-  `itda check` pass. Signing in from the shell's own frame is left for a
-  follow-up.
+- **framed (8086).** `itda setup http://127.0.0.1:8086/ --user lab` now reaches
+  the board from the shell. The shell shows only its `<h1>` ("사내 인트라넷"),
+  and its `/frame/board` iframe answers `303` to `/frame/login`, a redirect itda
+  will not follow because it is a credential path. itda reads that redirect the
+  way the top-level page's would be: it signs in through the form (2 cookies),
+  then follows the two frames with the session (`/frame/board`, `/frame/list`)
+  and drafts five actions - `home` and `get-board` (title checks), `get-list`
+  (the notices), `get-notice` (a per-notice read) and `create-notice` (the post,
+  which waits for an approval). Trying the reads once, `get-list` answers with
+  ten records. Without `--user`, `itda setup http://127.0.0.1:8086/` names the
+  sign-in instead ("127.0.0.1 sends itda to a sign-in page instead of showing
+  /frame/board") rather than drafting only the title, and `itda draft page
+  http://127.0.0.1:8086/` says the frame leads to one ("`/`: shows /frame/board
+  in a frame that answers with a sign-in and so was not read"). The reviewed
+  `specs/framed.yaml` targets the frame. A read returns the notices (25 across
+  three pages, ten per page). A post waits for approval, then lands once (a 303
+  to the new notice, reported as landed). itda refuses a second call with the
+  same approval; `itda audit --verify` and `itda check` pass.
 - **scripted (8087).** `itda setup http://127.0.0.1:8087/board --watch-only`
   opens a browser and watches the page load (2 calls, 1 read drafted). It drafts
   `list-notices` from the script's own `GET /api/notices` call; the read then
@@ -159,10 +157,8 @@ are the uglier ones, alongside the five earlier services.
   `itda audit --verify` and `itda check` pass.
 
 The test suite below encodes these outcomes. The framed, scripted and urltoken
-cases run to an approved change, and it checks the browser watch and the
-url-token setup too. The one the product cannot do today, signing in from a
-shell whose frame redirects to a login, is written for the behaviour we want and
-marked `#[ignore]` with that reason.
+cases run to an approved change, and it checks the browser watch, the url-token
+setup and signing in from a shell whose frame redirects to a login too.
 
 ## What it does not cover
 

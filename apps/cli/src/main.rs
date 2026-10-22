@@ -421,6 +421,7 @@ fn main() -> ExitCode {
                     lang: lang(),
                     schemas: Vec::new(),
                     session: None,
+                    frames_to_sign_in: Vec::new(),
                 },
                 install,
                 force,
@@ -442,6 +443,7 @@ fn main() -> ExitCode {
                     lang: lang(),
                     schemas: Vec::new(),
                     session: None,
+                    frames_to_sign_in: Vec::new(),
                 },
                 install,
                 force,
@@ -463,6 +465,7 @@ fn main() -> ExitCode {
                     lang: lang(),
                     schemas: Vec::new(),
                     session: None,
+                    frames_to_sign_in: Vec::new(),
                 },
                 install,
                 force,
@@ -520,6 +523,7 @@ fn main() -> ExitCode {
                 lang: lang(),
                 schemas: Vec::new(),
                 session: None,
+                frames_to_sign_in: Vec::new(),
             },
             install,
             force,
@@ -1493,6 +1497,9 @@ async fn draft_page(
         if let Some(line) = text::followed_frames(&framed.followed) {
             eprintln!("{line}");
         }
+        // A frame that answers with a sign-in is noted as leading to one,
+        // not only as unread; `itda setup` can sign in and read it.
+        options.frames_to_sign_in.extend(framed.sign_in_paths());
         pages.push(page);
         pages.append(&mut framed.pages);
     }

@@ -39,6 +39,10 @@ pub struct Options {
     /// The pages were fetched signed in through the site's own form: every
     /// action needs that session, and the definition says how to sign in.
     pub session: Option<SessionAuth>,
+    /// Paths of the page's own frames that answered with a redirect to a
+    /// sign-in and so were not read; the note for each says it leads to a
+    /// sign-in instead of only that it was not read.
+    pub frames_to_sign_in: Vec<String>,
 }
 
 /// A sign-in the pages were read with: the cookie that shows it (empty when
@@ -329,6 +333,7 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
             lang: options.lang.clone(),
             schemas: Vec::new(),
             session,
+            frames_to_sign_in: options.frames_to_sign_in.clone(),
         };
         parts.merge(page::page_parts(&pages, &page_options)?);
     }
@@ -449,6 +454,7 @@ pub fn from_template(
             lang: options.lang.clone(),
             schemas: options.schemas.clone(),
             session: options.session.clone(),
+            frames_to_sign_in: options.frames_to_sign_in.clone(),
         };
         let (mut found, from_description) =
             page::page_parts_with_description(pages, description, &page_options)?;

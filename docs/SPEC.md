@@ -98,6 +98,14 @@ and never fetches it. The same goes for a same-origin frame that answered with
 nothing. `itda draft page` and `itda setup` say what they followed ("Followed 1
 frame: /frame/board.").
 
+When a same-origin frame answers with a redirect to a sign-in page (the same
+detection the top-level page uses), itda treats it as if the top-level page
+had: following the redirect to read the login form is a read, so with
+`itda setup --user` it signs in through that form and reads the frame again
+with the session, then drafts from it. `itda draft page`, which does not sign
+in, notes that the frame leads to a sign-in rather than only that it was not
+read.
+
 ## Start from the software a site runs
 
 Most intranets run software everyone knows, and that software has a stable API
