@@ -106,6 +106,16 @@ pub fn t(key: &str) -> &'static str {
             "응답이 페이지와 달랐음",
         ),
         ("why_auth", "needs a sign-in", "로그인 필요"),
+        (
+            "why_wait",
+            "it asked to wait {n} s between requests",
+            "요청 사이에 {n}초 기다리라고 함",
+        ),
+        (
+            "why_rate_limited",
+            "it limits how often it is read",
+            "읽는 횟수를 제한함",
+        ),
         ("saved", "Saved as '{site}'.", "'{site}'로 저장했습니다."),
         (
             "why_not_found",

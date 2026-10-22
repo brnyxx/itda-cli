@@ -56,6 +56,8 @@ Never try to approve a change yourself. approval_rejected means the user said no
 writes_disabled means changes are off. Never run a change the user did not ask for. \
 auth_required means the user must sign in again (itda login); blocked_by_site means the site \
 refused automated access and is paused until the user runs itda resume. \
+site_rate_limited means the site asked for a wait longer than itda gives on its own: wait the \
+retry_after seconds it carries before calling that site again. \
 action_outcome_unknown means a change was sent but no answer came back: never call it again; \
 ask the user to check the site first. \
 When an action that used to work fails, ask the user to run itda check <site> before you retry \

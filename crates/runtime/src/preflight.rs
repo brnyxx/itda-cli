@@ -42,6 +42,7 @@ pub(crate) async fn run(
             .cloned()
             .collect();
         request.account_id = account_id.to_owned();
+        request.interval = spec.defaults.interval();
         let response = net.fetch(request).await?;
         if !response.successful() {
             return Err(

@@ -329,3 +329,20 @@ fn refusals_name_every_field_and_keep_their_codes() {
         .unwrap();
     assert_eq!(unsafe_auth.code, "unsafe_target");
 }
+
+#[test]
+fn a_site_interval_must_be_a_time() {
+    let mut sp = fixture("https://example.test");
+    sp.defaults.interval = "soon".into();
+    assert!(
+        spec_problems(&sp)
+            .iter()
+            .any(|p| p.field == "defaults.interval")
+    );
+    sp.defaults.interval = "2s".into();
+    assert!(
+        spec_problems(&sp)
+            .iter()
+            .all(|p| p.field != "defaults.interval")
+    );
+}

@@ -197,6 +197,7 @@ impl Runtime {
         request.headers = headers;
         request.body = body;
         request.account_id = account.clone().unwrap_or_default();
+        request.interval = spec.defaults.interval();
 
         if let Some(approvals) = approvals {
             let execution = ExecutionRequest {
@@ -466,7 +467,15 @@ fn refusal(response: &itda_net::Response, signed_in: bool) -> AppError {
     match (response.defense.as_str(), response.status) {
         ("none", 401 | 403) if signed_in => AppError::api("auth_required", 401),
         ("none", 404) => AppError::api("not_found", 404),
-        ("none", 429) | ("rate-limit", _) => AppError::api("site_rate_limited", 429),
+        ("none", 429) | ("rate-limit", _) => {
+            let mut error = AppError::api("site_rate_limited", 429);
+            if let Some(wait) = itda_net::retry_after(&response.headers) {
+                let seconds = wait.as_secs().max(1);
+                error.msg = format!("the site asked to wait {seconds} s before the next request");
+                error = error.with("retry_after", seconds);
+            }
+            error
+        }
         ("none", _) => AppError::api("request_failed", 502),
         _ => AppError::api("blocked_by_site", 403),
     }

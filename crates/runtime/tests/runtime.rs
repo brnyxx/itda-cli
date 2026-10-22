@@ -535,3 +535,28 @@ async fn a_read_whose_answer_is_lost_keeps_its_network_code() {
         .unwrap_err();
     assert_eq!(error.public_code, "request_failed");
 }
+
+#[tokio::test]
+async fn a_rate_limited_read_says_how_long_the_site_asked_to_wait() {
+    let router = Router::new().route(
+        "/items",
+        get(|| async {
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                [("retry-after", "120")],
+                "slow down",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let (runtime, _) = runtime().await;
+    let error = runtime
+        .call(&spec(&base), call("list-items", &[]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "site_rate_limited");
+    assert_eq!(error.extra["retry_after"], 120);
+    assert!(error.msg.contains("wait 120 s"), "{}", error.msg);
+}

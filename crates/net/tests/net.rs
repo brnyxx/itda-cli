@@ -233,18 +233,16 @@ async fn rate_limits_set_a_cooldown() {
 async fn the_budget_caps_requests_per_scope() {
     let gate = Gate::with_limits(Store::in_memory().unwrap(), 0, 2).unwrap();
     for _ in 0..2 {
-        let token = gate.acquire("https://example.test|").await.unwrap();
-        gate.release("https://example.test|", &token, itda_net::Outcome::Done)
-            .await
-            .unwrap();
+        let lease = gate.acquire("https://example.test|", None).await.unwrap();
+        lease.release(itda_net::Outcome::Done).await.unwrap();
     }
     assert_eq!(
-        gate.acquire("https://example.test|")
+        gate.acquire("https://example.test|", None)
             .await
             .unwrap_err()
             .public_code,
         "rate_limited"
     );
     // Other scopes are independent.
-    gate.acquire("https://other.test|").await.unwrap();
+    gate.acquire("https://other.test|", None).await.unwrap();
 }
