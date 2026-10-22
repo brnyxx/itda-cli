@@ -24,6 +24,9 @@ pub struct Event {
     pub site: String,
     pub action: String,
     pub effect: String,
+    /// Why a declared read was treated as a change, when it was: the
+    /// rendered request asked for one (`body names a mutation`).
+    pub reclassified: String,
     pub account: String,
     pub approval: String,
     pub inputs: BTreeMap<String, String>,
@@ -41,6 +44,8 @@ pub struct Record {
     pub action: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub effect: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reclassified: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub account: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -95,6 +100,7 @@ impl AuditLog {
             site: event.site,
             action: event.action,
             effect: event.effect,
+            reclassified: event.reclassified,
             account: event.account,
             approval: event.approval,
             inputs: event.inputs.keys().cloned().collect(),

@@ -13,13 +13,19 @@ use itda_types::{
 };
 
 /// A header or input that asks the site to treat the request as another
-/// method or effect than the one itda classified, such as
-/// `X-HTTP-Method-Override: DELETE` on a POST. Refused everywhere: the method
-/// that was reviewed is the method that is sent.
+/// method, address or effect than the one itda classified, such as
+/// `X-HTTP-Method-Override: DELETE` on a POST or `X-Original-URL: /admin/delete`
+/// on a read. Refused everywhere: the method and address that were reviewed
+/// are the ones that are sent.
 pub fn overrides_method(name: &str) -> bool {
     matches!(
         name.trim().to_ascii_lowercase().as_str(),
-        "x-http-method-override" | "x-method-override" | "x-http-method" | "_method"
+        "x-http-method-override"
+            | "x-method-override"
+            | "x-http-method"
+            | "_method"
+            | "x-original-url"
+            | "x-rewrite-url"
     )
 }
 

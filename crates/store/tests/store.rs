@@ -151,3 +151,43 @@ fn two_processes_starting_at_once_both_migrate_without_an_error() {
     drop(store);
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[cfg(unix)]
+#[test]
+fn the_database_and_its_wal_files_are_private_to_the_user() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("itda-store-{}", itda_types::util::id()));
+    let path = dir.join("itda.db");
+    std::fs::create_dir_all(&dir).unwrap();
+    // A database left behind by an older itda, created with the umask.
+    std::fs::write(&path, b"").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let store = Store::open(&path).unwrap();
+    store.migrate(&NOTES).unwrap();
+    store
+        .call_blocking(|conn| Ok(conn.execute("INSERT INTO note(body) VALUES('kept')", [])?))
+        .unwrap();
+    let mode = |name: &str| {
+        let file = dir.join(name);
+        file.exists()
+            .then(|| std::fs::metadata(&file).unwrap().permissions().mode() & 0o777)
+    };
+    assert_eq!(mode("itda.db"), Some(0o600));
+    assert_eq!(
+        mode("itda.db-wal"),
+        Some(0o600),
+        "the write-ahead log exists while the store is open and is private"
+    );
+    assert_eq!(mode("itda.db-shm"), Some(0o600));
+    drop(store);
+
+    // A fresh database is private from the start.
+    let fresh = dir.join("fresh.db");
+    let store = Store::open(&fresh).unwrap();
+    store.migrate(&NOTES).unwrap();
+    assert_eq!(mode("fresh.db"), Some(0o600));
+    assert_eq!(mode("fresh.db-wal"), Some(0o600));
+    assert_eq!(mode("fresh.db-shm"), Some(0o600));
+    drop(store);
+    std::fs::remove_dir_all(dir).ok();
+}

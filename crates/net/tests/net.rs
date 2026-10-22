@@ -93,6 +93,19 @@ async fn redirects_stay_on_origin_and_only_for_reads() {
                 get(|| async { Redirect::temporary("/logout") }),
             )
             .route(
+                "/moved-graphql",
+                get(|| async {
+                    Redirect::temporary("/graphql?query=mutation%20%7B%20deleteAll%20%7D")
+                }),
+            )
+            .route(
+                "/moved-query",
+                get(|| async {
+                    Redirect::temporary("/graphql?query=%7B%20items%20%7B%20id%20%7D%20%7D")
+                }),
+            )
+            .route("/graphql", get(|| async { "answered" }))
+            .route(
                 "/away",
                 get(move || {
                     let target = other_url.clone();
@@ -127,6 +140,22 @@ async fn redirects_stay_on_origin_and_only_for_reads() {
         unsafe_target.status, 307,
         "redirect to a change must not be followed"
     );
+
+    let mutation = net
+        .fetch(Request::read(format!("{base}/moved-graphql")))
+        .await
+        .unwrap();
+    assert_eq!(
+        mutation.status, 307,
+        "redirect to a GraphQL mutation must not be followed"
+    );
+
+    let query = net
+        .fetch(Request::read(format!("{base}/moved-query")))
+        .await
+        .unwrap();
+    assert_eq!(query.status, 200, "redirect to a GraphQL query is a read");
+    assert_eq!(query.bytes, b"answered");
 
     let mut write = Request::read(format!("{base}/old"));
     write.read_only = false;

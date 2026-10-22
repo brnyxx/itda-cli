@@ -1069,3 +1069,198 @@ async fn an_unknown_input_names_the_nearest_declared_one() {
     );
     assert_eq!(site.hits.load(Ordering::SeqCst), 0);
 }
+
+/// A site that counts what reaches it, for reads whose rendered request says
+/// more than their declared inputs do.
+async fn counting_site() -> Site {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let counted = |hits: Arc<AtomicUsize>| {
+        move || {
+            hits.fetch_add(1, Ordering::SeqCst);
+        }
+    };
+    let (a, b, c) = (
+        counted(hits.clone()),
+        counted(hits.clone()),
+        counted(hits.clone()),
+    );
+    let router = Router::new()
+        .route(
+            "/api",
+            axum::routing::post(move || async move {
+                a();
+                axum::Json(json!({"data": {"notices": []}}))
+            }),
+        )
+        .route(
+            "/graphql",
+            axum::routing::post(move || async move {
+                b();
+                axum::Json(json!({"data": {"notices": []}}))
+            }),
+        )
+        .route(
+            "/search",
+            axum::routing::post(move || async move {
+                c();
+                axum::Json(json!({"items": []}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    Site { base, hits }
+}
+
+fn rendered_spec(base: &str) -> Spec {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "rendered", "base_url": base},
+        "operations": [
+            {"name": "search-notices", "method": "POST", "path": "/api", "effect": "read", "evidence": "doc",
+             "body": {"json": {"after": {"type": "string"}},
+                      "json_template": {"query": "mutation { deleteAll }", "variables": {"after": "{{after}}"}}},
+             "response": {"format": "json", "required_pointers": ["/data"]}},
+            {"name": "search-items", "method": "POST", "path": "/search", "effect": "read", "evidence": "doc",
+             "body": {"json": {"q": {"type": "string"}},
+                      "json_template": {"q": "{{q}}", "options": {"deep": {"mode": "delete"}}}},
+             "response": {"format": "json", "required_pointers": ["/items"]}},
+            {"name": "notices", "method": "POST", "path": "/graphql", "effect": "read", "evidence": "doc",
+             "body": {"json": {"query": {"type": "string", "default": "query Notices { notices { id } }"},
+                               "after": {"type": "string"}},
+                      "json_template": {"variables": {"after": "{{after}}"}}},
+             "response": {"format": "json", "required_pointers": ["/data"]}},
+            {"name": "notices-ok", "method": "POST", "path": "/graphql", "effect": "read", "evidence": "doc",
+             "body": {"json": {"query": {"type": "string", "default": "query Notices { notices { id } }"},
+                               "after": {"type": "string"}},
+                      "json_template": {"query": "{{query}}", "variables": {"after": "{{after}}"}}},
+             "response": {"format": "json", "required_pointers": ["/data"]}},
+            {"name": "find-items", "method": "POST", "path": "/search", "effect": "read", "evidence": "doc",
+             "body": {"json": {"q": {"type": "string"}},
+                      "json_template": {"q": "{{q}}", "options": {"deep": {"mode": "fast"}}}},
+             "response": {"format": "json", "required_pointers": ["/items"]}}
+        ]
+    });
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn a_declared_read_whose_rendered_body_names_a_change_waits_for_approval() {
+    let site = counting_site().await;
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let dir = std::env::temp_dir().join(format!(
+        "itda-runtime-reclassified-{}",
+        itda_types::util::id()
+    ));
+    let log = Arc::new(itda_runtime::audit::AuditLog::new(dir.join("audit.jsonl")));
+    let approving = Runtime::new(Arc::new(Network::new(gate, true)), vault)
+        .with_approvals(approvals.clone())
+        .with_audit(log.clone());
+    let spec = rendered_spec(&site.base);
+    itda_policy::validate_spec(&spec).unwrap();
+    // The declared inputs say read; only the rendered body says otherwise.
+    assert_eq!(
+        itda_policy::operation_effect(spec.op("search-notices").unwrap(), &BTreeMap::new()),
+        itda_policy::Effect::Read
+    );
+
+    for (action, reason) in [
+        ("search-notices", "body names a mutation"),
+        ("search-items", "body asks for a change"),
+    ] {
+        let inputs: &[(&str, &str)] = if action == "search-notices" {
+            &[("after", "x")]
+        } else {
+            &[("q", "x")]
+        };
+        let error = approving
+            .call(&spec, call(action, inputs))
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(
+            error.public_code, "approval_required",
+            "{action}: {}",
+            error.msg
+        );
+        assert_eq!(error.extra["reclassified"], reason, "{action}");
+        assert!(error.msg.contains(reason), "{action}: {}", error.msg);
+        let id = error.extra["approval"].as_str().unwrap().to_owned();
+        let review = approvals.review(&id).await.unwrap();
+        assert!(
+            review
+                .inputs
+                .iter()
+                .any(|input| input.label == "reclassified" && input.value == reason),
+            "{action}: {:?}",
+            review.inputs
+        );
+        // The audit log says what the gate did, not what the definition said.
+        let record = log.records().unwrap().pop().unwrap();
+        assert_eq!(
+            (record.kind.as_str(), record.outcome.as_str()),
+            ("call", "approval_required")
+        );
+        assert_eq!(record.effect, "write", "{action}");
+        assert_eq!(record.reclassified, reason, "{action}");
+    }
+    assert_eq!(site.hits.load(Ordering::SeqCst), 0);
+    // A plain read's record carries no reason.
+    approving
+        .call(&spec, call("find-items", &[("q", "x")]))
+        .await
+        .unwrap();
+    let record = log.records().unwrap().pop().unwrap();
+    assert_eq!(
+        (record.effect.as_str(), record.reclassified.as_str()),
+        ("read", "")
+    );
+    assert_eq!(log.verify().unwrap(), 3);
+    std::fs::remove_dir_all(dir).ok();
+
+    // Without an approval store the reclassified read is a change that is off.
+    let (plain, _) = runtime().await;
+    let error = plain
+        .call(&spec, call("search-items", &[("q", "x")]))
+        .await
+        .map(|_| ())
+        .unwrap_err();
+    assert_eq!(error.public_code, "writes_disabled");
+    // Only the plain read above reached the site.
+    assert_eq!(site.hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_graphql_read_that_sends_no_document_is_refused_with_a_remedy() {
+    let site = counting_site().await;
+    let (runtime, _) = runtime().await;
+    let spec = rendered_spec(&site.base);
+    let error = runtime
+        .call(&spec, call("notices", &[("after", "x")]))
+        .await
+        .map(|_| ())
+        .unwrap_err();
+    assert_eq!(error.public_code, "effect_unknown", "{}", error.msg);
+    assert!(
+        error.remedy.contains("names no GraphQL document"),
+        "{}",
+        error.remedy
+    );
+    assert_eq!(site.hits.load(Ordering::SeqCst), 0);
+
+    // The same read with the document in its body is a read and runs.
+    let envelope = runtime
+        .call(&spec, call("notices-ok", &[("after", "x")]))
+        .await
+        .unwrap();
+    assert_eq!(envelope.effect, "read");
+    let envelope = runtime
+        .call(&spec, call("find-items", &[("q", "delete my account")]))
+        .await
+        .unwrap();
+    assert_eq!(envelope.effect, "read");
+    assert_eq!(site.hits.load(Ordering::SeqCst), 2);
+}

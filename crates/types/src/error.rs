@@ -102,6 +102,9 @@ fn remedy(public_code: &str) -> &'static str {
         "effect_changed" => {
             "Values from a preflight step would turn this read into a change, so itda sent nothing. Review the site definition."
         }
+        "effect_unknown" => {
+            "itda cannot tell whether the request it built reads or changes the site, so it sent nothing. Declare the action's effect, or give the read its GraphQL document, then review the site definition."
+        }
         "response_mismatch" => {
             "The website returned a different response than this action expects. Reconnect if signed out, or review the site definition."
         }

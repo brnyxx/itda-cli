@@ -541,3 +541,245 @@ fn a_sign_in_form_belongs_to_a_browser_credential_on_the_site() {
         );
     }
 }
+
+#[test]
+fn a_redirect_or_page_address_carrying_a_graphql_mutation_is_not_a_safe_read() {
+    for raw in [
+        "https://example.com/graphql?query=mutation%20%7B%20deleteItem(id%3A%201)%20%7D",
+        "https://example.com/graphql?query=mutation{deleteX}",
+        "https://example.com/api?query=subscription%20%7B%20updates%20%7D",
+        "https://example.com/graphql?q=mutation%20%7B%20x%20%7D",
+        "https://example.com/graphql?document=mutation%20%7B%20x%20%7D",
+        "https://example.com/graphql?query=mutation%20%7B%20broken",
+        // A document itda cannot read is not followed either, as the
+        // declared classifier treats the same value.
+        "https://example.com/search?query=mutation%20testing%20books",
+    ] {
+        assert!(!safe_read_url(&url::Url::parse(raw).unwrap()), "{raw}");
+    }
+    for raw in [
+        "https://example.com/graphql?query=%7B%20items%20%7B%20id%20%7D%20%7D",
+        "https://example.com/graphql?query=query%20Items%20%7B%20items%20%7B%20id%20%7D%20%7D",
+        "https://example.com/search?query=books%20about%20mutation",
+        "https://example.com/search?q=mutation%20%7B%20x%20%7D",
+        "https://example.com/graphql?query=%23%20mutation%20is%20a%20comment%0A%7B%20items%20%7B%20id%20%7D%20%7D",
+    ] {
+        assert!(safe_read_url(&url::Url::parse(raw).unwrap()), "{raw}");
+    }
+}
+
+#[test]
+fn the_rendered_request_is_classified_from_what_is_sent() {
+    use itda_policy::rendered_request_effect;
+    let url = |raw: &str| url::Url::parse(raw).unwrap();
+    let json = |value: serde_json::Value| Some(serde_json::to_vec(&value).unwrap());
+
+    // A literal mutation in a json_template, or a nested intent field,
+    // turns a declared read into a change.
+    let mutation = rendered_request_effect(
+        &url("https://example.com/graphql"),
+        json(json!({"query": "mutation { deleteItem(id: 1) { id } }", "variables": {}})).as_deref(),
+        false,
+    );
+    assert_eq!(mutation.effect, Effect::Write);
+    assert_eq!(mutation.reason, "body names a mutation");
+    let nested = rendered_request_effect(
+        &url("https://example.com/search"),
+        json(json!({"filter": {"items": [{"settings": {"op": "delete"}}]}})).as_deref(),
+        false,
+    );
+    assert_eq!(nested.effect, Effect::Write);
+    assert_eq!(nested.reason, "body asks for a change");
+    let key = rendered_request_effect(
+        &url("https://example.com/search"),
+        json(json!({"deleteAll": true, "q": "books"})).as_deref(),
+        false,
+    );
+    assert_eq!(key.effect, Effect::Write);
+    let form = rendered_request_effect(
+        &url("https://example.com/search"),
+        Some(b"q=books&mode=delete"),
+        true,
+    );
+    assert_eq!(form.effect, Effect::Write);
+    let subscription = rendered_request_effect(
+        &url("https://example.com/search"),
+        Some(b"q=books&query=subscription+%7B+updates+%7D"),
+        true,
+    );
+    assert_eq!(subscription.effect, Effect::Write);
+    let address = rendered_request_effect(
+        &url("https://example.com/graphql?query=mutation%20%7B%20x%20%7D"),
+        None,
+        false,
+    );
+    assert_eq!(address.effect, Effect::Write);
+    assert_eq!(address.reason, "address names a mutation");
+    let address_key =
+        rendered_request_effect(&url("https://example.com/items?purge=1"), None, false);
+    assert_eq!(address_key.effect, Effect::Write);
+
+    // A GraphQL endpoint with no document, or a document itda cannot read,
+    // is unknown and carries a remedy.
+    let bare = rendered_request_effect(
+        &url("https://example.com/graphql"),
+        json(json!({"variables": {}})).as_deref(),
+        false,
+    );
+    assert_eq!(bare.effect, Effect::Unknown);
+    assert_eq!(bare.reason, "the body names no GraphQL document");
+    let broken = rendered_request_effect(
+        &url("https://example.com/graphql"),
+        json(json!({"query": "mutation { broken"})).as_deref(),
+        false,
+    );
+    assert_eq!(broken.effect, Effect::Unknown);
+    let deep = format!("query {}{}", "{ a ".repeat(40), "}".repeat(40));
+    let too_deep = rendered_request_effect(
+        &url("https://example.com/graphql"),
+        json(json!({"query": deep})).as_deref(),
+        false,
+    );
+    assert_eq!(too_deep.effect, Effect::Unknown);
+    let nested_too_deep = {
+        let mut value = json!({"q": "books"});
+        for _ in 0..40 {
+            value = json!({"inner": value});
+        }
+        rendered_request_effect(
+            &url("https://example.com/search"),
+            json(value).as_deref(),
+            false,
+        )
+    };
+    assert_eq!(nested_too_deep.effect, Effect::Unknown);
+
+    // Reads stay reads: a GraphQL query, a search whose text names a change,
+    // a value that only mentions a mutation, and a plain page.
+    for (address, body, form) in [
+        (
+            "https://example.com/graphql",
+            json(json!({"query": "query Items { items { id } }", "variables": {"first": 10}})),
+            false,
+        ),
+        (
+            "https://example.com/graphql",
+            json(json!({"query": "{ items(search: \"mutation\") { id } }"})),
+            false,
+        ),
+        (
+            "https://example.com/graphql",
+            json(json!({"query": "# mutation is a comment\n{ items { id } }"})),
+            false,
+        ),
+        (
+            "https://example.com/search",
+            json(json!({"q": "how to delete an account", "page": 2, "sort": "updated"})),
+            false,
+        ),
+        (
+            "https://example.com/search?q=remove+old+posts&created_after=2020",
+            None,
+            false,
+        ),
+        (
+            "https://example.com/search",
+            Some(b"q=delete+me&page=2".to_vec()),
+            true,
+        ),
+        ("https://example.com/items?page=2", None, false),
+        (
+            "https://example.com/search",
+            json(json!({"filter": {"settings": {"mode": "fast"}}})),
+            false,
+        ),
+    ] {
+        let verdict = rendered_request_effect(&url(address), body.as_deref(), form);
+        assert_eq!(verdict.effect, Effect::Read, "{address} {body:?}");
+        assert_eq!(verdict.reason, "", "{address}");
+    }
+}
+
+#[test]
+fn url_rewrite_headers_override_the_request_like_method_overrides() {
+    for name in [
+        "X-Original-URL",
+        "x-rewrite-url",
+        "X-HTTP-Method-Override",
+        "_method",
+    ] {
+        assert!(itda_policy::overrides_method(name), "{name}");
+    }
+    assert!(!itda_policy::overrides_method("X-Requested-With"));
+    let spec = spec_from(
+        json!({"spec_version":1,"site":{"name":"fixture","base_url":"https://example.com"},
+        "operations":[{"name":"read-items","method":"GET","path":"/items","effect":"read","evidence":"doc",
+            "headers":{"X-Original-URL":"/admin/delete"}}]}),
+    );
+    let problems = spec_problems(&spec);
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.field == "operations.read-items.headers.X-Original-URL"),
+        "{problems:?}"
+    );
+}
+
+/// Every read in the bundled definitions, rendered with its defaults (and a
+/// placeholder for each required input), is still a read when the request
+/// itself is read: the gate re-reading the request adds no approval to a
+/// correctly declared definition.
+#[test]
+fn bundled_reads_stay_reads_when_the_rendered_request_is_read() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sites");
+    let mut files: Vec<_> = ["", "software"]
+        .iter()
+        .flat_map(|dir| std::fs::read_dir(root.join(dir)).unwrap())
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "yaml"))
+        .collect();
+    files.sort();
+    assert_eq!(files.len(), 12, "{files:?}");
+    let (mut reads, mut changes) = (0, 0);
+    for file in &files {
+        let spec = spec::parse(&std::fs::read(file).unwrap()).unwrap();
+        for op in &spec.operations {
+            let mut args = BTreeMap::new();
+            for (name, param) in op
+                .params
+                .iter()
+                .chain(op.query.iter())
+                .chain(op.body.iter().flat_map(|body| body.inputs()))
+            {
+                if param.required && param.default.is_none() {
+                    let value = match param.kind.as_str() {
+                        "int" | "float" => "1",
+                        "bool" => "true",
+                        _ => "x",
+                    };
+                    args.insert(name.clone(), value.to_owned());
+                }
+            }
+            if operation_effect(op, &args) != Effect::Read {
+                changes += 1;
+                continue;
+            }
+            reads += 1;
+            let (url, body) = spec.build_request(op, &args).unwrap();
+            let url = url::Url::parse(&url).unwrap();
+            let form = op.body.as_ref().is_some_and(|body| !body.form.is_empty());
+            let rendered = itda_policy::rendered_request_effect(&url, body.as_deref(), form);
+            assert_eq!(
+                rendered.effect,
+                Effect::Read,
+                "{}: {} ({})",
+                file.display(),
+                op.name,
+                rendered.reason
+            );
+            assert!(safe_read_url(&url), "{}: {}", file.display(), op.name);
+        }
+    }
+    eprintln!("bundled definitions: {reads} reads stay reads, {changes} changes untouched");
+    assert!(reads > 50, "{reads}");
+}
