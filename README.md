@@ -194,8 +194,8 @@ own. Only a page that still shows nothing, or needs a sign-in, asks you to
 use the site in your browser while itda watches.
 
 Once an agent is connected, you can also just ask it: "set up
-news.ycombinator.com for me". It calls `itda_setup`, the site is looked at,
-drafted and tried the same way, and its actions appear as tools in the same
+news.ycombinator.com for me". It calls `itda_setup`, itda looks at the site,
+drafts and tries it the same way, and its actions appear as tools in the same
 conversation (a scripted page opens briefly in a browser window on your
 screen); when a read says to sign in, `itda_login` opens your own browser
 and the agent only sees the account id.
@@ -319,8 +319,8 @@ serves every installed site:
 - Above that, three stable tools (`itda_search`, `itda_describe`, `itda_call`)
   keep the tool list short and prompt caches valid. `--mode` overrides this.
 - Results are the same JSON envelope as `itda call --json`, marked untrusted.
-- A change returns `approval_required` with an id. There is no tool that
-  approves; the agent has to ask you.
+- A change returns `approval_required` with an id. No tool approves; the
+  agent has to ask you.
 
 Agents that only have a shell can call `itda call … --json` and branch on the
 exit code:

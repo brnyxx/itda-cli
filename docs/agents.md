@@ -1,11 +1,11 @@
 # Use it from an agent
 
-For the agent itself there are two files in the repository:
+The repository has two files for the agent itself:
 [AGENTS.md](https://github.com/brnyxx/itda-cli/blob/main/AGENTS.md), a guide
 to using itda well, and
 [skills/itda/SKILL.md](https://github.com/brnyxx/itda-cli/blob/main/skills/itda/SKILL.md),
-the same in the short form skill loaders take. The MCP server hands the agent
-the same rules as its instructions.
+the same guide in the short form skill loaders take. The MCP server hands the
+agent the same rules as its instructions.
 
 ## MCP clients
 

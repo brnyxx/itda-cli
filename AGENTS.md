@@ -89,15 +89,16 @@ to do:
 
 ## Set up a new site
 
-Over MCP, call `itda_setup` with the address of a page on the site. itda looks
-at the page as itself, names the actions in plain words, tries every read once,
-keeps the ones that work, and the site's actions appear as tools in the same
-conversation. A page drawn by scripts opens briefly in a browser window on the
-user's screen, so itda can watch what it loads by itself; nothing in it is
-clicked or typed. A page that needs a sign-in, or still shows nothing, cannot
-be set up this way: the result says what the user should run in a terminal
-instead. If a read then says to sign in (`auth_required`), call `itda_login`
-with the site: the user signs in in their own browser and you only ever see the account id.
+Over MCP, call `itda_setup` with the address of a page on the site. itda
+looks at the page as itself, names the actions in plain words, tries every
+read once and keeps the ones that work. The site's actions appear as tools
+in the same conversation. A page drawn by scripts opens briefly in a browser
+window on the user's screen, so itda can watch what it loads by itself;
+nothing in it is clicked or typed. A page that needs a sign-in, or still
+shows nothing, cannot be set up this way: the result says what the user
+should run in a terminal instead. If a read then says to sign in (`auth_required`),
+call `itda_login` with the site: the user signs in in their own browser and
+you only ever see the account id.
 
 In a terminal, run `itda setup <url>`, or tell the user to type `itda` and
 paste the address. itda looks at the page (or opens the user's browser and
@@ -106,11 +107,12 @@ and asks the user before saving and before connecting an agent. Let the user
 answer. Public APIs with a ready-made definition install with `itda add github`
 (also `npm`, `crates-io`, `pypi`).
 
-`itda_manage` covers the rest without a terminal: `refresh`, `remove` and
-`resume` ask the user to confirm in a form the client shows them (a client that
-cannot show forms gets the command for the user to run; a form nobody answers
-counts as no), `approvals` lists the changes waiting for the user, and `audit`
-shows the last entries of the audit log. None of them approves a change.
+`itda_manage` covers the rest without a terminal. `refresh`, `remove` and
+`resume` ask the user to confirm in a form the client shows them; a client
+that cannot show forms gets the command for the user to run, and a form
+nobody answers counts as no. `approvals` lists the changes waiting for the
+user, and `audit` shows the last entries of the audit log. None of them
+approves a change.
 
 ## Report a problem
 

@@ -50,8 +50,8 @@ reported as not sent.
 
 ### Approving in your MCP client
 
-Clients that show MCP elicitation forms to you can ask for the approval
-themselves, so you do not have to switch to a terminal:
+Clients that show you MCP elicitation forms can ask for the approval
+there, so you do not have to switch to a terminal:
 
 ```sh
 itda mcp install claude-code --approve-in-client   # or set ITDA_APPROVE_IN_CLIENT=1

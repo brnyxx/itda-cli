@@ -141,12 +141,13 @@ WordPress does, nothing is said and the page is drafted like any other.
 
 `itda setup --as <software>` forces a template (the fingerprint's base when
 the page agrees, else the API under the page's origin; the confirm request is
-still made and the line says when it did not answer), `--no-template` reads
-the page like any other, and `itda check` and `itda refresh` work on the
-result as on any site: a refresh fills the same template at the same API
-base and merges the page's reads again. Over MCP, `itda_setup` does the same, takes `template` (a name, or
-`none`) and names the template it used in its result. The templates are not
-installed by `itda add`: their `base_url` is a placeholder the setup fills.
+still made and the line says when it did not answer). `--no-template` reads
+the page like any other. `itda check` and `itda refresh` work on the result
+as on any site: a refresh fills the same template at the same API base and
+merges the page's reads again. Over MCP, `itda_setup` does the same, takes
+`template` (a name, or `none`) and names the template it used in its result.
+The templates are not installed by `itda add`: their `base_url` is a
+placeholder the setup fills.
 
 ## Sites with a ready-made definition
 
@@ -204,17 +205,17 @@ token expires.
 `itda setup` runs a shorter form of this by itself when the page shows itda
 nothing but a title and carries scripts that could fetch something (a script
 file or a preloaded module, or an inline script that imports a module or
-mentions `fetch`, `XMLHttpRequest`, `graphql` or `api`; a page without them
-goes straight to the question below): it opens
-the same kind of window on the page, waits
-until the network has been quiet for two seconds (ten at most), scrolls once
-to the bottom, waits again, closes the window and drafts from what the page
-loaded on its own, the way `itda draft har` does, trying the page's own
-address first so what the page itself shows is never lost to a busier API
-elsewhere. It says what it saw in one line (`Watched the page load: 12
-calls, 3 reads drafted.`, counting the reads beyond a title check) and only
-asks you to record when no such read came out. Nothing in the window is clicked or
-typed, and nothing it signed in with is kept, since nobody signed in; a page
+mentions `fetch`, `XMLHttpRequest`, `graphql` or `api`); a page without them
+goes straight to the question below. It opens the same kind of window on the
+page, waits until the network has been quiet for two seconds (ten at most),
+scrolls once to the bottom, waits again, closes the window and drafts from
+what the page loaded on its own, the way `itda draft har` does. It tries the
+page's own address first, so what the page itself shows is never lost to a
+busier API elsewhere. It says what it saw in one line (`Watched the page
+load: 12 calls, 3 reads drafted.`, counting the reads beyond a title check)
+and only asks you to record when no such read came out. Nothing in the
+window is clicked or typed, and nothing it signed in with is kept, since
+nobody signed in; a page
 whose scripts go to a sign-in page stops with `auth_required`, as a redirect
 does. `--no-record` skips the window as well, `--watch-only` watches but
 never asks you to record. A site whose software is recognised (above) gets
@@ -460,7 +461,7 @@ auth:
 Store the value with `echo "$KEY" | itda login <site>` (OS keyring), or set
 `ITDA_SECRET__<SITE>__<ACCOUNT>__<NAME>` for CI and containers. `--account`
 picks among several accounts; the default account is `default`. The header is
-only ever sent to `base_url`'s origin, or to `origin` when you set it.
+sent only to `base_url`'s origin, or to `origin` when you set it.
 
 ### Sign in with a password
 
@@ -738,10 +739,11 @@ refresh needs names and shapes only; `itda remove` deletes it with the site. `te
 site came from (`gitlab`, `jira`...), with its API base in `base_url`, so a
 refresh fills the same template again and reads the page again when it still
 opens. `base_url`, `include` and `lang` are otherwise the
-choices the draft was made with, each left out when it was not given. Nothing in the file is a secret. `drafted`
-holds a hash of every operation as it was drafted, which is how a refresh
-tells an operation you edited by hand from one it may replace. A definition
-installed with `itda add` has no sources and cannot be refreshed.
+choices the draft was made with, each left out when it was not given. Nothing
+in the file is a secret. `drafted` holds a hash of every operation as it was
+drafted, so a refresh can tell an operation you edited by hand from one it
+may replace. A definition installed with `itda add` has no sources and cannot
+be refreshed.
 
 When a check says `site_changed`, draft the site again from those sources:
 
@@ -764,11 +766,11 @@ verdict  ok: every read still matches the site
 
 The merge keeps the site's name, title and `base_url`, `defaults`, `auth`
 and the header comments as they are, and goes through the operations by
-name: one whose YAML differs from what the sources drafted last time was
-edited by hand and is kept as it is; one the new draft changed (a renamed
-column, a moved endpoint, a response check) takes the new version; one the
+name. One whose YAML differs from what the sources drafted last time was
+edited by hand and is kept as it is. One the new draft changed (a renamed
+column, a moved endpoint, a response check) takes the new version. One the
 sources no longer draft is dropped only when its read also failed in the
-check; one the draft now has is tried once and added when it answers.
+check. One the draft now has is tried once and added when it answers.
 Approvals waiting for the site are withdrawn, as for any replaced
 definition. `-y` writes without asking; without it, nothing is written until
 you say yes. The site is checked right after and the verdict

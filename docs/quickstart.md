@@ -35,10 +35,10 @@ ok    local addresses  refused (ITDA_ALLOW_LOCAL=1 allows them)
 ## Set up a site you use
 
 Type `itda`, paste the address of a site you use, and press Enter. itda looks
-at the page; when the page is drawn by scripts and shows itda only a title,
+at the page. When the page is drawn by scripts and shows itda only a title,
 it opens your browser on it for a few seconds, watches what the page loads by
-itself and drafts from those calls (nothing is clicked or typed, and the
-window closes on its own); when the page needs a sign-in, it asks for your
+itself and drafts from those calls; nothing is clicked or typed, and the
+window closes on its own. When the page needs a sign-in, it asks for your
 user name and password and signs in through the site's own form, as itself
 (`--user <name>` from a script, the password on stdin), or asks to open your
 browser and watch while you use the site. It then shows what agents will be
@@ -61,8 +61,8 @@ when the page does not say; `--no-template` skips them.
 Once itda is connected (`itda mcp install <client>`, or the question at the
 end of a setup), you can skip the terminal for the next sites. Tell your
 agent "use news.ycombinator.com": it calls `itda_setup` with the address,
-the site is looked at, drafted and tried the same way, and its actions show
-up as tools in the same conversation. A page drawn by scripts opens briefly
+itda looks at the site, drafts and tries it the same way, and its actions
+show up as tools in the same conversation. A page drawn by scripts opens briefly
 in a browser window on your screen so itda can watch what it loads; nothing
 in it is clicked or typed. When a read says to sign in, the agent
 calls `itda_login` and your own browser opens for you to sign in; the agent

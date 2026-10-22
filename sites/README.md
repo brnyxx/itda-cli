@@ -11,7 +11,7 @@ the address in its `base_url`, and every change waits for your approval.
 | [pypi](pypi.yaml) | None | package and release, with known vulnerabilities | none |
 
 Each one is built into `itda`, so the name is enough. A file from a checkout
-or a raw URL works too, which is how you install a newer copy or your own:
+or a raw URL works too, for a newer copy or your own:
 
 ```sh
 itda add npm
