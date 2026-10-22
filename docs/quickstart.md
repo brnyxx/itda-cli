@@ -93,7 +93,7 @@ moment. A site definition can ask for more room with `defaults.interval`.
 | Command | What it does |
 |---|---|
 | `itda setup <url> [--name id] [--record\|--no-record] [--client name\|none] [--yes]` | One go: look at the page or record you using the site, name the actions in plain words (`ITDA_LANG=ko` for Korean), try every read, keep what works, connect an agent |
-| `itda draft page <url>… [--name id] [--base-url url] [--include text] [--install] [--force]` | Draft a site definition from the pages you use: tables, lists, embedded data, forms and feeds |
+| `itda draft page <url>… [--name id] [--base-url url] [--include text] [--install] [--force]` | Draft a site definition from the pages you use: tables, lists, embedded data, forms and feeds, plus the reads of the API description the site publishes |
 | `itda record <url> [--name id] [--install] [--save file.har]` | Use a site in your own browser while itda records what its pages ask for, then draft a definition from that |
 | `itda draft openapi <file> [--install]` · `itda draft har <file> [--install]` | Draft one from an API description or a saved browser recording |
 | `itda add <file\|url\|name\|-> [--force]` | Install a site definition (a file, an https URL, stdin, or a ready-made site such as `github`) after showing where it sends requests and which actions change the site |

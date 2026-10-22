@@ -54,7 +54,20 @@ notices when the page changes:
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
 | A sign-in form | Left out; `itda login <site> --browser` signs in |
 | `<link rel="alternate">` to RSS or Atom | A read with `format: xml` |
-| A link to an OpenAPI document | A note suggesting `itda draft openapi` |
+| A link to an OpenAPI document (`rel="service-desc"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or one of `/openapi.json`, `/openapi.yaml`, `/swagger.json`, `/api/openapi.json`, `/.well-known/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` would make them, under the page's address; its changes are listed as notes; see below |
+
+When a site also publishes an API description, itda reads it: the one the
+page links to, else the first of the five paths above that answers with an
+OpenAPI 3 or Swagger 2.0 document (GET only, as itda, at most 4 MB, stopping
+at the first hit). Its reads become actions the way `itda draft openapi`
+makes them, so the same path is drafted once whether the page or the
+description named it. The changes it lists are notes rather than actions (one
+each up to ten, then a count); `itda draft openapi <url>` drafts those for
+review. A read whose input is a credential, such as an `apikey` query
+parameter, is left out and listed, as the install-time checks would refuse
+it. A description whose server is another address is not merged, only noted,
+and one that does not parse leaves the page draft as it is. The header
+comment and every merged action's `evidence` name the description's address.
 
 Field and input names go through the same checks as a hand-written
 definition: a name that looks like a credential is left out and listed. A
