@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><title>Minutes - Example intranet</title></head>
+<body>
+  <h1>Meeting minutes</h1>
+  <article>
+    <p>Notes from the weekly meeting.</p>
+    <ul class="attachments">
+      <li><a href="/board/files/101" download>minutes-2026-10-20.pdf</a></li>
+      <li><a href="/board/files/102" download>budget.xlsx</a></li>
+      <li><a href="/download.php?id=55&amp;type=board" class="btn-download">첨부파일 다운로드</a></li>
+      <li><a href="/board/files/101.pdf">a plain link to the same file</a></li>
+    </ul>
+    <a href="/board/42">Next item</a>
+  </article>
+  <form action="/board/42/attach" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="recorded-secret-token">
+    <input name="memo">
+    <input type="file" name="attachment">
+    <button type="submit">Attach</button>
+  </form>
+</body>
+</html>

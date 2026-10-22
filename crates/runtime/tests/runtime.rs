@@ -136,6 +136,7 @@ fn call(action: &str, args: &[(&str, &str)]) -> Call {
         approval: None,
         next: None,
         discovery: false,
+        out: None,
     }
 }
 
@@ -1645,4 +1646,211 @@ async fn a_session_kept_in_storage_is_sent_as_a_bearer_header_and_stays_out_of_r
         1,
         "no request went out for an expired token"
     );
+}
+
+/// A site with an attachment to download and a form that takes a file.
+async fn file_site() -> (String, Arc<std::sync::Mutex<Vec<u8>>>) {
+    let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let got = received.clone();
+    let router = Router::new()
+        .route(
+            "/files/{id}",
+            get(
+                |axum::extract::Path(id): axum::extract::Path<u32>| async move {
+                    if id == 7 {
+                        Ok((
+                            [
+                                (axum::http::header::CONTENT_TYPE, "application/pdf"),
+                                (
+                                    axum::http::header::CONTENT_DISPOSITION,
+                                    "attachment; filename=\"minutes.pdf\"",
+                                ),
+                            ],
+                            "%PDF-1.4 minutes".to_owned(),
+                        ))
+                    } else {
+                        Err(axum::response::Html(
+                            "<html>Sign in to see this file</html>",
+                        ))
+                    }
+                },
+            ),
+        )
+        .route(
+            "/upload",
+            axum::routing::post(move |body: axum::body::Bytes| {
+                let got = got.clone();
+                async move {
+                    *got.lock().unwrap() = body.to_vec();
+                    StatusCode::CREATED
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    (base, received)
+}
+
+fn file_spec(base: &str) -> Spec {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "board", "title": "Board", "base_url": base},
+        "operations": [
+            {"name": "get-attachment", "desc": "Download an attachment", "method": "GET", "path": "/files/{id}", "effect": "read", "evidence": "doc",
+             "params": {"id": {"type": "int"}},
+             "response": {"format": "file", "media_types": ["application/pdf"]}},
+            {"name": "upload-file", "desc": "Attach a file to the board", "method": "POST", "path": "/upload", "effect": "write", "evidence": "doc",
+             "body": {"multipart": {"fields": {"title": {"type": "string", "required": true}}, "file": {"name": "upload", "from": "attachment"}}}}
+        ]
+    });
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn a_file_read_saves_the_file_and_returns_its_manifest() {
+    let (base, _) = file_site().await;
+    let (bare, _) = runtime().await;
+    let spec = file_spec(&base);
+    // Without a files folder the read is refused before anything is sent.
+    let error = bare
+        .call(&spec, call("get-attachment", &[("id", "7")]))
+        .await
+        .unwrap_err();
+    assert!(error.msg.contains("keeps no files"), "{}", error.msg);
+
+    let files = std::env::temp_dir().join(format!("itda-runtime-files-{}", itda_types::util::id()));
+    let (with_files, _) = runtime().await;
+    let runtime = with_files.with_files(&files);
+    let envelope = runtime
+        .call(&spec, call("get-attachment", &[("id", "7")]))
+        .await
+        .unwrap();
+    assert_eq!(envelope.effect, "read");
+    let expected = files.join("board").join("minutes.pdf");
+    assert_eq!(envelope.data["path"], expected.to_string_lossy().as_ref());
+    assert_eq!(envelope.data["bytes"], 16);
+    assert_eq!(envelope.data["media_type"], "application/pdf");
+    assert_eq!(
+        envelope.data["sha256"],
+        itda_types::util::hash(b"%PDF-1.4 minutes")
+    );
+    assert_eq!(std::fs::read(&expected).unwrap(), b"%PDF-1.4 minutes");
+
+    // `out` puts the file elsewhere; a page in place of the file says so.
+    let out = files.join("elsewhere");
+    let mut elsewhere = call("get-attachment", &[("id", "7")]);
+    elsewhere.out = Some(out.clone());
+    let envelope = runtime.call(&spec, elsewhere).await.unwrap();
+    assert_eq!(
+        envelope.data["path"],
+        out.join("minutes.pdf").to_string_lossy().as_ref()
+    );
+    let error = runtime
+        .call(&spec, call("get-attachment", &[("id", "8")]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "wrong_media_type");
+    assert_eq!(error.extra["upstream_status"], 200);
+    std::fs::remove_dir_all(&files).ok();
+}
+
+#[tokio::test]
+async fn an_upload_is_approved_by_hash_and_sent_once() {
+    use itda_runtime::audit::AuditLog;
+    let (base, received) = file_site().await;
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let dir = std::env::temp_dir().join(format!("itda-runtime-upload-{}", itda_types::util::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let log = Arc::new(AuditLog::new(dir.join("audit.jsonl")));
+    let runtime = Runtime::new(Arc::new(Network::new(gate, true)), vault)
+        .with_approvals(approvals.clone())
+        .with_audit(log.clone());
+    let spec = file_spec(&base);
+    let path = dir.join("plan.csv");
+    std::fs::write(&path, b"a,b\n1,2\n").unwrap();
+    let path_text = path.to_string_lossy().into_owned();
+    let sha256 = itda_types::util::hash(b"a,b\n1,2\n");
+    let args = [("title", "Q4 plan"), ("attachment", path_text.as_str())];
+
+    // A path that is not a file stops the call before an approval exists.
+    let error = runtime
+        .call(
+            &spec,
+            call(
+                "upload-file",
+                &[
+                    ("title", "x"),
+                    ("attachment", dir.to_string_lossy().as_ref()),
+                ],
+            ),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.msg.contains("cannot read"), "{}", error.msg);
+
+    let error = runtime
+        .call(&spec, call("upload-file", &args))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "approval_required");
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    let review = approvals.review(&id).await.unwrap();
+    let file_line = review.inputs.iter().find(|i| i.label == "file").unwrap();
+    assert_eq!(
+        file_line.value,
+        format!("plan.csv (8 bytes, sha256 {sha256})")
+    );
+    assert!(review.inputs.iter().all(|i| i.label != "attachment"));
+    assert_eq!(review.request.as_ref().unwrap().file_hash, sha256);
+    approvals.claim(&id).await.unwrap();
+
+    // Other bytes under the same name are not what was approved.
+    std::fs::write(&path, b"a,b\n9,9\n").unwrap();
+    let mut swapped = call("upload-file", &args);
+    swapped.approval = Some(id.clone());
+    let error = runtime.call(&spec, swapped).await.unwrap_err();
+    assert_eq!(error.public_code, "approval_expired");
+    assert_eq!(error.extra["reason"], "file_changed");
+    assert!(received.lock().unwrap().is_empty());
+
+    // The same file again gets a fresh approval and goes once.
+    std::fs::write(&path, b"a,b\n1,2\n").unwrap();
+    let error = runtime
+        .call(&spec, call("upload-file", &args))
+        .await
+        .unwrap_err();
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    approvals.claim(&id).await.unwrap();
+    let mut approved = call("upload-file", &args);
+    approved.approval = Some(id.clone());
+    let envelope = runtime.call(&spec, approved).await.unwrap();
+    assert_eq!(envelope.meta.http_status, 201);
+    let body = String::from_utf8_lossy(&received.lock().unwrap()).into_owned();
+    assert!(body.contains("name=\"title\"\r\n\r\nQ4 plan\r\n"), "{body}");
+    assert!(
+        body.contains(
+            "name=\"upload\"; filename=\"plan.csv\"\r\nContent-Type: text/csv\r\n\r\na,b\n1,2\n\r\n"
+        ),
+        "{body}"
+    );
+
+    let records = log.records().unwrap();
+    let with_hash: Vec<(&str, &str)> = records
+        .iter()
+        .filter(|r| r.file_sha256 == sha256)
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert!(
+        with_hash.contains(&("change_started", "sending")),
+        "{with_hash:?}"
+    );
+    assert!(with_hash.contains(&("call", "ok")), "{with_hash:?}");
+    let text = std::fs::read_to_string(log.path()).unwrap();
+    assert!(!text.contains(&path_text), "{text}");
+    assert_eq!(log.verify().unwrap(), records.len() as u64);
+    std::fs::remove_dir_all(&dir).ok();
 }

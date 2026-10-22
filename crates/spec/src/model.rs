@@ -302,6 +302,43 @@ pub struct ResponseExpectation {
     pub ssr_json: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub extract_pointer: String,
+    /// `format: file` only: the media types the answer may carry
+    /// (`application/pdf`). An HTML answer counts only when the site marks
+    /// it as an attachment.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub media_types: Vec<String>,
+    /// `format: file` only: the largest file the read accepts, in bytes;
+    /// [`DEFAULT_FILE_BYTES`] when 0.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub max_bytes: u64,
+    /// `format: file` only: whether an answer of no bytes is a file.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub allow_empty: bool,
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
+}
+
+/// The largest file a read saves unless its definition says otherwise.
+pub const DEFAULT_FILE_BYTES: u64 = 64 * 1024 * 1024;
+/// A definition cannot ask for a larger file than this.
+pub const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+
+impl ResponseExpectation {
+    /// Whether the read saves the answer as a file instead of reading it.
+    pub fn is_file(&self) -> bool {
+        self.format == "file"
+    }
+
+    /// The size cap of a file read.
+    pub fn file_limit(&self) -> u64 {
+        if self.max_bytes == 0 {
+            DEFAULT_FILE_BYTES
+        } else {
+            self.max_bytes
+        }
+    }
 }
 
 impl Operation {
@@ -320,6 +357,16 @@ impl Operation {
     /// The input a pagination marker goes back in, when the read turns pages.
     pub fn pagination_input(&self) -> Option<&str> {
         self.pagination.as_ref().map(|p| p.input().0)
+    }
+
+    /// Whether the answer is saved as a file (`response: {format: file}`).
+    pub fn saves_file(&self) -> bool {
+        self.response.as_ref().is_some_and(|r| r.is_file())
+    }
+
+    /// The input that carries the path of the file a multipart body sends.
+    pub fn file_input(&self) -> Option<&String> {
+        self.body.as_ref().and_then(|body| body.file_input())
     }
 
     /// Inputs an agent may not set: filled by a preflight step, or the cursor
@@ -383,11 +430,62 @@ pub struct Body {
     pub json_template: Option<Value>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub form: std::collections::BTreeMap<String, Param>,
+    /// A `multipart/form-data` body: text fields and, at most, one file the
+    /// person names by its path on this computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multipart: Option<Multipart>,
 }
+
+/// A `multipart/form-data` body. `fields` are sent as text parts; `file`
+/// names the part that carries a file and the input its local path comes in.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Multipart {
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub fields: std::collections::BTreeMap<String, Param>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<FilePart>,
+}
+
+/// The file part of a multipart body: the form field's `name` and the input
+/// (`from`) whose value is the path of a file on this computer.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FilePart {
+    pub name: String,
+    pub from: String,
+}
+
+/// The input kind of a file path: a `string` an agent gives, shown to the
+/// person with the file's name, size and hash before it is sent.
+pub const FILE_KIND: &str = "file";
+
+static FILE_PARAM: std::sync::LazyLock<Param> = std::sync::LazyLock::new(|| Param {
+    kind: FILE_KIND.into(),
+    required: true,
+    default: None,
+});
+
 impl Body {
+    /// Every input the body takes, the file path input among them.
     pub fn inputs(&self) -> impl Iterator<Item = (&String, &Param)> {
-        self.json.iter().chain(self.form.iter())
+        self.json.iter().chain(self.form.iter()).chain(
+            self.multipart
+                .iter()
+                .flat_map(|m| m.fields.iter())
+                .chain(self.file_input().map(|name| (name, &*FILE_PARAM))),
+        )
     }
+    /// The name of the input that carries a file's path, when the body
+    /// sends one.
+    pub fn file_input(&self) -> Option<&String> {
+        self.multipart
+            .as_ref()
+            .and_then(|m| m.file.as_ref())
+            .map(|file| &file.from)
+    }
+    /// The content type of a json or form body. A multipart body's carries
+    /// its boundary and is set when the request is built.
     pub fn content_type(&self) -> &'static str {
         if self.form.is_empty() {
             "application/json"

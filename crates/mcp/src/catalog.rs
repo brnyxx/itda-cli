@@ -16,6 +16,8 @@ pub struct Entry {
     pub method: String,
     /// The read turns pages: it returns `meta.next` and takes `next`.
     pub paginated: bool,
+    /// The read saves its answer as a file and returns a manifest.
+    pub saves_file: bool,
     pub input_schema: Map<String, Value>,
 }
 
@@ -37,6 +39,7 @@ impl Catalog {
                     method: op.method.clone(),
                     paginated: op.pagination.is_some()
                         && operation_effect(op, &BTreeMap::new()) == Effect::Read,
+                    saves_file: op.saves_file(),
                     input_schema: input_schema(op, operation_effect(op, &BTreeMap::new())),
                 });
             }
@@ -151,6 +154,12 @@ fn input_schema(op: &Operation, effect: Effect) -> Map<String, Value> {
 }
 
 fn param_schema(param: &Param) -> Value {
+    if param.kind == itda_spec::FILE_KIND {
+        return json!({
+            "type": "string",
+            "description": "The path of a file on this computer to send. The user sees its name, size and SHA-256 when approving; the approval is for those bytes.",
+        });
+    }
     let kind = match param.kind.as_str() {
         "int" | "integer" => "integer",
         "float" | "number" => "number",

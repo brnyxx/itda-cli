@@ -956,3 +956,100 @@ fn pages_read_with_a_query_session_name_the_query_key_instead_of_a_cookie() {
     assert!(session.login.is_some());
     assert!(spec.operations.iter().all(|op| op.auth == "session"));
 }
+
+#[test]
+fn attachments_become_file_reads_and_an_upload_form_a_multipart_change() {
+    let draft = from_pages(
+        &[page(
+            "https://intranet.example.co.kr/board/41",
+            "attachments.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = spec_of(&draft);
+    itda_policy::validate_spec(&spec).unwrap();
+    let names: Vec<&str> = spec.operations.iter().map(|o| o.name.as_str()).collect();
+    assert!(names.contains(&"download-file"), "{names:?}");
+    assert!(names.contains(&"download-download"), "{names:?}");
+    assert!(names.contains(&"post-attach"), "{names:?}");
+    assert_eq!(draft.reads, draft.operations - 1);
+
+    let by_path = spec.op("download-file").unwrap();
+    assert_eq!(by_path.path, "/board/files/{file_id}");
+    assert_eq!(by_path.desc, "Download an attachment from Minutes");
+    assert!(by_path.params["file_id"].required);
+    let response = by_path.response.as_ref().unwrap();
+    assert_eq!(response.format, "file");
+    // The links name no kind of file, so the read accepts the usual documents.
+    assert!(
+        response.media_types.contains(&"application/pdf".to_owned()),
+        "{:?}",
+        response.media_types
+    );
+    assert!(
+        response
+            .media_types
+            .contains(&"application/octet-stream".to_owned())
+    );
+    assert_eq!(
+        by_path.evidence,
+        "/board/41 links to GET /board/files/{file_id} as an attachment (2 links)"
+    );
+    assert_eq!(
+        itda_policy::operation_effect(by_path, &Default::default()),
+        itda_policy::Effect::Read
+    );
+
+    let by_query = spec.op("download-download").unwrap();
+    assert_eq!(by_query.path, "/download.php");
+    assert_eq!(
+        (
+            by_query.query["id"].kind.as_str(),
+            by_query.query["id"].required
+        ),
+        ("int", true)
+    );
+    assert_eq!(by_query.query["type"].default, Some("board".into()));
+
+    let upload = spec.op("post-attach").unwrap();
+    assert_eq!(upload.desc, "Upload a file to Minutes");
+    assert_eq!(upload.auth, "session");
+    let multipart = upload.body.as_ref().unwrap().multipart.as_ref().unwrap();
+    assert_eq!(
+        multipart.file,
+        Some(itda_spec::FilePart {
+            name: "attachment".into(),
+            from: "attachment".into()
+        })
+    );
+    assert_eq!(multipart.fields["memo"].kind, "string");
+    assert!(multipart.fields["_csrf"].from_step());
+    assert_eq!(upload.preflight[0].path, "/board/41");
+    assert_eq!(upload.file_input().map(String::as_str), Some("attachment"));
+    assert!(!draft.yaml.contains("recorded-secret-token"));
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("you approve the file by name, size and hash")),
+        "{:?}",
+        draft.notes
+    );
+    assert!(
+        !draft
+            .notes
+            .iter()
+            .any(|n| n.contains("do not cover file uploads")),
+        "{:?}",
+        draft.notes
+    );
+    assert!(
+        !spec
+            .operations
+            .iter()
+            .any(|o| o.path == "/board/files/101.pdf"),
+        "{names:?}"
+    );
+}

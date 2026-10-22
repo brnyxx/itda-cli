@@ -696,3 +696,125 @@ operations:
         assert!(issues[0].detail.contains("storage:<key>"), "{issues:?}");
     }
 }
+
+#[test]
+fn a_multipart_body_names_its_fields_and_one_file() {
+    let sp = parse(
+        r##"
+spec_version: 1
+site: {name: t3, base_url: https://x.example.com}
+operations:
+  - name: upload
+    method: POST
+    path: /files
+    body:
+      multipart:
+        fields: {title: {type: string, required: true}, folder: {type: string, default: inbox}}
+        file: {name: upload, from: attachment}
+  - name: get-file
+    method: GET
+    path: /files/{id}
+    params: {id: {type: int, required: true}}
+    response: {format: file, media_types: [application/pdf], max_bytes: 1000, allow_empty: true}
+"##,
+    );
+    assert!(sp.validate().is_empty(), "{:?}", sp.validate());
+    let upload = sp.op("upload").unwrap();
+    let kinds: Vec<(&str, &str)> = upload
+        .body
+        .as_ref()
+        .unwrap()
+        .inputs()
+        .map(|(n, p)| (n.as_str(), p.kind.as_str()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("folder", "string"),
+            ("title", "string"),
+            ("attachment", "file")
+        ]
+    );
+    let args = BTreeMap::from([
+        ("title".to_owned(), "Plan".to_owned()),
+        ("attachment".to_owned(), "/tmp/plan.csv".to_owned()),
+    ]);
+    let (url, body) = sp.build_request(upload, &args).unwrap();
+    assert_eq!((url.as_str(), body), ("https://x.example.com/files", None));
+    let parts = sp.multipart_parts(upload, &args).unwrap().unwrap();
+    assert_eq!(
+        parts.fields,
+        [
+            ("folder".to_owned(), "inbox".to_owned()),
+            ("title".to_owned(), "Plan".to_owned())
+        ]
+    );
+    assert_eq!(
+        parts.file,
+        Some(("upload".to_owned(), "/tmp/plan.csv".to_owned()))
+    );
+    let missing = sp
+        .multipart_parts(
+            upload,
+            &BTreeMap::from([("title".to_owned(), "x".to_owned())]),
+        )
+        .unwrap_err();
+    assert!(missing.msg.contains("attachment"), "{}", missing.msg);
+
+    let get = sp.op("get-file").unwrap();
+    assert!(get.saves_file());
+    let response = get.response.as_ref().unwrap();
+    assert_eq!((response.file_limit(), response.allow_empty), (1000, true));
+    assert_eq!(
+        spec::ResponseExpectation::default().file_limit(),
+        spec::DEFAULT_FILE_BYTES
+    );
+    // A buffered answer is never the file.
+    assert!(!get.matches_response(&TestResponse {
+        url: "https://x.example.com/files/1",
+        status: 200,
+        headers: vec![("content-type", "application/pdf")],
+        bytes: b"%PDF".to_vec(),
+    }));
+
+    let two = spec::parse(
+        br##"
+spec_version: 1
+site: {name: t4, base_url: https://x.example.com}
+operations:
+  - name: both
+    method: POST
+    path: /x
+    body:
+      form: {a: {type: string}}
+      multipart: {fields: {b: {type: string}}}
+"##,
+    )
+    .unwrap();
+    assert!(
+        two.validate()
+            .iter()
+            .any(|i| i.detail.contains("one body encoding"))
+    );
+    let clash = spec::parse(
+        br##"
+spec_version: 1
+site: {name: t5, base_url: https://x.example.com}
+operations:
+  - name: clash
+    method: POST
+    path: /x
+    body:
+      multipart:
+        fields: {attachment: {type: string}}
+        file: {name: upload, from: attachment}
+"##,
+    )
+    .unwrap();
+    assert!(
+        clash
+            .validate()
+            .iter()
+            .any(|i| i.field.ends_with("file.from"))
+    );
+}

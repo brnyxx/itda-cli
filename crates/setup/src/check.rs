@@ -76,6 +76,11 @@ async fn reads(
                 out.push(outcome("skipped", "changes the site".into(), None));
                 continue;
             }
+            // A check reads; it does not fill a folder with files.
+            if op.saves_file() {
+                out.push(outcome("skipped", "saves a file".into(), None));
+                continue;
+            }
             let needed = needed_inputs(op);
             if !needed.is_empty() {
                 out.push(outcome(

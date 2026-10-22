@@ -56,7 +56,10 @@ impl Spec {
 
         let mut body = None;
         if let Some(b) = &op.body {
-            if !b.form.is_empty() {
+            if b.multipart.is_some() {
+                // The parts are assembled by `multipart_parts`; the body is
+                // streamed from disk when it is sent.
+            } else if !b.form.is_empty() {
                 let mut form = FormEncoder::default();
                 for (name, p) in &b.form {
                     if !args.contains_key(name) && p.default.is_none() {
@@ -119,6 +122,51 @@ impl Spec {
         Ok((url_s, body))
     }
 
+    /// The parts of a multipart body: the text fields, resolved like form
+    /// fields, and the file part's field name with the path the person gave.
+    /// `None` when the operation sends no multipart body.
+    pub fn multipart_parts(
+        &self,
+        op: &Operation,
+        args: &std::collections::BTreeMap<String, String>,
+    ) -> AppResult<Option<MultipartParts>> {
+        let Some(multipart) = op.body.as_ref().and_then(|b| b.multipart.as_ref()) else {
+            return Ok(None);
+        };
+        let empty_resolved = std::collections::BTreeMap::new();
+        let mut fields = Vec::new();
+        for (name, p) in &multipart.fields {
+            if !args.contains_key(name) && p.default.is_none() {
+                if p.required {
+                    return Err(apperr::usage(
+                        format!("Missing required input: {name}"),
+                        "Use the action's --help for its inputs.",
+                    ));
+                }
+                continue;
+            }
+            let mut v = coerce_str(p, name, args, true)?;
+            if v.contains("{{") {
+                v = interpolate_template_str(&v, &empty_resolved, args);
+            }
+            fields.push((name.clone(), v));
+        }
+        let file = match &multipart.file {
+            Some(part) => {
+                let path = args.get(&part.from).filter(|p| !p.trim().is_empty());
+                let Some(path) = path else {
+                    return Err(apperr::usage(
+                        format!("Missing required input: {}", part.from),
+                        "Give the path of the file to send.",
+                    ));
+                };
+                Some((part.name.clone(), path.clone()))
+            }
+            None => None,
+        };
+        Ok(Some(MultipartParts { fields, file }))
+    }
+
     /// Project a raw JSON response into a declared model shape with type coercion.
     pub fn apply_model(&self, name: &str, raw: &[u8]) -> AppResult<Value> {
         let model = match self.models.get(name) {
@@ -138,6 +186,14 @@ impl Spec {
             _ => project(model, &doc),
         })
     }
+}
+
+/// A multipart body as the definition and the inputs make it: text fields in
+/// order, and the file part's field name with the local path to send.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultipartParts {
+    pub fields: Vec<(String, String)>,
+    pub file: Option<(String, String)>,
 }
 
 /// One record in the model's shape. A list answer is projected record by record.

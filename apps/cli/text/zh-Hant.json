@@ -122,5 +122,8 @@
   "lost_landed": "{read} 顯示已生效",
   "lost_not_found": "{read} 未顯示",
   "lost_unknown": "用於確認的讀取 {read} 也失敗了",
-  "lost_unchecked": "沒有用於確認的讀取；請檢查網站"
+  "lost_unchecked": "沒有用於確認的讀取；請檢查網站",
+  "returns_file": "回傳一個檔案：{types}，儲存在 {dir} 下",
+  "sends_file": "傳送 {input} 中指定的檔案；你按名稱、大小和雜湊核准它",
+  "saved_file": "已儲存 {path}（{bytes} 位元組，sha256 {sha256}）"
 }

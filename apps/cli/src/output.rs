@@ -9,7 +9,8 @@ pub fn exit_code(public_code: &str) -> u8 {
         "ok" => 0,
         "bad_request" | "data_invalid" | "bad_url" | "not_found" | "effect_changed" => 2,
         "auth_required" | "identity_unavailable" => 10,
-        "response_mismatch" | "query_failed" => 11,
+        "response_mismatch" | "query_failed" | "wrong_media_type" | "partial_answer"
+        | "empty_answer" => 11,
         "blocked_by_site" | "unsafe_target" | "local_target" => 12,
         "rate_limited" | "site_rate_limited" => 13,
         "api_denied" => 14,
@@ -17,7 +18,7 @@ pub fn exit_code(public_code: &str) -> u8 {
         "approval_expired" => 21,
         "pagination_expired" | "pagination_invalid" => 23,
         "action_outcome_unknown" => 22,
-        "request_failed" | "timeout" | "too_large" => 30,
+        "request_failed" | "timeout" | "too_large" | "request_lease_lost" => 30,
         _ => 1,
     }
 }
@@ -93,6 +94,9 @@ mod tests {
         assert_eq!(exit_code("writes_disabled"), 20);
         assert_eq!(exit_code("pagination_expired"), 23);
         assert_eq!(exit_code("timeout"), 30);
+        assert_eq!(exit_code("wrong_media_type"), 11);
+        assert_eq!(exit_code("partial_answer"), 11);
+        assert_eq!(exit_code("request_lease_lost"), 30);
         assert_eq!(exit_code("internal"), 1);
     }
 }

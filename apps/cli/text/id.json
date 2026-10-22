@@ -122,5 +122,8 @@
   "lost_landed": "{read} menunjukkan sudah masuk",
   "lost_not_found": "{read} tidak menunjukkannya",
   "lost_unknown": "pembacaan pengonfirmasi {read} juga gagal",
-  "lost_unchecked": "tidak ada pembacaan pengonfirmasi; periksa situs"
+  "lost_unchecked": "tidak ada pembacaan pengonfirmasi; periksa situs",
+  "returns_file": "mengembalikan sebuah file: {types}, disimpan di {dir}",
+  "sends_file": "mengirim file yang ditulis di {input}; Anda menyetujuinya berdasarkan nama, ukuran, dan hash",
+  "saved_file": "Tersimpan {path} ({bytes} byte, sha256 {sha256})"
 }

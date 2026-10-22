@@ -29,6 +29,10 @@ pub struct ExecutionRequest {
     pub spec_hash: String,
     #[serde(default)]
     pub credential_hash: String,
+    /// The SHA-256 of the file a change sends, when it sends one: the
+    /// approval is for that file's bytes, not its path.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub file_hash: String,
 }
 impl ExecutionRequest {
     pub fn digest(&self) -> AppResult<String> {

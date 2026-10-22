@@ -3372,3 +3372,173 @@ async fn a_session_in_the_query_is_sent_and_kept_out_of_results_and_the_audit_lo
     assert!(seen.load(Ordering::SeqCst) >= 1);
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A site whose attachment is a file to save, and a form that takes one.
+fn install_files(home: &Path, base: &str) {
+    let dir = home.join("specs/files");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.yaml"),
+        format!(
+            "spec_version: 1
+site:
+  name: files
+  base_url: {base}
+operations:
+  - name: get-attachment
+    desc: Download an attachment
+    method: GET
+    path: /attachment.pdf
+    effect: read
+    evidence: doc
+    response: {{format: file, media_types: [application/pdf]}}
+  - name: attach
+    desc: Attach a file
+    method: POST
+    path: /upload
+    effect: write
+    evidence: doc
+    body:
+      multipart:
+        fields: {{title: {{type: string, required: true}}}}
+        file: {{name: upload, from: attachment}}
+"
+        ),
+    )
+    .unwrap();
+}
+
+async fn serve_files() -> String {
+    let router = Router::new().route(
+        "/attachment.pdf",
+        get(|| async {
+            (
+                [(axum::http::header::CONTENT_TYPE, "application/pdf")],
+                "%PDF-1.4 cli fixture",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_read_saves_under_the_data_directory_or_out() {
+    let home = home();
+    install_files(&home, &serve_files().await);
+    let english = [("ITDA_LANG", "en")];
+
+    let text = String::from_utf8_lossy(&itda(&home, &["describe", "files"], &english).await.stdout)
+        .into_owned();
+    assert!(
+        text.contains("returns a file: application/pdf, saved under"),
+        "{text}"
+    );
+    assert!(text.contains("sends the file at attachment"), "{text}");
+    let described =
+        stdout_json(&itda(&home, &["describe", "files.get-attachment", "--json"], &[]).await);
+    assert_eq!(described[0]["returns"]["file"]["sha256"], "string");
+
+    let saved = itda(&home, &["call", "files.get-attachment", "--json"], &english).await;
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stderr)
+    );
+    let envelope = stdout_json(&saved);
+    let expected = home.join("files").join("files").join("attachment.pdf");
+    assert_eq!(
+        envelope["data"]["path"],
+        expected.to_string_lossy().as_ref()
+    );
+    assert_eq!(envelope["data"]["bytes"], 20);
+    assert_eq!(envelope["data"]["media_type"], "application/pdf");
+    assert_eq!(
+        envelope["data"]["sha256"],
+        itda_types::util::hash(b"%PDF-1.4 cli fixture")
+    );
+    assert_eq!(std::fs::read(&expected).unwrap(), b"%PDF-1.4 cli fixture");
+    let said = String::from_utf8_lossy(&saved.stderr).into_owned();
+    assert!(
+        said.starts_with(&format!(
+            "Saved {} (20 bytes, sha256 ",
+            expected.to_string_lossy()
+        )),
+        "{said}"
+    );
+
+    let out = home.join("downloads");
+    let elsewhere = itda(
+        &home,
+        &[
+            "call",
+            "files.get-attachment",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        &english,
+    )
+    .await;
+    assert!(elsewhere.status.success());
+    assert!(out.join("attachment.pdf").exists());
+
+    // The check never fills the folder: a file read is skipped by name.
+    let checked = stdout_json(&itda(&home, &["check", "files", "--json"], &[]).await);
+    let attachment = checked["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["action"] == "get-attachment")
+        .unwrap();
+    assert_eq!(attachment["status"], "skipped");
+    assert_eq!(attachment["detail"], "saves a file");
+
+    // An upload names the file in the approval; a missing file never asks.
+    let missing = itda(
+        &home,
+        &[
+            "call",
+            "files.attach",
+            "--title",
+            "x",
+            "--attachment",
+            "/nowhere/plan.csv",
+            "--json",
+        ],
+        &english,
+    )
+    .await;
+    assert_eq!(missing.status.code(), Some(2));
+    let plan = home.join("plan.csv");
+    std::fs::write(&plan, b"a,b\n").unwrap();
+    let asked = stdout_json(
+        &itda(
+            &home,
+            &[
+                "call",
+                "files.attach",
+                "--title",
+                "x",
+                "--attachment",
+                plan.to_str().unwrap(),
+                "--json",
+            ],
+            &english,
+        )
+        .await,
+    );
+    assert_eq!(asked["status"], "approval_required");
+    let listed = stdout_json(&itda(&home, &["approvals", "--json"], &[]).await);
+    let inputs = listed[0]["inputs"].as_array().unwrap();
+    let file = inputs.iter().find(|i| i["label"] == "file").unwrap();
+    assert_eq!(
+        file["value"],
+        format!(
+            "plan.csv (4 bytes, sha256 {})",
+            itda_types::util::hash(b"a,b\n")
+        )
+    );
+    std::fs::remove_dir_all(home).ok();
+}

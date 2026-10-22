@@ -72,6 +72,9 @@ pub const DIRECT_LIMIT: usize = 30;
 const PAGES_NOTE: &str =
     ". Returns meta.next when there is another page; pass it back as next to read it.";
 
+/// Added to the description of a read that saves a file.
+const FILE_NOTE: &str = ". Returns a file, never its contents: data is {path, bytes, media_type, sha256} of the file saved on the user's computer, and the result links it as a resource.";
+
 /// Results longer than this are cut, with `truncated: true`, so one large page
 /// cannot flood the agent's context.
 pub const RESULT_LIMIT: usize = 24 * 1024;
@@ -102,6 +105,10 @@ ask the user to check the site first. When it carries outcome_check, itda alread
 that shows whether the change landed: result landed means the change is in, tell the user and do \
 not ask for it again; not_found means the site shows no trace of it, so the user may ask for a new \
 approval; unknown means that read failed too. \
+A read that returns a file saves it on the user's computer and answers with its path, size, \
+media type and sha256, never the bytes; wrong_media_type, too_large, partial_answer and \
+empty_answer say why no file was saved. A change that sends a file takes the path of a file on \
+the user's computer; the user approves that exact file by name, size and hash. \
 A read that lists things returns meta.next when the site has another page: call it again \
 with next set to that handle and the same inputs to read the following page, only as far as \
 the user's question needs; never page through a whole site on your own. pagination_expired or \
@@ -285,7 +292,7 @@ impl Server {
                         "status": "ok",
                         "action": e.name,
                         "effect": e.effect.as_str(),
-                        "description": if e.paginated { format!("{}{PAGES_NOTE}", e.description) } else { e.description.clone() },
+                        "description": if e.paginated { format!("{}{PAGES_NOTE}", e.description) } else if e.saves_file { format!("{}{FILE_NOTE}", e.description) } else { e.description.clone() },
                         "input_schema": e.input_schema,
                     })),
                     None => unknown(action, catalog.entries().iter().map(|e| e.name.as_str())),
@@ -358,6 +365,7 @@ impl Server {
             approval,
             next,
             discovery: false,
+            out: None,
         };
         // The person answered the form of the previous round in the client.
         if let (None, Some(caller), Some(client)) = (&call.approval, caller, &self.client_approval)
@@ -391,13 +399,39 @@ impl Server {
                 Ok(mut value) => {
                     value["status"] = "ok".into();
                     value["untrusted"] = true.into();
-                    structured(bounded(value))
+                    let link = entry
+                        .saves_file
+                        .then(|| file_link(&value["data"]))
+                        .flatten();
+                    let mut result = structured(bounded(value));
+                    if let Some(link) = link {
+                        result.content.push(link);
+                    }
+                    result
                 }
                 Err(_) => failure(&AppError::api("internal", 500)),
             },
             Err(error) => failure(&error),
         }
     }
+}
+
+/// The saved file as a resource link, so a client can open it without the
+/// bytes passing through the agent.
+fn file_link(manifest: &Value) -> Option<ContentBlock> {
+    let path = manifest.get("path")?.as_str()?;
+    let uri = url::Url::from_file_path(path).ok()?;
+    let name = std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".into());
+    let mut resource = rmcp::model::Resource::new(uri.to_string(), name);
+    resource.mime_type = manifest
+        .get("media_type")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    resource.size = manifest.get("bytes").and_then(Value::as_u64);
+    Some(ContentBlock::resource_link(resource))
 }
 
 fn action_tool(entry: &Entry) -> Tool {
@@ -409,6 +443,8 @@ fn action_tool(entry: &Entry) -> Tool {
         );
     } else if entry.paginated {
         description.push_str(PAGES_NOTE);
+    } else if entry.saves_file {
+        description.push_str(FILE_NOTE);
     }
     let annotations = ToolAnnotations::new()
         .read_only(read)

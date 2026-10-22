@@ -28,9 +28,17 @@
 //! answer is lost, the runtime runs that read once, as a read, and reports
 //! `landed`, `not_found` or `unknown` next to `action_outcome_unknown`. It
 //! never resends the change; see `check_outcome`.
+//!
+//! A read declared `format: file` saves its answer under the files folder
+//! (`with_files`, or the call's `out`) and returns a manifest, never the
+//! bytes; see `files`. A change with a multipart body sends a file from this
+//! computer: the approval names the file, its size and its SHA-256, and the
+//! send is aborted if the file changes under it.
 pub mod audit;
+mod files;
 mod pagination;
 mod preflight;
+pub use files::{Manifest, SentFile};
 use itda_net::{Network, Request};
 use itda_policy::{
     Approvals, Cursors, Effect, ExecutionRequest, ReviewInput, operation_effect, overrides_method,
@@ -46,7 +54,7 @@ use itda_types::{
 use itda_vault::{Secret, Vault};
 use serde::Serialize;
 use serde_json::Value;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 /// The account used when a call names none.
 pub const DEFAULT_ACCOUNT: &str = "default";
@@ -60,6 +68,7 @@ pub struct Runtime {
     approvals: Option<Arc<Approvals>>,
     audit: Option<Arc<audit::AuditLog>>,
     cursors: Option<Arc<Cursors>>,
+    files: Option<PathBuf>,
 }
 
 /// One action call. `account` is only needed for actions with credentials.
@@ -77,6 +86,9 @@ pub struct Call {
     /// challenge is reported without pausing the site (see
     /// `itda_net::Request::pause_on_block`).
     pub discovery: bool,
+    /// Where a file read saves its answer, instead of the runtime's files
+    /// folder.
+    pub out: Option<PathBuf>,
 }
 
 /// What an agent receives: the shaped data and where it came from, never the
@@ -122,7 +134,15 @@ impl Runtime {
             approvals: None,
             audit: None,
             cursors: None,
+            files: None,
         }
+    }
+
+    /// Save the answers of file reads under `dir/<site>/`, unless a call
+    /// says `out`. Without it, file reads are refused.
+    pub fn with_files(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.files = Some(dir.into());
+        self
     }
 
     /// Keep page markers in this store, so reads that turn pages can hand
@@ -145,8 +165,24 @@ impl Runtime {
     }
 
     pub async fn call(&self, spec: &Spec, call: Call) -> AppResult<Envelope> {
+        // The file a change sends is read once here: its hash goes into the
+        // approval, the audit log and the send, which checks the bytes
+        // against it.
+        let file = match files::sent_file(spec, &call).await {
+            Ok(file) => file,
+            Err(error) => {
+                if let Some(log) = &self.audit {
+                    let mut event = self.event(spec, &call, "call", None);
+                    event.outcome = error.public_code.clone();
+                    let _ = log.append(event);
+                }
+                return Err(error);
+            }
+        };
         let mut reclassified = None;
-        let mut result = self.run(spec, &call, &mut reclassified).await;
+        let mut result = self
+            .run(spec, &call, file.as_ref(), &mut reclassified)
+            .await;
         let mut check = None;
         if let Err(error) = &mut result
             && error.public_code == "action_outcome_unknown"
@@ -158,7 +194,7 @@ impl Runtime {
             check = Some(outcome);
         }
         if let Some(log) = &self.audit {
-            let mut event = self.event(spec, &call, "call");
+            let mut event = self.event(spec, &call, "call", file.as_ref());
             if let Some(reason) = reclassified {
                 event.effect = Effect::Write.as_str().into();
                 event.reclassified = reason.into();
@@ -186,10 +222,17 @@ impl Runtime {
         result
     }
 
-    fn event(&self, spec: &Spec, call: &Call, kind: &'static str) -> audit::Event {
+    fn event(
+        &self,
+        spec: &Spec,
+        call: &Call,
+        kind: &'static str,
+        file: Option<&SentFile>,
+    ) -> audit::Event {
         let op = spec.op(&call.action).ok();
         audit::Event {
             kind,
+            file_sha256: file.map(|f| f.sha256.clone()).unwrap_or_default(),
             site: spec.site.name.clone(),
             action: call.action.clone(),
             effect: op
@@ -230,7 +273,7 @@ impl Runtime {
         // The read is run like any read: one whose rendered request asks
         // for a change goes the way of a change, and so is never sent here.
         let mut reclassified = None;
-        let envelope = match self.run(spec, &read, &mut reclassified).await {
+        let envelope = match self.run(spec, &read, None, &mut reclassified).await {
             Ok(envelope) => envelope,
             Err(error) => return outcome("unknown", Some(error.public_code)),
         };
@@ -250,6 +293,7 @@ impl Runtime {
         outcome(if found { "landed" } else { "not_found" }, None)
     }
 
+    /// `file` is the file the change sends, read before anything else.
     /// `reclassified` is set when a declared read was treated as a change
     /// because of what the rendered request said, so the caller's audit
     /// record says the same.
@@ -257,6 +301,7 @@ impl Runtime {
         &self,
         spec: &Spec,
         call: &Call,
+        file: Option<&SentFile>,
         reclassified: &mut Option<&'static str>,
     ) -> AppResult<Envelope> {
         validate_spec(spec)?;
@@ -308,9 +353,27 @@ impl Runtime {
             .filter(|(_, value)| !value.contains("{{"))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        if let (Some(_), Some(declared)) = (&body, &op.body) {
+        if let (Some(_), Some(declared)) = (&body, &op.body)
+            && declared.multipart.is_none()
+        {
             headers.push(("content-type".into(), declared.content_type().into()));
         }
+        // A file read needs a folder to save into.
+        let download = if op.saves_file() {
+            let dir = match (&call.out, &self.files) {
+                (Some(out), _) => out.clone(),
+                (None, Some(files)) => files.join(&spec.site.name),
+                (None, None) => {
+                    return Err(usage(
+                        "This itda keeps no files",
+                        "Call the read with out set to a folder.",
+                    ));
+                }
+            };
+            Some(files::download(op, dir))
+        } else {
+            None
+        };
 
         let account = (!op.auth.is_empty()).then(|| {
             call.account
@@ -426,6 +489,8 @@ impl Runtime {
         request.account_id = account.clone().unwrap_or_default();
         request.interval = spec.defaults.interval();
         request.pause_on_block = !call.discovery;
+        request.download = download;
+        request.multipart = files::multipart(spec, op, &args, file)?;
 
         if let Some(approvals) = approvals {
             let execution = ExecutionRequest {
@@ -435,10 +500,11 @@ impl Runtime {
                 inputs: call.args.clone(),
                 spec_hash: util::hash(&serde_json::to_vec(spec)?),
                 credential_hash: credential_hash.clone(),
+                file_hash: file.map(|f| f.sha256.clone()).unwrap_or_default(),
             };
             match &call.approval {
                 None => {
-                    let mut inputs = review_inputs(op, &request.method, &url, &call.args);
+                    let mut inputs = review_inputs(op, &request.method, &url, &call.args, file);
                     if let Some(reason) = *reclassified {
                         inputs.push(ReviewInput {
                             label: "reclassified".into(),
@@ -508,10 +574,30 @@ impl Runtime {
                     }
                     return Err(error);
                 }
-                Some(id) => approvals.consume(id, &execution).await?,
+                Some(id) => {
+                    // The file is what the person approved, not the path:
+                    // other bytes under the same name need a new approval.
+                    if let Some(file) = file
+                        && let Ok(review) = approvals.review(id).await
+                        && review
+                            .request
+                            .as_ref()
+                            .is_some_and(|approved| approved.file_hash != file.sha256)
+                    {
+                        approvals.reject(id).await?;
+                        let mut error = AppError::api("approval_expired", 409)
+                            .with("approval", id.clone())
+                            .with("reason", "file_changed");
+                        error.msg = format!(
+                            "the file differs from the one the user approved; approval {id} was withdrawn"
+                        );
+                        return Err(error);
+                    }
+                    approvals.consume(id, &execution).await?
+                }
             }
             if let Some(log) = &self.audit {
-                let mut event = self.event(spec, call, "change_started");
+                let mut event = self.event(spec, call, "change_started", file);
                 event.outcome = "sending".into();
                 if let Some(reason) = *reclassified {
                     event.effect = Effect::Write.as_str().into();
@@ -547,6 +633,7 @@ impl Runtime {
             }
             request.url = url;
             request.body = body;
+            request.multipart = files::multipart(spec, op, &args, file)?;
             exposed.extend(
                 cookies
                     .iter()
@@ -630,10 +717,14 @@ impl Runtime {
                     && itda_net::sent(&error)
                     && matches!(
                         error.public_code.as_str(),
-                        "timeout" | "request_failed" | "too_large"
+                        "timeout" | "request_failed" | "too_large" | "request_lease_lost"
                     ) =>
             {
-                return Err(AppError::api("action_outcome_unknown", 502));
+                let mut unknown = AppError::api("action_outcome_unknown", 502);
+                if let Some(reason) = error.extra.get("reason") {
+                    unknown = unknown.with("reason", reason.clone());
+                }
+                return Err(unknown);
             }
             Err(error) => return Err(error),
         };
@@ -678,7 +769,7 @@ impl Runtime {
                 error
             });
         }
-        if read && !op.matches_response(&response) {
+        if read && response.file.is_none() && !op.matches_response(&response) {
             return Err(AppError::api("response_mismatch", 502));
         }
         // The change has happened, so a reply that does not match the
@@ -687,6 +778,8 @@ impl Runtime {
             serde_json::json!({
                 "location": location.map(|to| to.to_string()).unwrap_or_default()
             })
+        } else if let Some(saved) = &response.file {
+            serde_json::to_value(Manifest::of(saved))?
         } else {
             match shape(spec, op, &response) {
                 Ok(data) => data,
@@ -884,6 +977,7 @@ fn review_inputs(
     method: &str,
     url: &str,
     args: &BTreeMap<String, String>,
+    file: Option<&SentFile>,
 ) -> Vec<ReviewInput> {
     let mut inputs = Vec::new();
     if !op.desc.is_empty() {
@@ -896,10 +990,24 @@ fn review_inputs(
         label: "request".into(),
         value: format!("{method} {url}"),
     });
-    inputs.extend(args.iter().map(|(label, value)| ReviewInput {
-        label: label.clone(),
-        value: shown(value),
-    }));
+    // The file first, by name, size and hash: what leaves this computer.
+    if let Some(file) = file {
+        inputs.push(ReviewInput {
+            label: "file".into(),
+            value: format!(
+                "{} ({} bytes, sha256 {})",
+                file.name, file.bytes, file.sha256
+            ),
+        });
+    }
+    inputs.extend(
+        args.iter()
+            .filter(|(name, _)| file.is_none_or(|file| file.input != **name))
+            .map(|(label, value)| ReviewInput {
+                label: label.clone(),
+                value: shown(value),
+            }),
+    );
     inputs
 }
 

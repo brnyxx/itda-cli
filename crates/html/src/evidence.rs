@@ -59,6 +59,17 @@ pub struct Form {
     /// A sign-in form; a person fills it in, never an agent.
     pub password: bool,
     pub multipart: bool,
+    /// The name of the form's file control, when it has one: the form
+    /// sends a file from the person's computer.
+    pub file: Option<String>,
+}
+
+/// A link the page labels as an attachment to download.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attachment {
+    /// Resolved against the page address.
+    pub url: String,
+    pub text: String,
 }
 
 /// A feed the page links to with `<link rel="alternate">`.
@@ -1600,6 +1611,7 @@ pub fn forms(html: &str, base: &str) -> Vec<Form> {
                 .attr("enctype")
                 .is_some_and(|e| e.contains("multipart"));
             let mut password = false;
+            let mut file = None;
             let mut controls: Vec<Control> = Vec::new();
             for control in form.select(&control_selector).take(60) {
                 let Some(name) = control.value().attr("name").filter(|n| stable_name(n)) else {
@@ -1616,7 +1628,11 @@ pub fn forms(html: &str, base: &str) -> Vec<Form> {
                         password = true;
                         continue;
                     }
-                    "submit" | "button" | "reset" | "image" | "file" => continue,
+                    "file" => {
+                        file.get_or_insert_with(|| name.to_owned());
+                        continue;
+                    }
+                    "submit" | "button" | "reset" | "image" => continue,
                     _ => {}
                 }
                 if controls.iter().any(|c| c.name == name) {
@@ -1648,9 +1664,88 @@ pub fn forms(html: &str, base: &str) -> Vec<Form> {
                 controls,
                 password,
                 multipart,
+                file,
             }
         })
         .collect()
+}
+
+/// Words a page uses to label a link as an attachment, in English and
+/// Korean. Only the label counts: a link to a document that the page does
+/// not call an attachment is a page like any other.
+const ATTACHMENT_WORDS: [&str; 7] = [
+    "download",
+    "attachment",
+    "attached",
+    "다운로드",
+    "내려받기",
+    "첨부",
+    "내려받",
+];
+
+/// Same-origin links the page labels as attachments: a `download`
+/// attribute, attachment words in the link's text, title, label or class,
+/// or an icon inside it named for one. In page order, at most 200.
+pub fn attachment_links(html: &str, base: &str) -> Vec<Attachment> {
+    let document = Html::parse_document(html);
+    let Ok(base) = url::Url::parse(base) else {
+        return Vec::new();
+    };
+    let Ok(selector) = Selector::parse("a[href]") else {
+        return Vec::new();
+    };
+    let labelled = |text: &str| {
+        let lower = text.to_lowercase();
+        ATTACHMENT_WORDS.iter().any(|word| lower.contains(word))
+    };
+    let mut out: Vec<Attachment> = Vec::new();
+    for link in document.select(&selector).take(2000) {
+        let Ok(url) = base.join(link.value().attr("href").unwrap_or_default()) else {
+            continue;
+        };
+        if url.origin() != base.origin()
+            || !matches!(url.scheme(), "http" | "https")
+            || url.fragment().is_some_and(|f| !f.is_empty()) && url.path() == base.path()
+        {
+            continue;
+        }
+        let text: String = link.text().collect::<Vec<_>>().join(" ");
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let own = [
+            link.value().attr("title"),
+            link.value().attr("aria-label"),
+            link.value().attr("class"),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(std::iter::once(text.as_str()))
+        .any(labelled);
+        let icon = link
+            .descendants()
+            .filter_map(ElementRef::wrap)
+            .any(|child| {
+                ["class", "alt", "src", "title", "aria-label", "href"]
+                    .iter()
+                    .filter_map(|name| child.value().attr(name))
+                    .any(labelled)
+            });
+        if link.value().attr("download").is_none() && !own && !icon {
+            continue;
+        }
+        let mut url = url;
+        url.set_fragment(None);
+        if out.iter().any(|seen| seen.url == url.as_str()) {
+            continue;
+        }
+        out.push(Attachment {
+            url: url.to_string(),
+            text,
+        });
+        if out.len() == 200 {
+            break;
+        }
+    }
+    out
 }
 
 /// A sign-in form as a person's submit would send it: where it posts to, the
@@ -2376,6 +2471,7 @@ mod tests {
         assert!(forms[0].controls[1].hidden);
         assert_eq!(forms[0].controls[1].value.as_deref(), Some("3"));
         assert!(forms[1].multipart);
+        assert_eq!(forms[1].file.as_deref(), Some("upload"));
         assert!(forms[2].password);
         assert!(
             forms[2]
@@ -2384,6 +2480,29 @@ mod tests {
                 .any(|c| c.name == "_csrf" && c.secret)
         );
         assert!(!format!("{forms:?}").contains("abc"));
+    }
+
+    #[test]
+    fn only_links_the_page_calls_attachments_are_attachments() {
+        let html = r#"<a href="/files/1">Report</a>
+            <a href="/files/2" download>Report</a>
+            <a href="/files/3"><img class="icon-download" src="/dl.png"></a>
+            <a href="/board/files/4.pdf" title="첨부파일 다운로드">보고서.pdf</a>
+            <a href="/files/5" class="attachment">plan</a>
+            <a href="https://other.test/files/6" download>elsewhere</a>
+            <a href="/files/2#top" download>again</a>"#;
+        let links = attachment_links(html, BASE);
+        let urls: Vec<&str> = links.iter().map(|a| a.url.as_str()).collect();
+        assert_eq!(
+            urls,
+            [
+                "https://example.test/files/2",
+                "https://example.test/files/3",
+                "https://example.test/board/files/4.pdf",
+                "https://example.test/files/5",
+            ]
+        );
+        assert_eq!(links[2].text, "보고서.pdf");
     }
 
     #[test]

@@ -21,6 +21,10 @@ pub enum Label<'a> {
     Search { title: &'a str },
     /// A form that changes the site.
     Submit { title: &'a str },
+    /// A form that sends a file.
+    Upload { title: &'a str },
+    /// A file the page links to as an attachment.
+    Attachment { title: &'a str },
     /// An RSS or Atom feed.
     Feed { title: &'a str },
     /// An API call, by the verb its name starts with and the resource.
@@ -73,6 +77,8 @@ fn korean(label: &Label<'_>) -> String {
         }
         Label::Search { title } => format!("{}에서 검색", subject(title)),
         Label::Submit { title } => format!("{}의 폼 보내기", subject(title)),
+        Label::Upload { title } => format!("{}에 파일 올리기", subject(title)),
+        Label::Attachment { title } => format!("{}의 첨부 파일 내려받기", subject(title)),
         Label::Feed { title } => {
             if title.is_empty() {
                 "최신 글 피드 읽기".into()
@@ -119,6 +125,8 @@ fn english(label: &Label<'_>) -> String {
         Label::One { what, title } => format!("Read one of the {what} on {}", subject(title)),
         Label::Search { title } => format!("Search on {}", subject(title)),
         Label::Submit { title } => format!("Submit the form on {}", subject(title)),
+        Label::Upload { title } => format!("Upload a file to {}", subject(title)),
+        Label::Attachment { title } => format!("Download an attachment from {}", subject(title)),
         Label::Feed { title } => {
             if title.is_empty() {
                 "Read the site's feed".into()

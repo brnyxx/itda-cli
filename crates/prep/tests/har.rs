@@ -575,3 +575,71 @@ fn a_bearer_the_site_keeps_in_storage_becomes_a_refreshable_session() {
         plain.yaml
     );
 }
+
+#[test]
+fn a_recorded_upload_and_a_recorded_attachment_are_drafted() {
+    let har = serde_json::json!({"log": {"entries": [
+        {"request": {"method": "POST", "url": "https://intranet.example.com/api/v1/files", "headers": [], "queryString": [],
+            "postData": {"mimeType": "multipart/form-data; boundary=x", "params": [
+                {"name": "title", "value": "Q4 plan"},
+                {"name": "file", "fileName": "plan.csv", "contentType": "text/csv"}
+            ]}},
+         "response": {"status": 201, "headers": [], "content": {"mimeType": "application/json", "text": "{\"id\": 9}"}}},
+        {"request": {"method": "GET", "url": "https://intranet.example.com/api/v1/files/9/download", "headers": [], "queryString": []},
+         "response": {"status": 200, "headers": [{"name": "Content-Disposition", "value": "attachment; filename=\"plan.csv\""}],
+                      "content": {"mimeType": "text/csv; charset=utf-8", "text": "a,b"}}},
+        {"request": {"method": "GET", "url": "https://intranet.example.com/api/v1/files/9", "headers": [], "queryString": []},
+         "response": {"status": 200, "headers": [], "content": {"mimeType": "application/json", "text": "{\"id\": 9, \"name\": \"plan.csv\"}"}}}
+    ]}});
+    let draft = from_har(har.to_string().as_bytes(), &Options::default()).unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
+    itda_policy::validate_spec(&spec).unwrap();
+    let names: Vec<&str> = spec.operations.iter().map(|o| o.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["create-file", "get-file", "get-download"],
+        "{}",
+        draft.yaml
+    );
+
+    let upload = spec.op("create-file").unwrap();
+    let multipart = upload.body.as_ref().unwrap().multipart.as_ref().unwrap();
+    assert_eq!(multipart.fields["title"].kind, "string");
+    assert_eq!(
+        multipart.file,
+        Some(itda_spec::FilePart {
+            name: "file".into(),
+            from: "file".into()
+        })
+    );
+    assert_eq!(
+        itda_policy::operation_effect(upload, &Default::default()),
+        itda_policy::Effect::Write
+    );
+    assert!(!draft.yaml.contains("Q4 plan"));
+
+    let download = spec.op("get-download").unwrap();
+    let response = download.response.as_ref().unwrap();
+    assert_eq!(
+        (response.format.as_str(), response.media_types.as_slice()),
+        ("file", &["text/csv".to_owned()][..])
+    );
+    assert_eq!(
+        spec.op("get-file")
+            .unwrap()
+            .response
+            .as_ref()
+            .unwrap()
+            .format,
+        "json"
+    );
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("sent it as an attachment")),
+        "{:?}",
+        draft.notes
+    );
+}

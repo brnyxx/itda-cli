@@ -122,5 +122,8 @@
   "lost_landed": "{read} cho thấy đã được áp dụng",
   "lost_not_found": "{read} không cho thấy nó",
   "lost_unknown": "lượt đọc xác nhận {read} cũng thất bại",
-  "lost_unchecked": "không có lượt đọc xác nhận; hãy kiểm tra trang web"
+  "lost_unchecked": "không có lượt đọc xác nhận; hãy kiểm tra trang web",
+  "returns_file": "trả về một tệp: {types}, lưu trong {dir}",
+  "sends_file": "gửi tệp ghi ở {input}; bạn phê duyệt nó theo tên, kích thước và hash",
+  "saved_file": "Đã lưu {path} ({bytes} byte, sha256 {sha256})"
 }

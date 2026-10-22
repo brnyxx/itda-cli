@@ -122,5 +122,8 @@
   "lost_landed": "{read} mostrou que foi aplicada",
   "lost_not_found": "{read} não a mostrou",
   "lost_unknown": "a leitura de confirmação {read} também falhou",
-  "lost_unchecked": "sem leitura de confirmação; verifique o site"
+  "lost_unchecked": "sem leitura de confirmação; verifique o site",
+  "returns_file": "retorna um arquivo: {types}, salvo em {dir}",
+  "sends_file": "envia o arquivo indicado em {input}; você o aprova pelo nome, tamanho e hash",
+  "saved_file": "Salvo {path} ({bytes} bytes, sha256 {sha256})"
 }

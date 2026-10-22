@@ -16,12 +16,12 @@ itda-net.workspace = true
 itda-vault.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 url.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
 itda-store.workspace = true
-tokio.workspace = true
 
 [lints]
 workspace = true

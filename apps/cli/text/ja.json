@@ -122,5 +122,8 @@
   "lost_landed": "{read} で反映を確認",
   "lost_not_found": "{read} に見当たらず",
   "lost_unknown": "確認用の読み取り {read} も失敗",
-  "lost_unchecked": "確認用の読み取りなし。サイトを確認してください"
+  "lost_unchecked": "確認用の読み取りなし。サイトを確認してください",
+  "returns_file": "ファイルを返します: {types}、{dir} の下に保存",
+  "sends_file": "{input} に指定したファイルを送ります。名前、サイズ、ハッシュを見て承認します",
+  "saved_file": "{path} に保存しました（{bytes} バイト、sha256 {sha256}）"
 }
