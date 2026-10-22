@@ -674,6 +674,7 @@ fn parts_at(
     let host = base.host_str().unwrap_or_default().to_owned();
     Ok(Parts {
         site,
+        title: String::new(),
         base_url,
         auth,
         operations,

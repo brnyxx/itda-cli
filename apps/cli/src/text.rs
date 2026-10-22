@@ -25,11 +25,21 @@ pub fn t(key: &str) -> &'static str {
         ("found_forms", "{n} forms", "폼 {n}개"),
         ("found_feed", "a feed", "피드"),
         ("found_data", "data the page embeds", "페이지에 담긴 데이터"),
+        (
+            "found_description",
+            "a link to its API description",
+            "API 설명 링크",
+        ),
         ("found_title", "only a title", "제목만"),
         (
             "asked_schema",
             "Asked the GraphQL API at {url} what it offers.",
             "{url}의 GraphQL API에 무엇을 제공하는지 물었습니다.",
+        ),
+        (
+            "described",
+            "Read its API description at {url}: {reads} reads, {changes} changes noted.",
+            "{url}의 API 설명을 읽었습니다: 읽기 {reads}개, 변경 {changes}개는 메모로 남김.",
         ),
         (
             "needs_record",
@@ -225,6 +235,18 @@ pub fn client_label(slug: &str) -> &str {
         "codex" => "Codex",
         other => other,
     }
+}
+
+/// What a site's API description added to a draft, in one line.
+pub fn described(described: &itda_prep::Described) -> String {
+    tf(
+        "described",
+        &[
+            ("url", &described.url),
+            ("reads", &described.reads.to_string()),
+            ("changes", &described.changes.to_string()),
+        ],
+    )
 }
 
 /// `t(key)` with `{name}` fields filled in.

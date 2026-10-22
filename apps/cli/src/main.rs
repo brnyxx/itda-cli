@@ -2,6 +2,7 @@
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
 mod check;
+mod description;
 mod feedback;
 mod install;
 mod introspect;
@@ -1087,12 +1088,12 @@ async fn draft_page(
         options.schemas = introspect::schemas(&net, &endpoints).await;
         introspect::say(&options.schemas, "");
     }
-    publish(
-        home,
-        itda_prep::from_pages(&pages, &options)?,
-        install,
-        force,
-    )
+    let description = description::find(&net, &pages).await;
+    let draft = itda_prep::from_pages_and_description(&pages, description.as_ref(), &options)?;
+    if let Some(described) = &draft.described {
+        eprintln!("{}", text::described(described));
+    }
+    publish(home, draft, install, force)
 }
 
 /// Record the site in the person's own browser and draft from the recording,

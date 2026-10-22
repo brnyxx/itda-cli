@@ -3,11 +3,13 @@
 //! A page shows what it is made of: a table or a list of records, data the
 //! server embedded for its scripts, forms, feeds and page links. Each becomes
 //! an action with a response check, so `itda check` can tell when the page
-//! changes. Pages are fetched by the caller with the honest client; nothing
-//! here reaches the network.
+//! changes. When the site also publishes an API description, its reads join
+//! the draft. Pages and descriptions are fetched by the caller with the honest
+//! client; nothing here reaches the network.
 use crate::har::{Kind, action_name, site_name, template, unique};
 use crate::label::{Label, describe, language};
-use crate::{Draft, Options, Parts, reorder, slug};
+use crate::openapi::openapi_parts;
+use crate::{Described, Draft, Options, Parts, reorder, slug};
 use itda_html::evidence;
 use itda_types::error::{AppResult, usage};
 use itda_types::util::secret_field;
@@ -20,6 +22,23 @@ pub struct Page {
     pub url: String,
     pub html: String,
 }
+
+/// An API description the site publishes, as fetched: the one a page linked
+/// to, or the one [`DESCRIPTION_PATH`] answered with.
+#[derive(Clone, Debug)]
+pub struct Description {
+    pub url: String,
+    pub bytes: Vec<u8>,
+}
+
+/// Changes an API description lists are noted one per line up to here; a
+/// large API gets a count instead of a wall of notes.
+const LISTED_CHANGES: usize = 10;
+
+/// The one same-origin path a caller asks for when no page links to a
+/// description. Every request to a site waits its turn at the gate, so more
+/// paths would cost every site that publishes nothing a second or more each.
+pub const DESCRIPTION_PATH: &str = "/openapi.json";
 
 /// Embedded payloads in the order a definition should prefer them.
 const SSR_KEYS: &[&str] = &[
@@ -35,7 +54,19 @@ const SSR_KEYS: &[&str] = &[
 ];
 
 pub fn from_pages(pages: &[Page], options: &Options) -> AppResult<Draft> {
+    from_pages_and_description(pages, None, options)
+}
+
+/// The pages, plus the reads of the API description the site publishes.
+/// Changes the description lists are noted, never drafted from a page, and a
+/// description that cannot be read leaves the page draft as it is.
+pub fn from_pages_and_description(
+    pages: &[Page],
+    description: Option<&Description>,
+    options: &Options,
+) -> AppResult<Draft> {
     let mut parts = page_parts(pages, options)?;
+    let described = description.and_then(|d| merge_description(&mut parts, d, options));
     let lang = language(&options.lang, &page_lang(&pages[0].html));
     crate::add_schemas(&mut parts, options, &lang);
     if parts.operations.is_empty() {
@@ -44,7 +75,126 @@ pub fn from_pages(pages: &[Page], options: &Options) -> AppResult<Draft> {
             "Check that the pages are under the site's address, or loosen --include.",
         ));
     }
-    Ok(parts.finish())
+    let mut draft = parts.finish();
+    draft.described = described;
+    Ok(draft)
+}
+
+/// Reads from the description join the page's operations, under the page's
+/// site and base address; each change becomes one note. `None` when the
+/// description could not be used, with a note saying why.
+fn merge_description(
+    parts: &mut Parts,
+    description: &Description,
+    options: &Options,
+) -> Option<Described> {
+    let url = &description.url;
+    let api_options = Options {
+        name: Some(parts.site.clone()),
+        base_url: None,
+        include: options.include.clone(),
+        lang: options.lang.clone(),
+        schemas: Vec::new(),
+    };
+    let mut api = match openapi_parts(&description.bytes, &api_options, Some(url)) {
+        Ok(api) => api,
+        Err(error) => {
+            parts.notes.push(format!(
+                "{url} could not be read as an API description ({}); drafted from the pages alone.",
+                error.msg
+            ));
+            return None;
+        }
+    };
+    // Operation paths are relative to the description's server; they join the
+    // draft only when that server is under the page's address.
+    let prefix = match api.base_url.strip_prefix(parts.base_url.as_str()) {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => rest.to_owned(),
+        _ => {
+            parts.notes.push(format!(
+                "{url} describes an API at {}, not under {}; `itda draft openapi {url}` makes a definition of its own.",
+                api.base_url, parts.base_url
+            ));
+            return None;
+        }
+    };
+    let (reads, changes): (Vec<Mapping>, Vec<Mapping>) = std::mem::take(&mut api.operations)
+        .into_iter()
+        .partition(|op| op.get("effect").and_then(Yaml::as_str) == Some("read"));
+    let label = |op: &Mapping| {
+        format!(
+            "{} {}",
+            op.get("method").and_then(Yaml::as_str).unwrap_or_default(),
+            op.get("path").and_then(Yaml::as_str).unwrap_or_default()
+        )
+    };
+    // A read whose input is a credential would fail the install-time checks
+    // and take the page's own actions down with it.
+    let (reads, keyed): (Vec<Mapping>, Vec<Mapping>) = reads
+        .into_iter()
+        .partition(|op| credential_inputs(op).is_empty());
+    let change_labels: Vec<String> = changes.iter().map(label).collect();
+    let left_out: Vec<String> = keyed.iter().map(label).collect();
+    // Notes about operations that are not drafted would only confuse: the
+    // changes, whether drafted or skipped, and the reads left out here.
+    api.notes.retain(|note| {
+        !["POST ", "PUT ", "PATCH ", "DELETE "]
+            .iter()
+            .any(|method| note.starts_with(method))
+            && !left_out.iter().any(|l| note.starts_with(l.as_str()))
+    });
+    for op in &keyed {
+        let inputs = credential_inputs(op);
+        parts.notes.push(match inputs.as_slice() {
+            [one] => format!(
+                "{}: left out; its input {one} is a credential, which goes in auth, never through the agent.",
+                label(op)
+            ),
+            many => format!(
+                "{}: left out; its inputs {} are credentials, which go in auth, never through the agent.",
+                label(op),
+                many.join(", ")
+            ),
+        });
+    }
+    for label in change_labels.iter().take(LISTED_CHANGES) {
+        parts.notes.push(format!(
+            "{label}: a change the API description lists; not drafted from a page."
+        ));
+    }
+    if change_labels.len() > LISTED_CHANGES {
+        parts.notes.push(format!(
+            "...and {} more changes, left out the same way.",
+            change_labels.len() - LISTED_CHANGES
+        ));
+    }
+    if !change_labels.is_empty() {
+        parts.notes.push(format!(
+            "`itda draft openapi {url}` drafts the changes for review."
+        ));
+    }
+    api.operations = reads
+        .into_iter()
+        .map(|mut op| {
+            if !prefix.is_empty()
+                && let Some(path) = op.get("path").and_then(Yaml::as_str)
+            {
+                let joined = format!("{prefix}{path}");
+                op.insert("path".into(), joined.into());
+            }
+            op
+        })
+        .collect();
+    let reads = parts.merge(api);
+    parts
+        .notes
+        .retain(|note| !note.contains(&format!("links to an API description at {url};")));
+    parts.source = format!("{} and the API description at {url}", parts.source);
+    Some(Described {
+        url: url.clone(),
+        reads,
+        changes: change_labels.len(),
+    })
 }
 
 /// The pages as operations, without the final checks.
@@ -230,12 +380,37 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
     let host = base.host_str().unwrap_or_default().to_owned();
     Ok(Parts {
         site,
+        title: String::new(),
         base_url,
         auth,
         operations,
         notes,
         source: format!("`itda draft page` from pages on {host}"),
     })
+}
+
+/// Input names of the operation that look like credentials, as the
+/// install-time checks judge them.
+fn credential_inputs(op: &Mapping) -> Vec<String> {
+    fn keys(value: Option<&Yaml>) -> Vec<String> {
+        value
+            .and_then(Yaml::as_mapping)
+            .map(|m| {
+                m.keys()
+                    .filter_map(Yaml::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    let body = op.get("body").and_then(Yaml::as_mapping);
+    keys(op.get("params"))
+        .into_iter()
+        .chain(keys(op.get("query")))
+        .chain(keys(body.and_then(|b| b.get("json"))))
+        .chain(keys(body.and_then(|b| b.get("form"))))
+        .filter(|name| secret_field(name))
+        .collect()
 }
 
 fn page_url(raw: &str) -> AppResult<url::Url> {

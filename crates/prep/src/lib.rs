@@ -12,8 +12,8 @@ mod openapi;
 mod page;
 
 pub use har::from_har;
-pub use openapi::from_openapi;
-pub use page::{Page, from_pages};
+pub use openapi::{from_openapi, is_openapi};
+pub use page::{DESCRIPTION_PATH, Description, Page, from_pages, from_pages_and_description};
 
 use itda_types::error::AppResult;
 
@@ -90,6 +90,18 @@ pub struct Draft {
     pub notes: Vec<String>,
     /// What the install-time checks found, one line each.
     pub problems: Vec<String>,
+    /// What the site's API description added, when the pages had one.
+    pub described: Option<Described>,
+}
+
+/// What an API description contributed to a page draft.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Described {
+    pub url: String,
+    /// Reads merged into the draft, after dropping those the pages already had.
+    pub reads: usize,
+    /// Changes the description lists; noted, never drafted from a page.
+    pub changes: usize,
 }
 
 /// A lower-case id made of letters, digits and single dashes, starting with a
@@ -124,6 +136,8 @@ pub fn slug(text: &str) -> String {
 /// A draft before its final checks: what one source found.
 pub(crate) struct Parts {
     pub site: String,
+    /// The site's human name, when the source gives one.
+    pub title: String,
     pub base_url: String,
     pub auth: Vec<Yaml>,
     pub operations: Vec<Mapping>,
@@ -135,7 +149,7 @@ impl Parts {
     pub(crate) fn finish(self) -> Draft {
         finish(
             &self.site,
-            "",
+            &self.title,
             &self.base_url,
             self.auth,
             self.operations,
@@ -157,8 +171,10 @@ impl Parts {
 
     /// Add what another source found about the same site: operations the
     /// first source did not have, auth entries by name, and its notes.
-    fn merge(&mut self, other: Parts) {
+    /// Returns how many operations were new.
+    fn merge(&mut self, other: Parts) -> usize {
         let seen: std::collections::BTreeSet<_> = self.operations.iter().map(Self::key).collect();
+        let before = self.operations.len();
         let mut names: std::collections::BTreeSet<String> = self
             .operations
             .iter()
@@ -192,6 +208,7 @@ impl Parts {
             }
         }
         self.notes.extend(other.notes);
+        self.operations.len() - before
     }
 }
 
@@ -300,6 +317,7 @@ pub(crate) fn finish(
         reads,
         notes,
         problems,
+        described: None,
     }
 }
 

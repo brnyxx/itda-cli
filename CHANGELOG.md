@@ -37,6 +37,16 @@ change the definition format or the CLI.
 - An optional input the agent leaves out now leaves the `json_template`
   body too, instead of standing in as an empty string where a number or
   null belongs; GraphQL variables typed `Int` or `Boolean` need that.
+- `itda draft page` and `itda setup` read the API description a site
+  publishes: the one the page links to, else `/openapi.json` on the same
+  origin when it answers with one (one GET, as itda, at most 4 MB). Its reads
+  join the draft the way `itda draft
+  openapi` makes them, drafted once when the page already had the same path;
+  its changes become notes, and a read keyed by a credential input is left
+  out and listed. A description on another address is noted, not merged,
+  and one that does not parse leaves the page draft as it is. The
+  header comment and each merged action's `evidence` name where it came from,
+  and `itda setup` says what it read in one line.
 
 ### Changed
 - The landing page on phones: lighter glass, the setup dialog left out of the

@@ -1,5 +1,5 @@
 //! OpenAPI 3.x and Swagger 2.0 to a draft definition.
-use crate::{Draft, Options, insert_after, reorder, slug};
+use crate::{Draft, Options, Parts, insert_after, reorder, slug};
 use itda_types::error::{AppResult, usage};
 use serde_json::Value;
 use serde_norway::{Mapping, Value as Yaml};
@@ -10,11 +10,32 @@ const METHODS: &[&str] = &["get", "head", "post", "put", "patch", "delete"];
 const MAX_OPERATIONS: usize = 200;
 
 pub fn from_openapi(text: &[u8], options: &Options) -> AppResult<Draft> {
+    Ok(openapi_parts(text, options, None)?.finish())
+}
+
+/// True when the bytes parse as an OpenAPI 3 or Swagger 2.0 document.
+pub fn is_openapi(text: &[u8]) -> bool {
+    parse(text).is_ok()
+}
+
+fn parse(text: &[u8]) -> AppResult<(Value, bool)> {
     let doc: Value = serde_norway::from_slice(text).map_err(|_| not_openapi())?;
     let swagger2 = doc["swagger"].as_str() == Some("2.0");
     if !swagger2 && !doc["openapi"].as_str().is_some_and(|v| v.starts_with('3')) {
         return Err(not_openapi());
     }
+    Ok((doc, swagger2))
+}
+
+/// The document as operations, without the final checks. `located_at` is the
+/// address the document was fetched from, when it was: a relative server URL
+/// is resolved against it, and every operation's evidence names it.
+pub(crate) fn openapi_parts(
+    text: &[u8],
+    options: &Options,
+    located_at: Option<&str>,
+) -> AppResult<Parts> {
+    let (doc, swagger2) = parse(text)?;
     let title = doc["info"]["title"]
         .as_str()
         .unwrap_or("")
@@ -30,7 +51,7 @@ pub fn from_openapi(text: &[u8], options: &Options) -> AppResult<Draft> {
         .unwrap_or_else(|| "site".into());
     let base_url = match &options.base_url {
         Some(url) => url.clone(),
-        None => server_url(&doc, swagger2).ok_or_else(|| {
+        None => server_url(&doc, swagger2, located_at).ok_or_else(|| {
             usage(
                 "The document names no absolute server URL",
                 "Pass --base-url with the API's address.",
@@ -97,10 +118,11 @@ pub fn from_openapi(text: &[u8], options: &Options) -> AppResult<Draft> {
                         insert_after(&mut entry, "method", "auth", auth_name.into());
                     }
                     entry.insert("name".into(), unique.clone().into());
-                    entry.insert(
-                        "evidence".into(),
-                        format!("OpenAPI {title} {version}: {label}").trim().into(),
-                    );
+                    let mut evidence = format!("OpenAPI {title} {version}").trim().to_owned();
+                    if let Some(at) = located_at {
+                        evidence.push_str(&format!(" at {at}"));
+                    }
+                    entry.insert("evidence".into(), format!("{evidence}: {label}").into());
                     operations.push((unique, reorder(entry)));
                 }
                 None => {
@@ -121,15 +143,15 @@ pub fn from_openapi(text: &[u8], options: &Options) -> AppResult<Draft> {
     } else {
         title.clone()
     };
-    Ok(crate::finish(
-        &site,
-        &title,
-        &base_url,
+    Ok(Parts {
+        site,
+        title,
+        base_url,
         auth,
-        operations.into_iter().map(|(_, op)| op).collect(),
+        operations: operations.into_iter().map(|(_, op)| op).collect(),
         notes,
-        &format!("`itda draft openapi` from {source}"),
-    ))
+        source: format!("`itda draft openapi` from {source}"),
+    })
 }
 
 fn not_openapi() -> itda_types::error::AppError {
@@ -139,9 +161,14 @@ fn not_openapi() -> itda_types::error::AppError {
     )
 }
 
-fn server_url(doc: &Value, swagger2: bool) -> Option<String> {
+fn server_url(doc: &Value, swagger2: bool, located_at: Option<&str>) -> Option<String> {
+    let location = located_at.and_then(|at| url::Url::parse(at).ok());
     let url = if swagger2 {
-        let host = doc["host"].as_str()?;
+        let host = match (doc["host"].as_str(), &location) {
+            (Some(host), _) => host.to_owned(),
+            (None, Some(location)) => location.host_str()?.to_owned(),
+            (None, None) => return None,
+        };
         let scheme = doc["schemes"]
             .as_array()
             .and_then(|s| {
@@ -156,9 +183,13 @@ fn server_url(doc: &Value, swagger2: bool) -> Option<String> {
             doc["basePath"].as_str().unwrap_or("")
         )
     } else {
-        let server = doc["servers"].as_array()?.first()?;
-        let mut url = server["url"].as_str()?.to_owned();
-        if let Some(variables) = server["variables"].as_object() {
+        // A document with no `servers` means "where you found me".
+        let mut url = match doc["servers"].as_array().and_then(|s| s.first()) {
+            Some(server) => server["url"].as_str()?.to_owned(),
+            None if location.is_some() => "/".to_owned(),
+            None => return None,
+        };
+        if let Some(variables) = doc["servers"][0]["variables"].as_object() {
             for (name, variable) in variables {
                 if let Some(default) = variable["default"].as_str() {
                     url = url.replace(&format!("{{{name}}}"), default);
@@ -167,7 +198,12 @@ fn server_url(doc: &Value, swagger2: bool) -> Option<String> {
         }
         url
     };
-    (url.starts_with("https://") || url.starts_with("http://")).then_some(url)
+    if url.starts_with("https://") || url.starts_with("http://") {
+        return Some(url);
+    }
+    // `/api/v1` in a document fetched from the site is relative to the site.
+    let resolved = location?.join(&url).ok()?;
+    Some(resolved.to_string())
 }
 
 /// Header API keys and bearer tokens become `header` auth entries; other

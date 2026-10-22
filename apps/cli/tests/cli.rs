@@ -7,6 +7,10 @@ use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 fn home() -> PathBuf {
@@ -472,7 +476,12 @@ async fn a_fetched_page_becomes_actions_that_run() {
     assert!(yaml.contains("name: search-board"), "{yaml}");
     assert!(yaml.contains("name: post-board"), "{yaml}");
     assert!(!yaml.contains("tok-123"));
-    assert!(String::from_utf8_lossy(&printed.stderr).contains("3 actions (2 reads, 1 changes)"));
+    let said = String::from_utf8_lossy(&printed.stderr);
+    assert!(said.contains("3 actions (2 reads, 1 changes)"), "{said}");
+    assert!(
+        !said.contains("API description"),
+        "a site with no description says nothing about one: {said}"
+    );
 
     let installed = itda(
         &home,
@@ -964,5 +973,200 @@ async fn a_site_with_introspection_off_is_drafted_from_its_page_alone() {
     let yaml = String::from_utf8_lossy(&printed.stdout);
     assert!(yaml.contains("name: get-board"), "{yaml}");
     assert!(!yaml.contains("/graphql"), "{yaml}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+/// A small OpenAPI document: one read and one change under `/items`.
+fn description(server: Option<&str>) -> Value {
+    let mut doc = json!({
+        "openapi": "3.0.3",
+        "info": {"title": "Items API", "version": "1.0"},
+        "paths": {
+            "/items": {
+                "get": {"operationId": "listItems", "summary": "List the items",
+                        "responses": {"200": {"content": {"application/json": {
+                            "schema": {"type": "object", "required": ["items"]}}}}}},
+                "post": {"operationId": "addItem",
+                         "requestBody": {"content": {"application/json": {
+                             "schema": {"type": "object", "properties": {"title": {"type": "string"}}}}}},
+                         "responses": {"201": {"description": "added"}}}
+            }
+        }
+    });
+    if let Some(server) = server {
+        doc["servers"] = json!([{"url": server}]);
+    }
+    doc
+}
+
+fn docs_page(link: bool) -> axum::response::Html<String> {
+    let head = if link {
+        "<link rel='service-desc' href='/openapi.json'>"
+    } else {
+        ""
+    };
+    axum::response::Html(format!(
+        "<title>Docs - Items</title>{head}<h1>Items</h1>
+         <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+         <tr><td>2</td><td><a href='/i/2'>Second</a></td></tr>
+         <tr><td>1</td><td><a href='/i/1'>First</a></td></tr></table>"
+    ))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_page_that_links_its_api_description_gets_its_reads() {
+    let home = home();
+    let router = Router::new()
+        .route("/docs", get(|| async { docs_page(true) }))
+        .route(
+            "/openapi.json",
+            get(|| async { axum::Json(description(Some("/api"))) }),
+        )
+        .route(
+            "/api/items",
+            get(|| async { axum::Json(json!({"items": [{"title": "from the api"}]})) }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let installed = itda(
+        &home,
+        &[
+            "draft",
+            "page",
+            &format!("{base}/docs"),
+            "--name",
+            "items",
+            "--install",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&installed.stderr);
+    assert!(installed.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "Read its API description at {base}/openapi.json: 1 reads, 1 changes noted."
+        )),
+        "{said}"
+    );
+    assert!(
+        said.contains("note: POST /items: a change the API description lists"),
+        "{said}"
+    );
+    assert!(said.contains("2 actions (2 reads, 0 changes)"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/items/spec.yaml")).unwrap();
+    assert!(spec.contains("name: list-items"), "{spec}");
+    assert!(spec.contains("path: /api/items"), "{spec}");
+    assert!(
+        spec.contains(&format!("and the API description at {base}/openapi.json")),
+        "{spec}"
+    );
+
+    let called = itda(&home, &["call", "items.list-items", "--json"], &[]).await;
+    assert!(called.status.success(), "{called:?}");
+    assert_eq!(
+        stdout_json(&called)["data"]["items"][0]["title"],
+        "from the api"
+    );
+    let checked = itda(&home, &["check", "items", "--json"], &[]).await;
+    assert!(checked.status.success(), "{checked:?}");
+    assert_eq!(stdout_json(&checked)["verdict"], "ok");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_well_known_path_answers_with_the_api_description() {
+    let home = home();
+    let others = Arc::new(AtomicUsize::new(0));
+    let router = Router::new()
+        .route("/board", get(|| async { docs_page(false) }))
+        .route(
+            "/openapi.json",
+            get(|| async { axum::Json(description(None)) }),
+        )
+        .route(
+            "/items",
+            get(|| async { axum::Json(json!({"items": [{"title": "probed"}]})) }),
+        )
+        .fallback({
+            let others = others.clone();
+            move || async move {
+                others.fetch_add(1, Ordering::SeqCst);
+                axum::http::StatusCode::NOT_FOUND
+            }
+        });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/board"),
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "ko")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "{base}/openapi.json의 API 설명을 읽었습니다: 읽기 1개, 변경 1개는 메모로 남김."
+        )),
+        "{said}"
+    );
+    assert!(said.contains("list-items"), "{said}");
+    let spec = std::fs::read_to_string(home.join("specs/board/spec.yaml")).unwrap();
+    assert!(spec.contains("path: /items"), "{spec}");
+    assert!(
+        !spec.contains("add-item"),
+        "changes are noted, not drafted: {spec}"
+    );
+    let called = itda(&home, &["call", "board.list-items", "--json"], &[]).await;
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "probed");
+    assert_eq!(
+        others.load(Ordering::SeqCst),
+        0,
+        "only /openapi.json is probed"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unreadable_description_leaves_the_page_draft_as_it_is() {
+    let home = home();
+    let router = Router::new()
+        .route("/docs", get(|| async { docs_page(true) }))
+        .route("/openapi.json", get(|| async { axum::Json(json!({})) }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let printed = itda(
+        &home,
+        &["draft", "page", &format!("{base}/docs")],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    let said = String::from_utf8_lossy(&printed.stderr);
+    assert!(printed.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "note: {base}/openapi.json could not be read as an API description"
+        )),
+        "{said}"
+    );
+    assert!(!said.contains("Read its API description"), "{said}");
+    assert!(said.contains("1 actions (1 reads, 0 changes)"), "{said}");
+    assert!(String::from_utf8_lossy(&printed.stdout).contains("name: list-docs"));
     std::fs::remove_dir_all(home).ok();
 }

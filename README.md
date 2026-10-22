@@ -109,9 +109,10 @@ Install itda and set up the-site-you-use.example for me.
 
 The pieces are commands of their own. For pages you can open without
 signing in, give itda their addresses: tables and lists become records,
-search forms become reads, post forms become changes, feeds come along, and a
+search forms become reads, post forms become changes, feeds come along, a
 GraphQL endpoint the page names is asked once what it offers, one read per
-query field:
+query field, and when the site publishes an API description, its reads join
+the draft:
 
 ```sh
 itda draft page https://example.com/board --install   # shows what it found on the page
