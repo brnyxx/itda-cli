@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Why the gate waits - Blog</title>
+  <meta name="description" content="How one request at a time keeps a site calm.">
+  <meta name="author" content="Mina Park">
+</head>
+<body>
+<header class="site-header"><a href="/">Blog</a><nav><a href="/posts">Posts</a><a href="/about">About</a><a href="/feed">Feed</a></nav></header>
+<main>
+  <article>
+    <header>
+      <h1 class="post-title">Why the gate waits</h1>
+      <p class="post-byline">Mina Park on <time datetime="2026-03-01T09:00:00Z">March 1, 2026</time></p>
+    </header>
+    <div class="post-content">
+      <p>Every request to a site waits its turn at the gate. That is not a limit on the agent; it is a promise to the site. A site that sees one request at a time can tell who is asking, and can say no in a way the client will hear.</p>
+      <p>The gate also makes the audit log honest. One line per request, in the order they went out, with the answer each one got. Nothing is retried on its own, nothing is sent twice, and nothing is sent that a person did not ask for.</p>
+      <p>When a page refuses, the site is paused rather than the request repeated. The person checks the site in a browser and resumes it. That is the whole mechanism, and it is enough.</p>
+    </div>
+  </article>
+  <aside class="sidebar"><h2>Related</h2><ul><li><a href="/posts/one">One</a></li><li><a href="/posts/two">Two</a></li><li><a href="/posts/three">Three</a></li></ul></aside>
+</main>
+<footer><a href="/terms">Terms</a></footer>
+</body>
+</html>

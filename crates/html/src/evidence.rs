@@ -1,6 +1,7 @@
 //! What a fetched page shows about itself, for drafting a definition: repeated
-//! records, tables, forms, feeds and pagination. Nothing here runs a script or
-//! keeps a field value; only names, selectors and shapes come out.
+//! records, tables, the main content of a page that is one thing, forms,
+//! feeds and pagination. Nothing here runs a script or keeps a field value;
+//! only names, selectors and shapes come out.
 //!
 //! Derived from Hycli `src/html/extract.rs` (`infer_html_extraction`) and
 //! `src/html/forms.rs` (`forms`) (Apache-2.0). Changes: tables with header
@@ -10,7 +11,8 @@
 use crate::{Extraction, Field, OutputField, element_text, stable_name};
 use itda_types::util::secret_field;
 use scraper::{ElementRef, Html, Selector};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::OnceLock;
 
 /// Record selectors that list pages use, tried before the page's own classes.
 const KNOWN_RECORDS: &[&str] = &[
@@ -79,16 +81,24 @@ pub fn infer_extraction(html: &str, base: &str) -> Option<Extraction> {
 }
 
 /// Elements that repeat as records, and the page furniture they are never in.
-const RECORD_TAGS: &[&str] = &["li", "tr", "article", "div", "section", "dd", "dt", "p"];
+const RECORD_TAGS: &[&str] = &[
+    "li", "tr", "article", "div", "section", "dd", "dt", "p", "a",
+];
 const FURNITURE: &[&str] = &["nav", "aside", "header", "footer"];
+/// At most this many fields a record read declares.
+const MAX_RECORD_FIELDS: usize = 12;
+/// How many records are looked into to find where their fields sit.
+const SAMPLE: usize = 20;
 
 /// Any run of three or more siblings of one shape, outside navigation,
-/// whose members each hold one link at the same place: a list page the
-/// known selectors do not name. The title and link are read from that
-/// link's own path, found in the page rather than guessed.
+/// whose members each hold a title at the same place: a link, a heading
+/// or a named text, or the record is itself a link. A list page the known
+/// selectors do not name. The title and link are read from the title's
+/// own path, found in the page rather than guessed; the rest of the fields
+/// come from what the records share (`shared_fields`).
 fn generic_extraction(document: &Html) -> Option<Extraction> {
     let everything = Selector::parse("body *").ok()?;
-    let mut best: Option<(usize, Extraction)> = None;
+    let mut candidates: Vec<(ElementRef<'_>, String, Vec<ElementRef<'_>>)> = Vec::new();
     for parent in document.select(&everything).take(40_000) {
         if furniture(parent) {
             continue;
@@ -100,68 +110,504 @@ fn generic_extraction(document: &Html) -> Option<Extraction> {
             }
         }
         for (shape, records) in groups {
-            if records.len() < 3 {
-                continue;
+            // Bare paragraphs and bare links are prose and menus, never
+            // records; a class the site gave them says otherwise.
+            if records.len() >= 3
+                && (shape.contains('.') || (shape != "p" && shape != "a"))
+                && same_shape(&records)
+            {
+                candidates.push((parent, shape, records));
             }
-            let Some((items, records)) = items_selector(document, parent, &shape, records) else {
-                continue;
-            };
-            let Some((path, text_len)) = title_path(&records) else {
-                continue;
-            };
-            let score = records.len().min(100) * text_len.min(120);
-            if best.as_ref().is_some_and(|(top, _)| *top >= score) {
-                continue;
-            }
-            let mut fields = BTreeMap::new();
-            if let Some(field) = pick_field(&records, &[("", "data-id"), ("", "id")], false) {
-                fields.insert("id".into(), field);
-            }
-            fields.insert(
-                "title".into(),
-                OutputField {
-                    selector: path.clone(),
-                    attribute: String::new(),
-                    required: false,
-                    absolute_url: false,
-                },
-            );
-            fields.insert(
-                "link".into(),
-                OutputField {
-                    selector: path,
-                    attribute: "href".into(),
-                    required: false,
-                    absolute_url: true,
-                },
-            );
-            for (name, options) in [
-                (
-                    "summary",
-                    &[(".summary", ""), (".description", ""), ("p", "")][..],
-                ),
-                ("meta", &[(".meta", ""), (".byline", ""), (".info", "")][..]),
-                (
-                    "published_at",
-                    &[("time[datetime]", "datetime"), ("time", "")][..],
-                ),
-            ] {
-                if let Some(field) = pick_field(&records, options, false) {
-                    fields.insert(name.into(), field);
-                }
-            }
-            best = Some((
-                score,
-                Extraction {
-                    items,
-                    fields,
-                    page: BTreeMap::new(),
-                    limit: 100,
-                },
-            ));
         }
     }
+    // Longest runs first, so that a run that cannot beat the best found so
+    // far is skipped before its records are looked into.
+    candidates.sort_by_key(|(_, _, records)| std::cmp::Reverse(records.len()));
+    let mut best: Option<(usize, Extraction)> = None;
+    for (parent, shape, records) in candidates {
+        let most = records.len().min(100) * 120;
+        if best.as_ref().is_some_and(|(top, _)| *top >= most) {
+            continue;
+        }
+        let Some((items, records)) = items_selector(document, parent, &shape, records) else {
+            continue;
+        };
+        let Some((title, link, text_len, linked)) = record_title(&records) else {
+            continue;
+        };
+        let score = records.len().min(100) * text_len.min(120);
+        if best.as_ref().is_some_and(|(top, _)| *top >= score) {
+            continue;
+        }
+        let mut fields = BTreeMap::new();
+        if let Some(field) = pick_field(&records, &[("", "data-id"), ("", "id")], false) {
+            fields.insert("id".into(), field);
+        }
+        fields.insert("title".into(), title);
+        if let Some(link) = link {
+            fields.insert("link".into(), link);
+        }
+        shared_fields(&records, &mut fields);
+        // A title that is a link is a record by itself; a heading or a
+        // link that is the whole record needs one more thing to read,
+        // or it is a tag cloud or a list of section names.
+        let known = ["id", "title", "link"];
+        if !linked && !fields.keys().any(|name| !known.contains(&name.as_str())) {
+            continue;
+        }
+        best = Some((
+            score,
+            Extraction {
+                items,
+                fields,
+                page: BTreeMap::new(),
+                limit: 100,
+            },
+        ));
+    }
     best.map(|(_, extraction)| extraction)
+}
+
+/// The tags of an element's children, in order: two records of one shape
+/// hold the same kinds of things in the same order.
+fn signature(element: ElementRef<'_>) -> String {
+    element
+        .children()
+        .filter_map(ElementRef::wrap)
+        .take(8)
+        .map(|child| child.value().name())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Most of the records (half or more) are built the same way inside.
+fn same_shape(records: &[ElementRef<'_>]) -> bool {
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for record in records {
+        *counts.entry(signature(*record)).or_default() += 1;
+    }
+    counts
+        .values()
+        .max()
+        .is_some_and(|top| top * 2 >= records.len())
+}
+
+/// The title of these records and, when it has one, their link: the one
+/// link most records hold at the same place, else a heading, a text named
+/// as a title, or the record itself when it is a link. Also the average
+/// title length and whether the title is a link.
+fn record_title(
+    records: &[ElementRef<'_>],
+) -> Option<(OutputField, Option<OutputField>, usize, bool)> {
+    let text = |selector: &str| OutputField {
+        selector: selector.to_owned(),
+        attribute: String::new(),
+        required: false,
+        absolute_url: false,
+    };
+    let href = |selector: &str| OutputField {
+        selector: selector.to_owned(),
+        attribute: "href".into(),
+        required: false,
+        absolute_url: true,
+    };
+    if let Some((path, text_len)) = title_path(records) {
+        return Some((text(&path), Some(href(&path)), text_len, true));
+    }
+    let is_heading =
+        |e: ElementRef<'_>| matches!(e.value().name(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6");
+    let is_titled = |e: ElementRef<'_>| {
+        e.value().classes().any(|class| {
+            let lower = class.to_ascii_lowercase();
+            ["title", "headline", "subject", "name"]
+                .iter()
+                .any(|word| lower.contains(word))
+        })
+    };
+    // A quick look before the paths are worked out: most runs of siblings
+    // hold neither a heading nor a named title.
+    let has = |pick: &dyn Fn(ElementRef<'_>) -> bool| {
+        records.iter().take(3).any(|record| {
+            record
+                .descendants()
+                .filter_map(ElementRef::wrap)
+                .take(300)
+                .any(pick)
+        })
+    };
+    let heading = if has(&is_heading) {
+        shared_paths(records, is_heading).into_iter().next()
+    } else {
+        None
+    }
+    .or_else(|| {
+        if has(&is_titled) {
+            shared_paths(records, is_titled).into_iter().next()
+        } else {
+            None
+        }
+    });
+    let anchors = records
+        .iter()
+        .all(|record| record.value().name() == "a" && record.value().attr("href").is_some());
+    if let Some((path, text_len)) = heading {
+        let link =
+            pick_field(records, &[("a[href]", "href")], true).or_else(|| anchors.then(|| href("")));
+        return Some((text(&path), link, text_len, false));
+    }
+    if anchors {
+        let texts: Vec<usize> = records
+            .iter()
+            .map(|record| element_text(*record).trim().len())
+            .filter(|len| *len > 0 && *len <= 300)
+            .collect();
+        if texts.len() >= needed(records.len()) {
+            let average = texts.iter().sum::<usize>() / texts.len();
+            return Some((text(""), Some(href("")), average, false));
+        }
+    }
+    None
+}
+
+/// How many records a field must be in: four of five, at least two.
+fn needed(records: usize) -> usize {
+    (records * 4).div_ceil(5).max(2)
+}
+
+/// The path, relative to a record, of an element the predicate picks and
+/// that most records hold once at the same place with a text that is not
+/// too long; with the average length of that text, best first.
+fn shared_paths(
+    records: &[ElementRef<'_>],
+    pick: impl Fn(ElementRef<'_>) -> bool,
+) -> Vec<(String, usize)> {
+    let mut paths: Vec<String> = Vec::new();
+    for record in records.iter().take(5) {
+        for element in record.descendants().filter_map(ElementRef::wrap).take(300) {
+            if element.id() == record.id() || !pick(element) {
+                continue;
+            }
+            let path = relative_path(*record, element);
+            if !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+    }
+    // A sample of the records says where the field is; the read itself
+    // runs on all of them.
+    let records = &records[..records.len().min(SAMPLE)];
+    let needed = needed(records.len());
+    let mut found: Vec<(String, usize, usize)> = paths
+        .into_iter()
+        .take(80)
+        .filter_map(|path| {
+            let selector = Selector::parse(&path).ok()?;
+            let texts: Vec<usize> = records
+                .iter()
+                .filter_map(|record| {
+                    let text = element_text(one(*record, &selector)?);
+                    let text = text.trim();
+                    (!text.is_empty() && text.len() <= 300).then_some(text.len())
+                })
+                .collect();
+            (texts.len() >= needed).then(|| {
+                let average = texts.iter().sum::<usize>() / texts.len();
+                (path, texts.len(), average)
+            })
+        })
+        .collect();
+    found.sort_by_key(|(path, hits, _)| (std::cmp::Reverse(*hits), path.len()));
+    found
+        .into_iter()
+        .map(|(path, _, average)| (path, average))
+        .collect()
+}
+
+/// The element's path below the record: `div.body > span.meta > a:nth-of-type(2)`,
+/// with a position only on the last step and only when it has no class.
+fn relative_path(record: ElementRef<'_>, element: ElementRef<'_>) -> String {
+    let mut path = Vec::new();
+    let mut node = Some(element);
+    while let Some(e) = node.filter(|e| e.id() != record.id()) {
+        path.insert(0, segment(e));
+        node = e.parent().and_then(ElementRef::wrap);
+    }
+    if let Some(last) = path.last_mut()
+        && !last.contains('.')
+    {
+        let position = element
+            .prev_siblings()
+            .filter_map(ElementRef::wrap)
+            .filter(|e| e.value().name() == element.value().name())
+            .count()
+            + 1;
+        let siblings = position
+            + element
+                .next_siblings()
+                .filter_map(ElementRef::wrap)
+                .filter(|e| e.value().name() == element.value().name())
+                .count();
+        if siblings > 1 {
+            *last = format!("{last}:nth-of-type({position})");
+        }
+    }
+    path.join(" > ")
+}
+
+/// The one element the selector picks inside the record, or nothing when
+/// it picks none or several.
+fn one<'a>(record: ElementRef<'a>, selector: &Selector) -> Option<ElementRef<'a>> {
+    let mut matches = record.select(selector);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+/// Fields most records share beyond the title and link: a summary, a
+/// byline and a date where pages usually put them, then whatever else sits
+/// at one place in most records under a class the site named (`score`,
+/// `author`, `release__version`), deepest first, and a text that reads as
+/// a date when no `time` says when.
+fn shared_fields(records: &[ElementRef<'_>], fields: &mut BTreeMap<String, OutputField>) {
+    let records = &records[..records.len().min(SAMPLE)];
+    for (name, options) in [
+        (
+            "summary",
+            &[
+                (".summary", ""),
+                (".description", ""),
+                (".excerpt", ""),
+                (".snippet", ""),
+                ("p", ""),
+            ][..],
+        ),
+        (
+            "meta",
+            &[
+                (".subtext", ""),
+                (".meta", ""),
+                (".byline", ""),
+                (".info", ""),
+            ][..],
+        ),
+        (
+            "published_at",
+            &[("time[datetime]", "datetime"), ("time", "")][..],
+        ),
+    ] {
+        if fields.contains_key(name) {
+            continue;
+        }
+        if let Some(field) = pick_field(records, options, false) {
+            fields.insert(name.into(), field);
+        }
+    }
+    let title = fields.get("title").cloned();
+    let title_texts: Vec<String> = title
+        .as_ref()
+        .and_then(|title| Selector::parse(&title.selector).ok().map(|s| (title, s)))
+        .map(|(title, selector)| {
+            records
+                .iter()
+                .map(|record| {
+                    let element = if title.selector.is_empty() {
+                        Some(*record)
+                    } else {
+                        one(*record, &selector)
+                    };
+                    element
+                        .map(element_text)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_owned()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let record_class = records
+        .first()
+        .and_then(|record| record.value().classes().find(|class| selector_word(class)))
+        .unwrap_or_default()
+        .to_owned();
+    let mut named = shared_paths(records, |e| e.value().classes().any(selector_word));
+    // Deepest first: `span.score` inside `span.meta` is the field, and the
+    // line that holds it is left to `meta`.
+    named.sort_by_key(|(path, _)| std::cmp::Reverse(path.matches(" > ").count()));
+    let mut kept: Vec<String> = fields.values().map(|f| f.selector.clone()).collect();
+    for (path, _) in named {
+        if fields.len() >= MAX_RECORD_FIELDS {
+            break;
+        }
+        // Not a field already read, and not the line around one.
+        if kept
+            .iter()
+            .any(|k| *k == path || k.starts_with(&format!("{path} > ")))
+        {
+            continue;
+        }
+        let Some(class) = path
+            .rsplit(" > ")
+            .next()
+            .and_then(|last| last.split_once('.'))
+            .map(|(_, class)| class.split(':').next().unwrap_or(class))
+        else {
+            continue;
+        };
+        let Ok(selector) = Selector::parse(&path) else {
+            continue;
+        };
+        let texts: Vec<String> = records
+            .iter()
+            .map(|record| {
+                one(*record, &selector)
+                    .map(element_text)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned()
+            })
+            .collect();
+        let same_as_title = title_texts
+            .iter()
+            .zip(&texts)
+            .filter(|(a, b)| !a.is_empty() && a == b)
+            .count();
+        if same_as_title * 2 >= records.len() {
+            continue;
+        }
+        let dated = texts.iter().filter(|t| date_like(t)).count() >= needed(records.len());
+        let name = if dated && !fields.contains_key("published_at") {
+            "published_at".to_owned()
+        } else {
+            match class_name(class, &record_class) {
+                Some(name) if !fields.contains_key(&name) => name,
+                _ => continue,
+            }
+        };
+        kept.push(path.clone());
+        fields.insert(
+            name,
+            OutputField {
+                selector: path,
+                attribute: String::new(),
+                required: false,
+                absolute_url: false,
+            },
+        );
+    }
+}
+
+/// Classes that say where a thing sits, not what it is.
+const LAYOUT_WORDS: &[&str] = &[
+    "row",
+    "col",
+    "cols",
+    "column",
+    "wrap",
+    "wrapper",
+    "container",
+    "inner",
+    "outer",
+    "left",
+    "right",
+    "center",
+    "top",
+    "bottom",
+    "flex",
+    "grid",
+    "block",
+    "inline",
+    "box",
+    "item",
+    "card",
+    "list",
+    "link",
+    "btn",
+    "button",
+    "icon",
+    "img",
+    "image",
+    "thumb",
+    "thumbnail",
+    "avatar",
+    "badge",
+    "label",
+    "hidden",
+    "visible",
+    "small",
+    "large",
+    "clearfix",
+    "truncate",
+    "sr-only",
+    "line",
+    "liner",
+    "graphic",
+    "node",
+    "main",
+];
+
+/// A field name from a class the site gave the element: `release__version`
+/// is `version`, `post-card-author` on a `post-card` is `author`; a layout
+/// word, a build name or a credential-like name is nothing.
+fn class_name(class: &str, record_class: &str) -> Option<String> {
+    // `heading__fzQskI` is a build name: its last part was not written by
+    // a person.
+    let last = class.rsplit("__").next().unwrap_or(class);
+    let upper = last.chars().filter(|c| c.is_ascii_uppercase()).count();
+    let built = last.len() <= 8
+        && last.contains(|c: char| c.is_ascii_alphabetic())
+        && (last.contains(|c: char| c.is_ascii_digit())
+            || (upper >= 2 && last.contains(|c: char| c.is_ascii_lowercase())));
+    if built {
+        return None;
+    }
+    // `post-card-author` on a `post-card` is `author`; so is `post-author`
+    // next to a `post-title`.
+    let stem = record_class
+        .split("__")
+        .next()
+        .unwrap_or(record_class)
+        .to_ascii_lowercase();
+    let first = stem.split(['-', '_']).next().unwrap_or_default().to_owned();
+    let mut name = last.to_ascii_lowercase();
+    for prefix in ["js-", "is-", "has-", "u-", "c-"] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            name = rest.to_owned();
+        }
+    }
+    for stem in [stem, first] {
+        if !stem.is_empty()
+            && let Some(rest) = name
+                .strip_prefix(&format!("{stem}-"))
+                .or_else(|| name.strip_prefix(&format!("{stem}_")))
+        {
+            name = rest.to_owned();
+            break;
+        }
+    }
+    let name = field_name(&name);
+    (!name.is_empty()
+        && name.len() <= 30
+        && name.contains(|c: char| c.is_ascii_alphabetic())
+        && !LAYOUT_WORDS.contains(&name.as_str())
+        && !secret_field(&name)
+        && stable_name(&name))
+    .then_some(name)
+}
+
+/// A short text that says when: `2026-01-05`, `05/01/2026`, `Jan 5, 2026`,
+/// `2026년 1월 5일`, `3 hours ago`, `2일 전`.
+fn date_like(text: &str) -> bool {
+    static DATE: OnceLock<regex::Regex> = OnceLock::new();
+    let text = text.trim();
+    if text.is_empty() || text.len() > 40 || !text.contains(|c: char| c.is_ascii_digit()) {
+        return false;
+    }
+    let date = DATE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)(\d{4}[-./년]\s?\d{1,2}([-./월]\s?\d{1,2})?)|(\d{1,2}[-./]\d{1,2}[-./]\d{2,4})|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}|\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b|\b\d+\s*(seconds?|minutes?|hours?|days?|weeks?|months?|years?|초|분|시간|일|주|개월|년)\s*(ago|전)\b|^\d{1,2}:\d{2}$",
+        )
+        .expect("constant")
+    });
+    date.is_match(text)
 }
 
 /// Inside navigation, a sidebar, a header or a footer: by tag, or by the
@@ -311,7 +757,7 @@ fn title_path(records: &[ElementRef<'_>]) -> Option<(String, usize)> {
             }
         }
     }
-    let needed = (records.len() * 4).div_ceil(5).max(2);
+    let needed = needed(records.len());
     paths
         .into_iter()
         .filter_map(|path| {
@@ -319,12 +765,7 @@ fn title_path(records: &[ElementRef<'_>]) -> Option<(String, usize)> {
             let texts: Vec<usize> = records
                 .iter()
                 .filter_map(|record| {
-                    let mut matches = record.select(&selector);
-                    let first = matches.next()?;
-                    if matches.next().is_some() {
-                        return None;
-                    }
-                    let text = element_text(first);
+                    let text = element_text(one(*record, &selector)?);
                     let text = text.trim();
                     (!text.is_empty() && text.len() <= 300).then_some(text.len())
                 })
@@ -488,35 +929,7 @@ fn record_extraction(document: &Html) -> Option<Extraction> {
         };
         fields.insert("title".into(), title);
         fields.insert("link".into(), link);
-        for (name, options) in [
-            (
-                "summary",
-                &[
-                    (".summary", ""),
-                    (".description", ""),
-                    (".excerpt", ""),
-                    (".snippet", ""),
-                    ("p", ""),
-                ][..],
-            ),
-            (
-                "meta",
-                &[
-                    (".subtext", ""),
-                    (".meta", ""),
-                    (".byline", ""),
-                    (".info", ""),
-                ][..],
-            ),
-            (
-                "published_at",
-                &[("time[datetime]", "datetime"), ("time", "")][..],
-            ),
-        ] {
-            if let Some(field) = pick_field(&records, options, false) {
-                fields.insert(name.into(), field);
-            }
-        }
+        shared_fields(&records, &mut fields);
         return Some(Extraction {
             items,
             fields,
@@ -533,7 +946,7 @@ fn pick_field(
     options: &[(&str, &str)],
     absolute_url: bool,
 ) -> Option<OutputField> {
-    let needed = (records.len() * 4).div_ceil(5).max(2);
+    let needed = needed(records.len());
     for &(selector, attribute) in options {
         let parsed = match selector {
             "" => None,
@@ -543,15 +956,7 @@ fn pick_field(
             .iter()
             .filter(|record| {
                 let target = match &parsed {
-                    Some(selector) => {
-                        let mut matches = record.select(selector);
-                        let first = matches.next();
-                        if matches.next().is_some() {
-                            None
-                        } else {
-                            first
-                        }
-                    }
+                    Some(selector) => one(**record, selector),
                     None => Some(**record),
                 };
                 target.is_some_and(|element| {
@@ -590,6 +995,504 @@ pub fn title_field(html: &str) -> Option<Field> {
         };
         field.is_present(&document).then_some(field)
     })
+}
+
+/// What a page that is one thing (an article, a product, a bug, a package)
+/// says about it, as page-level fields: the headline, the body text, what
+/// sits next to the headline, a date, an author, and the values the page
+/// labels in definition lists and label-value rows.
+#[derive(Clone, Debug, Default)]
+pub struct Main {
+    /// Selectors on the whole page, each matching exactly once. The
+    /// `headline` is required; the rest may be empty on another page.
+    pub fields: BTreeMap<String, OutputField>,
+    /// The headline's selector, for a response check.
+    pub headline: Field,
+    pub body: bool,
+    /// Labelled values read from definition lists and label-value rows.
+    pub values: usize,
+}
+
+/// Blocks a page puts its own content in, tried in order; the body when
+/// none of them is on the page exactly once.
+const MAIN_BLOCKS: &[&str] = &[
+    "main",
+    "[role=\"main\"]",
+    "article",
+    "#content",
+    "#main-content",
+    "#main",
+    ".main-content",
+    ".content",
+];
+/// The longest text a field keeps; longer bodies are left to the page.
+const MAX_BODY: usize = 16_000;
+
+/// The main content of a page that is one thing, or `None` when the page
+/// has no headline, nothing to read beside it, or (given the selector of
+/// the records found on it) when those records are a quarter or more of
+/// its main block: then the page is the list, and the list is its read.
+pub fn main_content(html: &str, items: Option<&str>) -> Option<Main> {
+    let document = Html::parse_document(html);
+    let block = MAIN_BLOCKS
+        .iter()
+        .filter_map(|selector| Selector::parse(selector).ok())
+        .find_map(|selector| {
+            let mut matches = document.select(&selector);
+            let first = matches.next()?;
+            matches.next().is_none().then_some(first)
+        })
+        .unwrap_or_else(|| document.root_element());
+    let mut counted = Vec::new();
+    text_lengths(document.root_element(), &mut counted);
+    let lengths: HashMap<_, usize> = counted.into_iter().map(|(e, n)| (e.id(), n)).collect();
+    let length = |e: ElementRef<'_>| lengths.get(&e.id()).copied().unwrap_or(0);
+    let block_text = length(block);
+    // The lists the records sit in (their parents: a `dt` says little on
+    // its own, its `dl` holds the page), for the share of the main block
+    // they take and for the body text, which must sit outside them.
+    let mut lists: Vec<ElementRef<'_>> = Vec::new();
+    if let Some(items) = items
+        && let Ok(selector) = Selector::parse(items)
+    {
+        for record in document.select(&selector).take(1000) {
+            if let Some(parent) = record.parent().and_then(ElementRef::wrap)
+                && !lists.iter().any(|p| p.id() == parent.id())
+            {
+                lists.push(parent);
+            }
+        }
+    }
+    let list_text: usize = lists.iter().map(|list| length(*list)).sum();
+    let h1 = Selector::parse("h1").ok()?;
+    // The first heading of the page itself: not the site's name in its
+    // header, not a heading in a menu or a sidebar.
+    let headline = block.select(&h1).find(|h| {
+        !element_text(*h).trim().is_empty()
+            && !h.ancestors().filter_map(ElementRef::wrap).any(|a| {
+                let site_header = a.value().name() == "header"
+                    && a.parent()
+                        .and_then(ElementRef::wrap)
+                        .is_some_and(|p| p.value().name() == "body");
+                site_header
+                    || matches!(a.value().name(), "nav" | "aside" | "footer")
+                    || (a.value().name() != "header" && furniture_self(a))
+            })
+    })?;
+    let headline_selector = unique_selector(&document, headline)?;
+    let mut fields = BTreeMap::new();
+    let text = |selector: String, attribute: &str, required: bool| OutputField {
+        selector,
+        attribute: attribute.to_owned(),
+        required,
+        absolute_url: false,
+    };
+    fields.insert("headline".into(), text(headline_selector.clone(), "", true));
+    let mut main = Main {
+        headline: Field {
+            selector: headline_selector,
+            attribute: String::new(),
+        },
+        ..Main::default()
+    };
+
+    // What the page says next to its headline, under a name the site gave
+    // it: `project-header__summary` is `summary`.
+    let headline_class = headline
+        .value()
+        .classes()
+        .find(|class| selector_word(class))
+        .unwrap_or_default()
+        .to_owned();
+    let beside: Vec<ElementRef<'_>> = headline
+        .parent()
+        .and_then(ElementRef::wrap)
+        .map(|parent| {
+            parent
+                .children()
+                .filter_map(ElementRef::wrap)
+                .filter(|e| e.id() != headline.id())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut beside_count = 0;
+    for element in beside.into_iter().take(12) {
+        if beside_count >= 5 {
+            break;
+        }
+        let Some(class) = element.value().classes().find(|class| selector_word(class)) else {
+            continue;
+        };
+        let value = element_text(element);
+        let value = value.trim();
+        if value.is_empty() || value.len() > 300 {
+            continue;
+        }
+        let Some(name) = class_name(class, &headline_class) else {
+            continue;
+        };
+        if fields.contains_key(&name) {
+            continue;
+        }
+        if let Some(selector) = unique_selector(&document, element) {
+            fields.insert(name, text(selector, "", false));
+            beside_count += 1;
+        }
+    }
+
+    let body = body_block(&document, block, headline, &lists, &length);
+    // The page is its list, not one thing, when the list takes a quarter or
+    // more of the main block and what is written beside it is less than a
+    // quarter of the list.
+    if list_text * 4 >= block_text && !body.as_ref().is_some_and(|(_, len)| len * 4 >= list_text) {
+        return None;
+    }
+    if let Some((body, _)) = body {
+        main.body = true;
+        fields.insert("body".into(), text(body, "", false));
+    }
+    for (name, options) in [
+        (
+            "description",
+            &[
+                ("meta[name=\"description\"]", "content"),
+                ("meta[property=\"og:description\"]", "content"),
+            ][..],
+        ),
+        (
+            "published_at",
+            &[
+                ("meta[property=\"article:published_time\"]", "content"),
+                ("time[datetime]", "datetime"),
+                ("time", ""),
+            ][..],
+        ),
+        (
+            "author",
+            &[
+                ("meta[name=\"author\"]", "content"),
+                ("[rel=\"author\"]", ""),
+                (".author", ""),
+                (".byline", ""),
+            ][..],
+        ),
+    ] {
+        if fields.contains_key(name) {
+            continue;
+        }
+        let found = options.iter().find_map(|(selector, attribute)| {
+            let field = Field {
+                selector: (*selector).to_owned(),
+                attribute: (*attribute).to_owned(),
+            };
+            field.is_present(&document).then_some(field)
+        });
+        if let Some(field) = found {
+            fields.insert(name.into(), text(field.selector, &field.attribute, false));
+        }
+    }
+    main.values = labelled_values(&document, block, &mut fields);
+    if !main.body && !fields.contains_key("published_at") && main.values < 2 && beside_count == 0 {
+        return None;
+    }
+    main.fields = fields;
+    Some(main)
+}
+
+/// The length of the text each element shows, in one pass: what
+/// `element_text` would count, give or take the spaces between nodes,
+/// without hidden parts, scripts and styles.
+fn text_lengths<'a>(element: ElementRef<'a>, out: &mut Vec<(ElementRef<'a>, usize)>) -> usize {
+    let value = element.value();
+    let hidden = matches!(value.name(), "script" | "style" | "noscript" | "template")
+        || value.attr("hidden").is_some()
+        || value.attr("aria-hidden") == Some("true");
+    let mut total = 0;
+    if !hidden {
+        for child in element.children() {
+            match ElementRef::wrap(child) {
+                Some(child) => total += text_lengths(child, out),
+                None => {
+                    if let Some(text) = child.value().as_text() {
+                        let text = text.trim();
+                        if !text.is_empty() {
+                            total += text.len() + 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.push((element, total));
+    total
+}
+
+/// Names pages give the block their text is in.
+const BODY_WORDS: &[&str] = &[
+    "description",
+    "body",
+    "content",
+    "readme",
+    "markdown",
+    "article",
+    "post",
+    "entry",
+    "prose",
+    "text",
+];
+
+/// The block that holds the page's text, outside the lists of records: the
+/// longest block named as one (`div.project-description`, `#readme`,
+/// `[itemprop=articleBody]`), else down from the main block while one child
+/// holds most of the text, stopping at a paragraph. Its selector and length
+/// when it is long enough to be a body and short enough to keep.
+fn body_block(
+    document: &Html,
+    block: ElementRef<'_>,
+    headline: ElementRef<'_>,
+    lists: &[ElementRef<'_>],
+    length: &dyn Fn(ElementRef<'_>) -> usize,
+) -> Option<(String, usize)> {
+    let holds_list = |e: ElementRef<'_>| {
+        lists.iter().any(|list| {
+            list.id() == e.id()
+                || list
+                    .ancestors()
+                    .filter_map(ElementRef::wrap)
+                    .any(|a| a.id() == e.id())
+        })
+    };
+    let fits = |e: ElementRef<'_>| {
+        let length = length(e);
+        ((200..=MAX_BODY).contains(&length) && e.id() != headline.id() && !holds_list(e))
+            .then_some(length)
+    };
+    let named = block
+        .descendants()
+        .filter_map(ElementRef::wrap)
+        .take(5000)
+        .filter(|e| matches!(e.value().name(), "div" | "section" | "article" | "main"))
+        .filter(|e| {
+            e.value()
+                .classes()
+                .chain(e.value().id())
+                .chain(e.value().attr("itemprop"))
+                .any(|name| {
+                    let lower = name.to_ascii_lowercase();
+                    BODY_WORDS.iter().any(|word| lower.contains(word))
+                })
+        })
+        .filter(|e| !furniture(*e))
+        .filter_map(|e| fits(e).map(|len| (len, e)))
+        .max_by_key(|(len, _)| *len);
+    let found = named.or_else(|| {
+        let mut node = block;
+        for _ in 0..12 {
+            if node.value().name() == "p" {
+                break;
+            }
+            let total = length(node);
+            let Some(child) = node
+                .children()
+                .filter_map(ElementRef::wrap)
+                .filter(|child| {
+                    !furniture_self(*child)
+                        && !matches!(child.value().name(), "script" | "style" | "nav" | "aside")
+                })
+                .map(|child| (length(child), child))
+                .max_by_key(|(len, _)| *len)
+                .filter(|(len, _)| len * 10 >= total * 3)
+                .map(|(_, child)| child)
+            else {
+                break;
+            };
+            node = child;
+        }
+        fits(node).map(|len| (len, node))
+    });
+    let (length, node) = found?;
+    // A body six steps down a chain of generated names is an app's layout,
+    // not a block a person named; it would not match tomorrow.
+    unique_selector(document, node)
+        .filter(|selector| selector.matches(" > ").count() <= 6)
+        .map(|selector| (selector, length))
+}
+
+/// Values the page labels: `dt` and `dd` pairs in definition lists, and
+/// rows of one `th` and one `td`. Each becomes a field named after its
+/// label. Returns how many were added.
+fn labelled_values(
+    document: &Html,
+    block: ElementRef<'_>,
+    fields: &mut BTreeMap<String, OutputField>,
+) -> usize {
+    const MAX_VALUES: usize = 12;
+    let mut added = 0;
+    let Ok(lists) = Selector::parse("dl") else {
+        return 0;
+    };
+    let add = |fields: &mut BTreeMap<String, OutputField>, label: &str, selector: String| {
+        let name = field_name(label);
+        if name.is_empty()
+            || name.len() > 40
+            || !name.contains(|c: char| c.is_ascii_alphabetic())
+            || secret_field(&name)
+            || !stable_name(&name)
+            || fields.contains_key(&name)
+            || Selector::parse(&selector).is_err()
+        {
+            return false;
+        }
+        fields.insert(
+            name,
+            OutputField {
+                selector,
+                attribute: String::new(),
+                required: false,
+                absolute_url: false,
+            },
+        );
+        true
+    };
+    for list in block.select(&lists).take(6) {
+        if added >= MAX_VALUES || furniture(list) {
+            break;
+        }
+        let children: Vec<ElementRef<'_>> = list.children().filter_map(ElementRef::wrap).collect();
+        let paired = children.len() >= 2
+            && children.len().is_multiple_of(2)
+            && children
+                .chunks(2)
+                .all(|pair| pair[0].value().name() == "dt" && pair[1].value().name() == "dd");
+        if !paired {
+            continue;
+        }
+        let Some(list_selector) = unique_selector(document, list) else {
+            continue;
+        };
+        for (index, pair) in children.chunks(2).enumerate() {
+            if added >= MAX_VALUES {
+                break;
+            }
+            let label = element_text(pair[0]);
+            let value = element_text(pair[1]);
+            if value.trim().is_empty() || value.len() > 2000 {
+                continue;
+            }
+            let selector = format!("{list_selector} > dd:nth-of-type({})", index + 1);
+            if add(fields, label.trim(), selector) {
+                added += 1;
+            }
+        }
+    }
+    let (Ok(tables), Ok(rows), Ok(cells)) = (
+        Selector::parse("table"),
+        Selector::parse("tr"),
+        Selector::parse("th, td"),
+    ) else {
+        return added;
+    };
+    for table in block.select(&tables).take(6) {
+        if added >= MAX_VALUES || furniture(table) {
+            break;
+        }
+        let rows: Vec<ElementRef<'_>> = table.select(&rows).take(40).collect();
+        let labelled = !rows.is_empty()
+            && rows.iter().all(|row| {
+                let cells: Vec<ElementRef<'_>> = row.select(&cells).collect();
+                cells.len() == 2
+                    && cells[0].value().name() == "th"
+                    && cells[1].value().name() == "td"
+            });
+        if !labelled {
+            continue;
+        }
+        let Some(table_selector) = unique_selector(document, table) else {
+            continue;
+        };
+        for (index, row) in rows.iter().enumerate() {
+            if added >= MAX_VALUES {
+                break;
+            }
+            let cells: Vec<ElementRef<'_>> = row.select(&cells).collect();
+            let label = element_text(cells[0]);
+            let value = element_text(cells[1]);
+            if value.trim().is_empty() || value.len() > 2000 {
+                continue;
+            }
+            let selector = format!("{table_selector} tr:nth-child({}) > td", index + 1);
+            if add(fields, label.trim(), selector) {
+                added += 1;
+            }
+        }
+    }
+    added
+}
+
+/// A selector that picks this element and nothing else on the page: its
+/// id or its class when that is alone, else its path down from the nearest
+/// ancestor with an id (or from `body`), each step placed among its
+/// siblings of the same tag when it has any.
+fn unique_selector(document: &Html, element: ElementRef<'_>) -> Option<String> {
+    let count = |selector: &str| {
+        Selector::parse(selector)
+            .map(|s| document.select(&s).take(2).count())
+            .unwrap_or(0)
+    };
+    let own: Vec<String> = element
+        .value()
+        .id()
+        .filter(|id| selector_word(id))
+        .map(|id| format!("#{id}"))
+        .into_iter()
+        .chain(
+            element
+                .value()
+                .classes()
+                .find(|class| selector_word(class))
+                .map(|class| format!("{}.{class}", element.value().name())),
+        )
+        .collect();
+    if let Some(found) = own.iter().find(|candidate| count(candidate) == 1) {
+        return Some(found.clone());
+    }
+    let placed = |e: ElementRef<'_>| {
+        let tag = e.value().name();
+        let same = |s: &ElementRef<'_>| s.value().name() == tag;
+        let before = e
+            .prev_siblings()
+            .filter_map(ElementRef::wrap)
+            .filter(same)
+            .count();
+        let after = e
+            .next_siblings()
+            .filter_map(ElementRef::wrap)
+            .filter(same)
+            .count();
+        let step = segment(e);
+        if before + after == 0 {
+            step
+        } else {
+            format!("{step}:nth-of-type({})", before + 1)
+        }
+    };
+    let mut path = vec![placed(element)];
+    let mut node = element.parent().and_then(ElementRef::wrap);
+    while let Some(ancestor) = node {
+        if matches!(ancestor.value().name(), "html" | "body") || path.len() > 12 {
+            break;
+        }
+        match ancestor.value().id().filter(|id| selector_word(id)) {
+            Some(id) => {
+                path.insert(0, format!("#{id}"));
+                break;
+            }
+            None => path.insert(0, placed(ancestor)),
+        }
+        node = ancestor.parent().and_then(ElementRef::wrap);
+    }
+    let selector = path.join(" > ");
+    (selector.len() <= 500 && count(&selector) == 1).then_some(selector)
 }
 
 /// Every form on the page, with its controls' names and types but no values.
@@ -717,13 +1620,24 @@ pub fn feeds(html: &str, base: &str) -> Vec<Feed> {
         .collect()
 }
 
+/// How a page turns its pages: the query key its links use, and the value
+/// that means this page.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pagination {
+    pub key: String,
+    /// `1` for a page number, `0` for an offset.
+    pub default: i64,
+}
+
 /// The query key the page's own links use to turn pages (`?page=2`), when
-/// they point at the same path.
-pub fn page_key(html: &str, page: &str) -> Option<String> {
+/// they point at the same path: the key of the link marked as the next
+/// page, else the key the most links use.
+pub fn pagination(html: &str, page: &str) -> Option<Pagination> {
     let document = Html::parse_document(html);
     let page = url::Url::parse(page).ok()?;
-    let selector = Selector::parse("a[href]").ok()?;
+    let selector = Selector::parse("a[href], link[href]").ok()?;
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut next: Option<String> = None;
     for link in document.select(&selector).take(2000) {
         let Ok(url) = page.join(link.value().attr("href").unwrap_or_default()) else {
             continue;
@@ -731,18 +1645,35 @@ pub fn page_key(html: &str, page: &str) -> Option<String> {
         if url.origin() != page.origin() || url.path() != page.path() {
             continue;
         }
+        let marked_next = link.value().attr("rel").is_some_and(|rel| {
+            rel.split_whitespace()
+                .any(|r| r.eq_ignore_ascii_case("next"))
+        });
         for (key, value) in url.query_pairs() {
-            if PAGE_KEYS.contains(&key.to_ascii_lowercase().as_str())
-                && value.parse::<u64>().is_ok()
-            {
+            if value.parse::<u64>().is_err() {
+                continue;
+            }
+            let known = PAGE_KEYS.contains(&key.to_ascii_lowercase().as_str());
+            if marked_next && next.is_none() && (known || url.query_pairs().count() == 1) {
+                next = Some(key.to_string());
+            }
+            if known {
                 *counts.entry(key.into_owned()).or_default() += 1;
             }
         }
     }
-    counts
-        .into_iter()
-        .max_by_key(|(_, count)| *count)
-        .map(|(key, _)| key)
+    let key = next.or_else(|| {
+        counts
+            .into_iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(key, _)| key)
+    })?;
+    let default = if matches!(key.to_ascii_lowercase().as_str(), "offset" | "start") {
+        0
+    } else {
+        1
+    };
+    Some(Pagination { key, default })
 }
 
 /// Does the page link to an OpenAPI description? The address, if so.
@@ -862,6 +1793,103 @@ mod tests {
     }
 
     #[test]
+    fn anchors_with_named_parts_are_records_and_bare_links_or_paragraphs_are_not() {
+        let releases: String = (1..=4)
+            .map(|n| format!("<a class='release' href='/p/1.{n}/'><p class='release__version'>1.{n}</p><p class='release__meta'><time datetime='2026-01-0{n}'>Jan {n}</time></p></a>"))
+            .collect();
+        let html = format!("<main><h1>Pkg</h1><div class='timeline'>{releases}</div></main>");
+        let extraction = infer_extraction(&html, BASE).unwrap();
+        assert_eq!(extraction.items, "div.timeline > a.release");
+        assert_eq!(extraction.fields["title"].selector, "");
+        assert_eq!(extraction.fields["link"].attribute, "href");
+        assert_eq!(extraction.fields["version"].selector, "p.release__version");
+        assert_eq!(extraction.fields["published_at"].attribute, "datetime");
+        let value = extraction.extract(&html, BASE).unwrap();
+        assert_eq!(value["items"][2]["version"], "1.3");
+        assert_eq!(value["items"][2]["link"], "https://example.test/p/1.3/");
+
+        let tags = "<main><h1>Tags</h1><div class='cloud'><a class='tag' href='/t/a'>a</a><a class='tag' href='/t/b'>b</a><a class='tag' href='/t/c'>c</a><a class='tag' href='/t/d'>d</a></div></main>";
+        assert!(infer_extraction(tags, BASE).is_none());
+        let prose = format!(
+            "<main><h1>Essay</h1><div class='text'>{}</div></main>",
+            (1..=4)
+                .map(|n| format!("<p>Paragraph {n} says something and <a href='/ref/{n}'>cites</a> a source at length.</p>"))
+                .collect::<String>()
+        );
+        assert!(infer_extraction(&prose, BASE).is_none());
+        let built = "<ul class='l__9fQ1'><li class='i__X41oTe'><h3><a href='/1'>One</a></h3><span class='badge__4AEjpg'>x</span></li><li class='i__X41oTe'><h3><a href='/2'>Two</a></h3><span class='badge__4AEjpg'>y</span></li><li class='i__X41oTe'><h3><a href='/3'>Three</a></h3><span class='badge__4AEjpg'>z</span></li></ul>";
+        let extraction = infer_extraction(built, BASE).unwrap();
+        assert!(
+            extraction
+                .fields
+                .keys()
+                .all(|k| ["title", "link"].contains(&k.as_str())),
+            "{:?}",
+            extraction.fields.keys()
+        );
+        assert!(date_like("2026-01-05") && date_like("Jan 5, 2026") && date_like("3 hours ago"));
+        assert!(date_like("2026년 1월 5일") && date_like("2일 전") && date_like("05/01/2026"));
+        assert!(!date_like("120") && !date_like("v2.34.2") && !date_like("Blue bicycle"));
+        assert_eq!(
+            class_name("post-card__author", "post-card").as_deref(),
+            Some("author")
+        );
+        assert_eq!(
+            class_name("post-byline", "post-title").as_deref(),
+            Some("byline")
+        );
+        assert_eq!(class_name("heading__fzQskI", ""), None);
+        assert_eq!(class_name("container", ""), None);
+        assert_eq!(class_name("csrf-token", ""), None);
+    }
+
+    #[test]
+    fn main_content_reads_one_thing_and_leaves_a_list_page_alone() {
+        let body = "<p>".to_owned() + &"A sentence of the body text. ".repeat(12) + "</p>";
+        let html = format!(
+            "<header><h1>Site</h1><nav><a href='/'>Home</a></nav></header><main><article><h1 class='title'>One thing</h1><p class='byline'>by someone</p><div class='content'>{body}</div><dl><dt>Status</dt><dd>Open</dd><dt>Owner</dt><dd>Mina</dd></dl></article></main>"
+        );
+        let main = main_content(&html, None).unwrap();
+        assert_eq!(main.headline.selector, "h1.title");
+        assert!(main.fields["headline"].required);
+        assert_eq!(main.fields["body"].selector, "div.content");
+        assert_eq!(main.fields["byline"].selector, "p.byline");
+        assert_eq!(
+            main.fields["status"].selector,
+            "main > article > dl > dd:nth-of-type(1)"
+        );
+        assert_eq!(
+            main.fields["owner"].selector,
+            "main > article > dl > dd:nth-of-type(2)"
+        );
+        assert_eq!(main.values, 2);
+        assert!(main.body);
+
+        let stories: String = (1..=6)
+            .map(|n| format!("<li class='story'><a href='/s/{n}'>Story number {n} with a long enough title</a></li>"))
+            .collect();
+        let list = format!("<main><h1>Front</h1><ol class='stories'>{stories}</ol></main>");
+        assert!(main_content(&list, Some("ol.stories > li.story")).is_none());
+        assert!(main_content("<title>Only</title><p>short</p>", None).is_none());
+        assert!(main_content("<h1>Head</h1><p>short</p>", None).is_none());
+    }
+
+    #[test]
+    fn pagination_prefers_the_next_link_and_offsets_start_at_zero() {
+        let html = "<a href='/board?p=2'>2</a><a href='/board?p=3'>3</a><a rel='next' href='/board?start=30'>next</a>";
+        assert_eq!(
+            pagination(html, BASE),
+            Some(Pagination {
+                key: "start".into(),
+                default: 0
+            })
+        );
+        let html = "<a href='/board?offset=20'>more</a><a href='/board?offset=40'>x</a>";
+        assert_eq!(pagination(html, BASE).unwrap().default, 0);
+        assert!(pagination("<a href='/other?page=2'>x</a>", BASE).is_none());
+    }
+
+    #[test]
     fn forms_keep_names_and_types_but_never_values() {
         let html = r#"<form action="/search" method="get"><input name="q" required><input type="hidden" name="board" value="3"><select name="sort"><option>new</option></select><input type="submit" name="go"></form>
             <form action="https://other.test/x" method="POST" enctype="multipart/form-data"><input name="title"><input type="file" name="upload"></form>
@@ -892,7 +1920,7 @@ mod tests {
             <body><h1>Notices</h1><a href="/board?page=2">2</a><a href="/board?page=3">3</a><a href="/other?page=9">x</a></body>"#;
         assert_eq!(feeds(html, BASE)[0].url, "https://example.test/feed.xml");
         assert_eq!(feeds(html, BASE)[0].title, "Posts");
-        assert_eq!(page_key(html, BASE).as_deref(), Some("page"));
+        assert_eq!(pagination(html, BASE).unwrap().key, "page");
         assert_eq!(title_field(html).unwrap().selector, "h1");
         assert_eq!(
             title_field("<title>Only</title>").unwrap().selector,

@@ -8,6 +8,10 @@ fn fixture(name: &str) -> String {
     .unwrap()
 }
 
+fn spec_of(draft: &itda_prep::Draft) -> itda_spec::Spec {
+    itda_spec::parse(draft.yaml.as_bytes()).unwrap()
+}
+
 fn page(url: &str, file: &str) -> Page {
     Page {
         url: url.into(),
@@ -26,8 +30,8 @@ fn a_board_page_becomes_a_list_a_search_a_post_and_a_feed() {
     )
     .unwrap();
     assert_eq!(draft.site, "intranet-example");
-    assert_eq!(draft.operations, 4, "{}", draft.yaml);
-    assert_eq!(draft.reads, 3);
+    assert_eq!(draft.operations, 5, "{}", draft.yaml);
+    assert_eq!(draft.reads, 4);
     assert!(draft.problems.is_empty(), "{:?}", draft.problems);
     let spec = itda_spec::parse(draft.yaml.as_bytes()).unwrap();
     assert_eq!(spec.site.base_url, "https://intranet.example.co.kr");
@@ -42,6 +46,26 @@ fn a_board_page_becomes_a_list_a_search_a_post_and_a_feed() {
     assert!(html.fields["link"].absolute_url);
     assert_eq!(board.query["page"].kind, "int");
     assert_eq!(board.query["page"].default, Some(1.into()));
+    assert_eq!(html.fields["author"].selector, "td:nth-child(3)");
+
+    let one = spec.op("get-board-by-id").unwrap();
+    assert_eq!(one.path, "/board/{id}");
+    assert_eq!(one.desc, "Read one of the items on Notice board");
+    assert_eq!(one.params["id"].kind, "int");
+    assert!(one.params["id"].required);
+    assert!(one.response.is_none());
+    assert_eq!(
+        one.evidence,
+        "the records of GET /board link to /board/{id}"
+    );
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.starts_with("GET /board/{id}: reads one record where the list's links go")),
+        "{:?}",
+        draft.notes
+    );
 
     let search = spec.op("search-board").unwrap();
     assert_eq!(search.method, "GET");
@@ -103,7 +127,7 @@ fn pages_elsewhere_and_duplicates_are_left_out() {
         &Options::default(),
     )
     .unwrap();
-    assert_eq!(draft.operations, 4);
+    assert_eq!(draft.operations, 5);
     assert!(draft.notes.iter().any(|n| n.contains("not under")));
     assert!(draft.notes.iter().any(|n| n.contains("drafted once")));
     assert!(from_pages(&[], &Options::default()).is_err());
@@ -167,7 +191,13 @@ fn a_linked_description_adds_its_reads_and_notes_its_changes() {
             changes: 2,
         })
     );
-    assert_eq!((draft.operations, draft.reads), (4, 4), "{}", draft.yaml);
+    assert_eq!((draft.operations, draft.reads), (5, 5), "{}", draft.yaml);
+    assert_eq!(
+        spec_of(&draft).op("get-pet").unwrap().path,
+        "/pets/{id}",
+        "the table's links share one shape: {}",
+        draft.yaml
+    );
     assert!(
         draft
             .yaml
@@ -283,7 +313,7 @@ fn a_description_without_servers_lives_where_it_was_found_and_dedupes_by_path() 
 fn a_description_elsewhere_or_unreadable_leaves_the_page_draft_alone() {
     let page = page("https://pets.example/docs", "docs.html");
     let plain = from_pages(std::slice::from_ref(&page), &Options::default()).unwrap();
-    assert_eq!(plain.operations, 1);
+    assert_eq!(plain.operations, 2, "{}", plain.yaml);
     assert!(plain.described.is_none());
     assert!(
         plain.notes.iter().any(|n| n.contains(
@@ -303,7 +333,7 @@ fn a_description_elsewhere_or_unreadable_leaves_the_page_draft_alone() {
         &Options::default(),
     )
     .unwrap();
-    assert_eq!(draft.operations, 1);
+    assert_eq!(draft.operations, 2);
     assert!(draft.described.is_none());
     assert!(
         draft.notes.iter().any(|n| n.contains(
@@ -323,7 +353,7 @@ fn a_description_elsewhere_or_unreadable_leaves_the_page_draft_alone() {
         &Options::default(),
     )
     .unwrap();
-    assert_eq!(draft.operations, 1);
+    assert_eq!(draft.operations, 2);
     assert!(draft.described.is_none());
     assert!(
         draft
@@ -467,4 +497,219 @@ fn fields_one_object_down_are_read_and_menus_are_not_lists() {
     assert!(model.contains_key("createdAt"), "{:?}", model.keys());
     assert!(!model.contains_key("author"));
     assert!(!draft.yaml.contains("mainNavigation"), "{}", draft.yaml);
+}
+
+#[test]
+fn a_card_grid_without_list_markup_lists_its_projects_and_reads_one() {
+    let draft = from_pages(
+        &[page("https://forge.example/projects", "cards.html")],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    assert_eq!(draft.operations, 2, "{}", draft.yaml);
+    let spec = spec_of(&draft);
+    let list = spec.op("list-projects").unwrap();
+    assert_eq!(list.desc, "List the projects on Projects");
+    assert_eq!(list.query["page"].default, Some(1.into()));
+    let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
+    assert_eq!(html.items, "div.project-card");
+    assert_eq!(html.fields["title"].selector, "h3");
+    assert_eq!(html.fields["summary"].selector, "p");
+    assert_eq!(html.fields["stars"].selector, "span.stars");
+    assert_eq!(html.fields["published_at"].attribute, "datetime");
+    assert_eq!(html.fields["link"].selector, "a[href]");
+    let value = html
+        .extract(&fixture("cards.html"), "https://forge.example/projects")
+        .unwrap();
+    assert_eq!(value["items"].as_array().unwrap().len(), 5);
+    assert_eq!(value["items"][1]["stars"], "88");
+    assert_eq!(
+        value["items"][1]["link"],
+        "https://forge.example/projects/beta"
+    );
+    assert!(!draft.yaml.contains("Terms"), "{}", draft.yaml);
+
+    let one = spec.op("get-project").unwrap();
+    assert_eq!(one.path, "/projects/{id}");
+    assert_eq!(one.params["id"].kind, "string");
+    assert_eq!(one.desc, "Read one of the projects on Projects");
+}
+
+#[test]
+fn rows_with_a_named_title_but_no_links_are_records_with_a_date_and_an_offset() {
+    let draft = from_pages(
+        &[page("https://market.example/search?q=bicycle", "rows.html")],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = spec_of(&draft);
+    let list = spec.op("get-search").unwrap();
+    assert_eq!(list.desc, "List the results on Search results");
+    assert_eq!(list.query["offset"].default, Some(0.into()));
+    assert_eq!(list.query["q"].default, Some("bicycle".into()));
+    let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
+    assert_eq!(html.items, "div.results > div.result");
+    assert_eq!(html.fields["title"].selector, "span.result__title");
+    assert_eq!(html.fields["price"].selector, "span.result__price");
+    assert_eq!(html.fields["published_at"].selector, "span.result__date");
+    assert!(!html.fields.contains_key("link"));
+}
+
+#[test]
+fn an_article_is_read_as_one_page_with_its_headline_body_and_byline() {
+    let draft = from_pages(
+        &[page(
+            "https://blog.example/posts/why-the-gate-waits",
+            "article.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = spec_of(&draft);
+    let post = spec.op("get-why-the-gate-waits").unwrap();
+    assert_eq!(post.desc, "Read Why the gate waits");
+    let response = post.response.as_ref().unwrap();
+    assert_eq!(response.required_html_fields[0].selector, "h1.post-title");
+    let html = response.html.as_ref().unwrap();
+    assert!(html.items.is_empty());
+    assert!(html.page["headline"].required);
+    assert_eq!(html.page["body"].selector, "div.post-content");
+    assert_eq!(html.page["byline"].selector, "p.post-byline");
+    assert_eq!(html.page["published_at"].attribute, "datetime");
+    assert_eq!(html.page["author"].attribute, "content");
+    assert_eq!(html.page["description"].attribute, "content");
+    let value = html
+        .extract(
+            &fixture("article.html"),
+            "https://blog.example/posts/why-the-gate-waits",
+        )
+        .unwrap();
+    assert_eq!(value["headline"], "Why the gate waits");
+    assert_eq!(value["author"], "Mina Park");
+    assert_eq!(value["published_at"], "2026-03-01T09:00:00Z");
+    assert!(
+        value["body"]
+            .as_str()
+            .unwrap()
+            .starts_with("Every request to a site")
+    );
+    assert!(
+        post.evidence
+            .starts_with("GET /posts/why-the-gate-waits is one page with a headline, a body"),
+        "{}",
+        post.evidence
+    );
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("reads the page's own content as")),
+        "{:?}",
+        draft.notes
+    );
+}
+
+#[test]
+fn a_product_page_reads_its_labelled_values_but_never_a_secret_one() {
+    let draft = from_pages(
+        &[page(
+            "https://shop.example/items/widget-pro",
+            "product.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = spec_of(&draft);
+    let item = spec.op("get-widget-pro").unwrap();
+    let html = item.response.as_ref().unwrap().html.as_ref().unwrap();
+    assert_eq!(html.page["headline"].selector, "h1.product-name");
+    assert_eq!(html.page["price"].selector, "p.product-price");
+    assert_eq!(
+        html.page["weight"].selector,
+        "table.specs tr:nth-child(1) > td"
+    );
+    assert_eq!(
+        html.page["warranty"].selector,
+        "table.specs tr:nth-child(3) > td"
+    );
+    assert_eq!(html.page["sku"].selector, "dl.meta > dd:nth-of-type(1)");
+    assert_eq!(html.page["color"].selector, "dl.meta > dd:nth-of-type(2)");
+    assert!(!html.page.contains_key("api-key"), "{:?}", html.page.keys());
+    assert!(!html.page.contains_key("body"));
+    let value = html
+        .extract(
+            &fixture("product.html"),
+            "https://shop.example/items/widget-pro",
+        )
+        .unwrap();
+    assert_eq!(value["weight"], "1.2 kg");
+    assert_eq!(value["color"], "Blue");
+    assert_eq!(value["price"], "99.00");
+    assert_eq!(
+        item.evidence,
+        "GET /items/widget-pro is one page with a headline, 1 more fields, 5 labelled values"
+    );
+}
+
+#[test]
+fn links_that_differ_by_a_query_key_become_a_read_by_that_key() {
+    let draft = from_pages(
+        &[page(
+            "https://board.example/list.php?board=free",
+            "ids.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert!(draft.problems.is_empty(), "{:?}", draft.problems);
+    assert_eq!(draft.operations, 2, "{}", draft.yaml);
+    let spec = spec_of(&draft);
+    let list = spec.op("get-list").unwrap();
+    assert_eq!(list.desc, "List the posts on Free board");
+    assert_eq!(list.query["offset"].default, Some(0.into()));
+    let html = list.response.as_ref().unwrap().html.as_ref().unwrap();
+    assert_eq!(html.fields["writer"].selector, "span.writer");
+    let one = spec.op("get-post").unwrap();
+    assert_eq!(one.path, "/view.php");
+    assert_eq!(one.query["id"].kind, "int");
+    assert!(one.query["id"].required);
+    assert_eq!(one.query["board"].default, Some("free".into()));
+    assert_eq!(
+        one.evidence,
+        "the records of GET /list.php link to /view.php?id="
+    );
+}
+
+#[test]
+fn a_page_with_nothing_to_read_is_still_only_a_title_check() {
+    let draft = from_pages(
+        &[page(
+            "https://pypi.example/project/requests/",
+            "challenge.html",
+        )],
+        &Options::default(),
+    )
+    .unwrap();
+    assert_eq!(draft.operations, 1, "{}", draft.yaml);
+    let spec = spec_of(&draft);
+    let op = &spec.operations[0];
+    let html = op.response.as_ref().unwrap().html.as_ref().unwrap();
+    assert_eq!(html.page.len(), 1);
+    assert_eq!(html.page["title"].selector, "title");
+    assert!(html.items.is_empty());
+    assert!(!draft.yaml.contains("noscript"), "{}", draft.yaml);
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("drawn by scripts") || n.contains("only the title is checked")),
+        "{:?}",
+        draft.notes
+    );
 }
