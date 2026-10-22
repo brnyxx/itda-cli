@@ -364,15 +364,27 @@ pub fn extract_ssr_map(html: &str) -> std::collections::BTreeMap<String, Value> 
                     } else if ident == "__APOLLO_STATE__"
                         && let Value::Object(top) = &mut val
                     {
+                        // The cache is a flat map keyed `Typename:id`. Records
+                        // with a title stay under `items`, as before, and every
+                        // record is also grouped under its typename, so a
+                        // definition can point at `/Post` or `/Product`.
                         let mut items = Vec::new();
+                        let mut groups: std::collections::BTreeMap<String, Vec<Value>> =
+                            std::collections::BTreeMap::new();
                         let mut remove_keys = Vec::new();
                         for (k, v) in top.iter() {
-                            if k.contains(':')
+                            if let Some((typename, _)) = k.split_once(':')
                                 && !k.starts_with('$')
                                 && let Value::Object(obj) = v
                             {
                                 if obj.contains_key("title") || obj.contains_key("url_slug") {
                                     items.push(v.clone());
+                                }
+                                if !typename.is_empty() {
+                                    groups
+                                        .entry(typename.to_owned())
+                                        .or_default()
+                                        .push(v.clone());
                                 }
                                 remove_keys.push(k.clone());
                             }
@@ -382,6 +394,9 @@ pub fn extract_ssr_map(html: &str) -> std::collections::BTreeMap<String, Value> 
                         }
                         if !items.is_empty() {
                             top.insert("items".into(), Value::Array(items));
+                        }
+                        for (typename, records) in groups {
+                            top.entry(typename).or_insert(Value::Array(records));
                         }
                     }
                     payloads.insert(ident.to_owned(), val);
@@ -561,6 +576,10 @@ mod tests {
         assert_eq!(
             extract_ssr_json(html, "__APOLLO_STATE__", "/items/0/title"),
             Some(json!("Rust Guide"))
+        );
+        assert_eq!(
+            extract_ssr_json(html, "__APOLLO_STATE__", "/Post/0/url_slug"),
+            Some(json!("rust-guide"))
         );
         assert_eq!(extract_ssr_json("<p>no scripts</p>", "auto", ""), None);
     }

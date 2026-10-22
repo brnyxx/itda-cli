@@ -1040,6 +1040,77 @@ fn draft(
     publish(home, from(&text, &options)?, install, force)
 }
 
+/// What the gate already knows about a page that refused itda, as the error
+/// `itda call` would give (`blocked_by_site`, `site_rate_limited`) with the
+/// block named in the person's language: Cloudflare, a bot manager, a
+/// captcha, or a rate limit with the wait it asked for. `None` when the
+/// answer was not a block.
+fn site_refusal(url: &str, response: &itda_net::Response) -> Option<AppError> {
+    use text::{t, tf};
+    let host = url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_else(|| url.to_owned());
+    if matches!(response.status, 301 | 302 | 303 | 307 | 308)
+        && let Some(path) = signin_redirect(url, response)
+    {
+        return Some(AppError::new(
+            itda_types::error::Code::Auth,
+            tf("redirect_signin", &[("host", &host), ("path", &path)]),
+            t("redirect_signin_fix"),
+        ));
+    }
+    let mut error = itda_runtime::refusal(response, false);
+    let status = response.status.to_string();
+    let (msg, fix) = match (response.defense.as_str(), error.public_code.as_str()) {
+        ("cloudflare", _) => (
+            tf("blocked_cloudflare", &[("host", &host)]),
+            t("blocked_fix"),
+        ),
+        ("bot-manager", _) => (
+            tf("blocked_bot_manager", &[("host", &host)]),
+            t("blocked_fix"),
+        ),
+        ("captcha", _) => (tf("blocked_captcha", &[("host", &host)]), t("blocked_fix")),
+        (_, "site_rate_limited") => (
+            match error
+                .extra
+                .get("retry_after")
+                .and_then(serde_json::Value::as_u64)
+            {
+                Some(wait) => tf(
+                    "rate_limited_wait",
+                    &[("host", &host), ("n", &wait.to_string())],
+                ),
+                None => tf("rate_limited", &[("host", &host)]),
+            },
+            t("rate_limited_fix"),
+        ),
+        (_, "blocked_by_site") => (
+            tf("blocked_other", &[("host", &host), ("status", &status)]),
+            t("blocked_fix"),
+        ),
+        _ => return None,
+    };
+    error.msg = msg;
+    error.remedy = fix.to_owned();
+    Some(error)
+}
+
+/// The page's path when its answer sends itda on to a sign-in page (a
+/// `Location` with a path segment such as `login`, `signin` or `sso`).
+fn signin_redirect(url: &str, response: &itda_net::Response) -> Option<String> {
+    let page = url::Url::parse(url).ok()?;
+    let target = page.join(response.header("location")).ok()?;
+    let signin = target.path().split('/').any(|segment| {
+        matches!(
+            segment.to_ascii_lowercase().as_str(),
+            "login" | "signin" | "sign-in" | "sign_in" | "sso" | "oauth" | "authenticate"
+        )
+    });
+    signin.then(|| page.path().to_owned())
+}
+
 /// Fetch each page with the honest client, then draft from what they show.
 /// A page that refuses or redirects to a sign-in is reported, never worked
 /// around; `itda record` covers sites that need an account.
@@ -1059,6 +1130,9 @@ async fn draft_page(
             ..itda_net::Request::read(url.as_str())
         };
         let response = net.fetch(request).await?;
+        if let Some(error) = site_refusal(url, &response) {
+            return Err(error);
+        }
         if !response.successful() {
             return Err(AppError::new(
                 itda_types::error::Code::Runtime,

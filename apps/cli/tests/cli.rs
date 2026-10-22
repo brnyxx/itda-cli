@@ -1170,3 +1170,173 @@ async fn an_unreadable_description_leaves_the_page_draft_as_it_is() {
     assert!(String::from_utf8_lossy(&printed.stdout).contains("name: list-docs"));
     std::fs::remove_dir_all(home).ok();
 }
+
+async fn serve_html(path: &'static str, body: &'static str) -> String {
+    let router = Router::new().route(path, get(move || async move { axum::response::Html(body) }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_blocked_page_is_named_by_what_the_gate_saw() {
+    use axum::http::StatusCode;
+    let router = Router::new()
+        .route(
+            "/cf",
+            get(|| async {
+                (
+                    StatusCode::FORBIDDEN,
+                    [("server", "cloudflare"), ("content-type", "text/html")],
+                    "<title>Just a moment...</title>",
+                )
+            }),
+        )
+        .route(
+            "/slow",
+            get(|| async {
+                (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    [("retry-after", "120"), ("content-type", "text/html")],
+                    "<p>slow down</p>",
+                )
+            }),
+        )
+        .route(
+            "/r/rust",
+            get(|| async {
+                (
+                    StatusCode::FOUND,
+                    [
+                        ("location", "/login/?dest=%2Fr%2Frust"),
+                        ("retry-after", "0"),
+                    ],
+                    "",
+                )
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    // Each run gets its own data directory: a block pauses the site in it.
+    let dir = home();
+    let english = [("ITDA_LANG", "en")];
+    let blocked = itda(&dir, &["draft", "page", &format!("{base}/cf")], &english).await;
+    assert_eq!(blocked.status.code(), Some(12), "{blocked:?}");
+    let err = String::from_utf8_lossy(&blocked.stderr);
+    assert!(
+        err.contains("error[blocked_by_site]: 127.0.0.1 is behind Cloudflare and refused itda."),
+        "{err}"
+    );
+    assert!(err.contains("itda does not go around that"), "{err}");
+    assert!(!err.contains("HTTP 403"), "{err}");
+    std::fs::remove_dir_all(dir).ok();
+
+    let dir = home();
+    let korean = itda(
+        &dir,
+        &["draft", "page", &format!("{base}/cf")],
+        &[("ITDA_LANG", "ko")],
+    )
+    .await;
+    assert_eq!(korean.status.code(), Some(12));
+    assert!(
+        String::from_utf8_lossy(&korean.stderr)
+            .contains("Cloudflare 뒤에 있어 itda를 거부했습니다"),
+        "{korean:?}"
+    );
+    std::fs::remove_dir_all(dir).ok();
+
+    let dir = home();
+    let limited = itda(&dir, &["draft", "page", &format!("{base}/slow")], &english).await;
+    assert_eq!(limited.status.code(), Some(13), "{limited:?}");
+    let err = String::from_utf8_lossy(&limited.stderr);
+    assert!(
+        err.contains("error[site_rate_limited]: 127.0.0.1 limits how often it is read and asked itda to wait 120 s."),
+        "{err}"
+    );
+    std::fs::remove_dir_all(dir).ok();
+
+    let dir = home();
+    let signin = itda(
+        &dir,
+        &["draft", "page", &format!("{base}/r/rust")],
+        &english,
+    )
+    .await;
+    assert_eq!(signin.status.code(), Some(10), "{signin:?}");
+    let err = String::from_utf8_lossy(&signin.stderr);
+    assert!(
+        err.contains("error[auth_required]: 127.0.0.1 sends itda to a sign-in page instead of showing /r/rust."),
+        "{err}"
+    );
+    assert!(err.contains("itda record"), "{err}");
+    std::fs::remove_dir_all(dir).ok();
+
+    let dir = home();
+    let setup = itda(
+        &dir,
+        &[
+            "setup",
+            &format!("{base}/cf"),
+            "--no-record",
+            "--client",
+            "cursor",
+            "--yes",
+        ],
+        &english,
+    )
+    .await;
+    assert!(!setup.status.success());
+    let err = String::from_utf8_lossy(&setup.stderr);
+    assert!(
+        err.contains("127.0.0.1 is behind Cloudflare and refused itda."),
+        "{err}"
+    );
+    assert!(!err.contains("needs a sign-in"), "{err}");
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn check_counts_the_records_of_a_typed_embedded_read() {
+    let home = home();
+    let base = serve_html(
+        "/products",
+        r#"<!doctype html><html><head><title>Shop</title></head><body><div id="__next"></div>
+<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"products":[{"id":1,"name":"Lamp","token":"private-value"},{"id":2,"name":"Desk","token":"private-value"},{"id":3,"name":"Chair","token":"private-value"}]}},"page":"/products","buildId":"abc"}</script>
+</body></html>"#,
+    )
+    .await;
+    let installed = itda(
+        &home,
+        &[
+            "draft",
+            "page",
+            &format!("{base}/products"),
+            "--name",
+            "shop",
+            "--install",
+        ],
+        &[],
+    )
+    .await;
+    assert!(installed.status.success(), "{installed:?}");
+
+    let checked = itda(&home, &["check", "shop", "--json"], &[]).await;
+    assert!(checked.status.success(), "{checked:?}");
+    let report = stdout_json(&checked);
+    assert_eq!(report["results"][0]["action"], "list-products");
+    assert_eq!(report["results"][0]["status"], "ok");
+    assert_eq!(report["results"][0]["records"], 3, "{report}");
+
+    let called = itda(&home, &["call", "shop.list-products", "--json"], &[]).await;
+    assert!(called.status.success(), "{called:?}");
+    let data = &stdout_json(&called)["data"];
+    assert_eq!(data.as_array().map(Vec::len), Some(3));
+    assert_eq!(data[0]["name"], "Lamp");
+    assert_eq!(data[0]["id"], 1);
+    assert!(data[0].get("token").is_none(), "{data}");
+    std::fs::remove_dir_all(home).ok();
+}

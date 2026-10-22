@@ -6,13 +6,14 @@
 //! changes. When the site also publishes an API description, its reads join
 //! the draft. Pages and descriptions are fetched by the caller with the honest
 //! client; nothing here reaches the network.
-use crate::har::{Kind, action_name, site_name, template, unique};
-use crate::label::{Label, describe, language};
+use crate::har::{Kind, action_name, plural, singular, site_name, template, unique};
+use crate::label::{Label, describe, language, words};
 use crate::openapi::openapi_parts;
 use crate::{Described, Draft, Options, Parts, reorder, slug};
 use itda_html::evidence;
 use itda_types::error::{AppResult, usage};
 use itda_types::util::secret_field;
+use serde_json::Value;
 use serde_norway::{Mapping, Value as Yaml};
 use std::collections::BTreeSet;
 
@@ -231,8 +232,9 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
 
     let mut notes = Vec::new();
     let mut operations: Vec<Mapping> = Vec::new();
+    let mut models = Mapping::new();
     let mut names = BTreeSet::new();
-    let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut seen: BTreeSet<(String, String, String)> = BTreeSet::new();
     let mut sign_in = false;
     for page in pages {
         let url = page_url(&page.url)?;
@@ -253,19 +255,27 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
             continue;
         }
         let (path, params) = template(rest);
+        // The same page seen twice is drafted once; two reads of one page
+        // that return different embedded lists are both kept.
         let mut push = |entry: Mapping, notes: &mut Vec<String>| {
-            let key = (
+            let field = |name: &str| {
                 entry
-                    .get("method")
+                    .get(name)
                     .and_then(Yaml::as_str)
                     .unwrap_or_default()
-                    .to_owned(),
-                entry
-                    .get("path")
-                    .and_then(Yaml::as_str)
-                    .unwrap_or_default()
-                    .to_owned(),
-            );
+                    .to_owned()
+            };
+            let response = entry.get("response").and_then(Yaml::as_mapping);
+            let list = response
+                .map(|r| {
+                    let text = |name: &str| r.get(name).and_then(Yaml::as_str).unwrap_or_default();
+                    match text("ssr_json") {
+                        "" => String::new(),
+                        key => format!("{key} {}", text("extract_pointer")),
+                    }
+                })
+                .unwrap_or_default();
+            let key = (field("method"), field("path"), list);
             if !seen.insert(key.clone()) {
                 notes.push(format!(
                     "{} {}: seen on more than one page; drafted once.",
@@ -278,10 +288,36 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
 
         let lang = language(&options.lang, &page_lang(&page.html));
         let page_title = title_of(&page.html);
-        push(
-            page_action(page, &url, &path, &params, &mut names, &mut notes, &lang),
+        let listings = embedded_lists(&page.html);
+        if let Some(entry) = page_action(
+            page,
+            &url,
+            &path,
+            &params,
+            &mut names,
             &mut notes,
-        );
+            &lang,
+            !listings.is_empty(),
+        ) {
+            push(entry, &mut notes);
+        }
+        for listing in &listings {
+            push(
+                listing_action(
+                    listing,
+                    page,
+                    &url,
+                    &path,
+                    &params,
+                    &page_title,
+                    &mut names,
+                    &mut models,
+                    &mut notes,
+                    &lang,
+                ),
+                &mut notes,
+            );
+        }
         for form in evidence::forms(&page.html, url.as_str()) {
             let label = format!("{} form on {}", form.method, url.path());
             if form.password {
@@ -384,6 +420,7 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
         base_url,
         auth,
         operations,
+        models,
         notes,
         source: format!("`itda draft page` from pages on {host}"),
     })
@@ -425,8 +462,6 @@ fn page_url(raw: &str) -> AppResult<url::Url> {
         })
 }
 
-/// The page itself as a read: its records, its embedded data, or at least
-/// its title, so the action fails when the page changes.
 /// The page's `<title>`, trimmed of a site suffix such as ` - Example`.
 fn title_of(html: &str) -> String {
     let title = itda_html::Field {
@@ -458,6 +493,11 @@ fn page_lang(html: &str) -> String {
     .unwrap_or_default()
 }
 
+/// The page itself as a read: its records, its embedded data, or at least
+/// its title, so the action fails when the page changes. A page whose
+/// records live only in an embedded payload gets no read of its own: the
+/// typed reads of those lists (`has_lists`) are its reads.
+#[allow(clippy::too_many_arguments)]
 fn page_action(
     page: &Page,
     url: &url::Url,
@@ -466,9 +506,14 @@ fn page_action(
     names: &mut BTreeSet<String>,
     notes: &mut Vec<String>,
     lang: &str,
-) -> Mapping {
+    has_lists: bool,
+) -> Option<Mapping> {
     let title = evidence::title_field(&page.html);
     let page_title = title_of(&page.html);
+    let extraction = evidence::infer_extraction(&page.html, url.as_str());
+    if has_lists && extraction.is_none() {
+        return None;
+    }
     let name = if path == "/" {
         "home".to_owned()
     } else {
@@ -489,46 +534,12 @@ fn page_action(
     entry.insert("method".into(), "GET".into());
     entry.insert("path".into(), path.into());
     entry.insert("effect".into(), "read".into());
-    if !params.is_empty() {
-        entry.insert("params".into(), Yaml::Mapping(required_strings(params)));
-    }
-    let mut query = Mapping::new();
-    for (key, value) in url.query_pairs() {
-        if secret_field(&key) || query.contains_key(key.as_ref()) {
-            continue;
-        }
-        let kind = Kind::of_text(&value);
-        let mut field = Mapping::new();
-        field.insert("type".into(), kind.name().into());
-        field.insert(
-            "default".into(),
-            match kind {
-                Kind::Int => value
-                    .parse::<i64>()
-                    .map(Yaml::from)
-                    .unwrap_or(value.as_ref().into()),
-                Kind::Bool => (value == "true").into(),
-                _ => value.as_ref().into(),
-            },
-        );
-        query.insert(key.as_ref().into(), Yaml::Mapping(field));
-    }
-    if let Some(key) = evidence::page_key(&page.html, url.as_str())
-        && !query.contains_key(key.as_str())
-    {
-        let mut field = Mapping::new();
-        field.insert("type".into(), "int".into());
-        field.insert("default".into(), 1.into());
-        query.insert(key.into(), Yaml::Mapping(field));
-    }
-    if !query.is_empty() {
-        entry.insert("query".into(), Yaml::Mapping(query));
-    }
+    page_inputs(&mut entry, page, url, params);
 
     let mut response = Mapping::new();
     response.insert("format".into(), "html".into());
     let label = format!("GET {}", url.path());
-    if let Some(extraction) = evidence::infer_extraction(&page.html, url.as_str()) {
+    if let Some(extraction) = extraction {
         entry.insert(
             "desc".into(),
             describe(&Label::List { title: &subject }, lang).into(),
@@ -549,7 +560,7 @@ fn page_action(
             )
             .into(),
         );
-    } else if let Some((key, pointer, pointers)) = embedded(&page.html) {
+    } else if !has_lists && let Some((key, pointer, pointers)) = embedded(&page.html) {
         entry.insert(
             "desc".into(),
             describe(&Label::Embedded { title: &subject }, lang).into(),
@@ -612,10 +623,686 @@ fn page_action(
         notes.push(format!(
             "{label}: no title, records or embedded data were found; add a response check by hand."
         ));
-        return entry;
+        return Some(entry);
     }
     entry.insert("response".into(), Yaml::Mapping(response));
+    Some(entry)
+}
+
+/// The page's path inputs and its query string as inputs with defaults, plus
+/// a `page` input when the page links to its next page.
+fn page_inputs(entry: &mut Mapping, page: &Page, url: &url::Url, params: &[String]) {
+    if !params.is_empty() {
+        entry.insert("params".into(), Yaml::Mapping(required_strings(params)));
+    }
+    let mut query = Mapping::new();
+    for (key, value) in url.query_pairs() {
+        if secret_field(&key) || query.contains_key(key.as_ref()) {
+            continue;
+        }
+        let kind = Kind::of_text(&value);
+        let mut field = Mapping::new();
+        field.insert("type".into(), kind.name().into());
+        field.insert(
+            "default".into(),
+            match kind {
+                Kind::Int => value
+                    .parse::<i64>()
+                    .map(Yaml::from)
+                    .unwrap_or(value.as_ref().into()),
+                Kind::Bool => (value == "true").into(),
+                _ => value.as_ref().into(),
+            },
+        );
+        query.insert(key.as_ref().into(), Yaml::Mapping(field));
+    }
+    if let Some(key) = evidence::page_key(&page.html, url.as_str())
+        && !query.contains_key(key.as_str())
+    {
+        let mut field = Mapping::new();
+        field.insert("type".into(), "int".into());
+        field.insert("default".into(), 1.into());
+        query.insert(key.into(), Yaml::Mapping(field));
+    }
+    if !query.is_empty() {
+        entry.insert("query".into(), Yaml::Mapping(query));
+    }
+}
+
+/// One list of records inside an embedded payload: where it is, what it
+/// holds in plain words, and the fields a model keeps from each record.
+struct Listing {
+    /// The payload key: `ld+json`, `__NEXT_DATA__`, `__APOLLO_STATE__`...
+    key: String,
+    /// JSON pointer to the array inside the payload.
+    pointer: String,
+    /// What the records are, in plain words: `news articles`, `products`.
+    what: String,
+    /// `(field, path, type)` in the order a model lists them.
+    fields: Vec<(String, String, &'static str)>,
+    count: usize,
+}
+
+/// A typed read of one embedded list: the page fetched again, the list
+/// taken out with `extract_pointer` and each record cut down by a model.
+#[allow(clippy::too_many_arguments)]
+fn listing_action(
+    listing: &Listing,
+    page: &Page,
+    url: &url::Url,
+    path: &str,
+    params: &[String],
+    page_title: &str,
+    names: &mut BTreeSet<String>,
+    models: &mut Mapping,
+    notes: &mut Vec<String>,
+    lang: &str,
+) -> Mapping {
+    let what = &listing.what;
+    let name = unique(names, &slug(&format!("list-{what}")));
+    let subject = if page_title.is_empty() {
+        url.path().to_owned()
+    } else {
+        page_title.to_owned()
+    };
+    let mut entry = Mapping::new();
+    entry.insert("name".into(), name.into());
+    entry.insert(
+        "desc".into(),
+        describe(
+            &Label::Records {
+                what,
+                title: &subject,
+            },
+            lang,
+        )
+        .into(),
+    );
+    entry.insert("method".into(), "GET".into());
+    entry.insert("path".into(), path.into());
+    entry.insert("effect".into(), "read".into());
+    let label = format!("GET {}", url.path());
+    entry.insert(
+        "evidence".into(),
+        format!(
+            "{label} embeds {} {what} in its {} script at {}",
+            listing.count, listing.key, listing.pointer
+        )
+        .into(),
+    );
+    page_inputs(&mut entry, page, url, params);
+    let mut response = Mapping::new();
+    response.insert("format".into(), "html".into());
+    response.insert("ssr_json".into(), listing.key.clone().into());
+    response.insert("extract_pointer".into(), listing.pointer.clone().into());
+    // The fields that make a record one of these must be in the first one,
+    // so a page that puts something else at the pointer fails the check.
+    // One field per role: the title, then the id, then the link, each the
+    // first (shallowest) the model lists.
+    let required: Vec<Yaml> = [Role::Title, Role::Id, Role::Url]
+        .into_iter()
+        .filter_map(|wanted| {
+            listing
+                .fields
+                .iter()
+                .find(|(_, path, _)| role(leaf(path)) == wanted)
+        })
+        .map(|(_, path, _)| format!("/0/{}", path.replace('.', "/")).into())
+        .collect();
+    if !required.is_empty() {
+        response.insert("required_pointers".into(), Yaml::Sequence(required));
+    }
+    entry.insert("response".into(), Yaml::Mapping(response));
+
+    let mut model = Mapping::new();
+    for (field, path, kind) in &listing.fields {
+        let mut spec = Mapping::new();
+        if path != field {
+            spec.insert("path".into(), path.clone().into());
+        }
+        spec.insert("type".into(), (*kind).into());
+        model.insert(field.clone().into(), Yaml::Mapping(spec));
+    }
+    let model_name = model_name(models, &slug(&singular(what)), Yaml::Mapping(model));
+    entry.insert("model".into(), model_name.into());
+    notes.push(format!(
+        "{label}: the {what} come from the {} payload at {}; the `{}` model keeps {} fields of each, add or rename them as agents need.",
+        listing.key,
+        listing.pointer,
+        entry
+            .get("model")
+            .and_then(Yaml::as_str)
+            .unwrap_or_default(),
+        listing.fields.len()
+    ));
     entry
+}
+
+/// The name a model is kept under: the same name when an equal model is
+/// already there, a numbered one when a different model has the name.
+fn model_name(models: &mut Mapping, base: &str, model: Yaml) -> String {
+    let base = if base.is_empty() { "record" } else { base };
+    let mut candidate = base.to_owned();
+    let mut n = 2;
+    while let Some(existing) = models.get(candidate.as_str()) {
+        if *existing == model {
+            return candidate;
+        }
+        candidate = format!("{base}-{n}");
+        n += 1;
+    }
+    models.insert(candidate.clone().into(), model);
+    candidate
+}
+
+/// What a record field is for, in the order a model lists them.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Role {
+    Id,
+    Title,
+    Url,
+    Date,
+    Summary,
+    Other,
+}
+
+fn role(key: &str) -> Role {
+    let lower = key.to_ascii_lowercase();
+    let plain = lower.replace(['-', '_'], "");
+    if plain == "id"
+        || plain == "slug"
+        || plain == "urlslug"
+        || (plain.ends_with("id") && plain.len() > 2)
+    {
+        Role::Id
+    } else if matches!(
+        plain.as_str(),
+        "title" | "headline" | "name" | "subject" | "label" | "caption"
+    ) {
+        Role::Title
+    } else if matches!(plain.as_str(), "url" | "href" | "link" | "permalink")
+        || plain.ends_with("url")
+        || plain.ends_with("link")
+    {
+        Role::Url
+    } else if plain.contains("date")
+        || plain.contains("time")
+        || plain.ends_with("at")
+        || plain.starts_with("published")
+        || plain.starts_with("created")
+        || plain.starts_with("updated")
+        || plain.starts_with("modified")
+    {
+        Role::Date
+    } else if matches!(
+        plain.as_str(),
+        "description"
+            | "summary"
+            | "excerpt"
+            | "shortdescription"
+            | "body"
+            | "content"
+            | "text"
+            | "abstract"
+            | "snippet"
+            | "articlebody"
+    ) {
+        Role::Summary
+    } else {
+        Role::Other
+    }
+}
+
+/// Words in a pointer that mark a list of links around the page, not the
+/// page's records.
+const NAVIGATION: &[&str] = &[
+    "navigation",
+    "nav",
+    "menu",
+    "footer",
+    "header",
+    "sidebar",
+    "breadcrumb",
+    "legal",
+];
+
+/// The last name in a model path: `issue.title` is `title`.
+fn leaf(path: &str) -> &str {
+    path.rsplit('.').next().unwrap_or(path)
+}
+
+/// Payload keys whose arrays say nothing about what the page lists.
+const GENERIC: &[&str] = &[
+    "data",
+    "items",
+    "list",
+    "results",
+    "result",
+    "edges",
+    "nodes",
+    "entries",
+    "props",
+    "pageprops",
+    "page",
+    "state",
+    "initialdata",
+    "hydrated",
+    "payload",
+    "records",
+    "rows",
+    "elements",
+    "itemlistelement",
+    "blocks",
+];
+
+/// Lists of records in the page's embedded payloads, each with the fields
+/// a model should keep: in ld+json an `ItemList` or an array of one typed
+/// thing (`NewsArticle`, `Product`...); in the other payloads the array of
+/// objects with the most to read (a title, a link, a date...) and, among
+/// those, the longest.
+fn embedded_lists(html: &str) -> Vec<Listing> {
+    const MAX_LISTS: usize = 4;
+    let map = itda_html::extract_ssr_map(html);
+    let mut out = Vec::new();
+    if let Some(root) = map.get("ld+json") {
+        out.extend(ld_json_lists(root));
+    }
+    let keys = SSR_KEYS
+        .iter()
+        .map(|k| (*k).to_owned())
+        .chain(map.keys().cloned())
+        .filter(|key| key != "ld+json");
+    let mut done = BTreeSet::new();
+    for key in keys {
+        if out.len() >= MAX_LISTS || !done.insert(key.clone()) {
+            continue;
+        }
+        let Some(root) = map.get(&key) else {
+            continue;
+        };
+        let mut lists = Vec::new();
+        lists_in(root, "", 0, &mut lists);
+        // Menus, footers and the like are not what the page lists.
+        lists.retain(|(pointer, _)| {
+            !pointer.split('/').any(|segment| {
+                let lower = segment.to_ascii_lowercase();
+                NAVIGATION.iter().any(|word| lower.contains(word))
+            })
+        });
+        let scored: Vec<_> = lists
+            .iter()
+            .map(|(pointer, records)| {
+                let fields = fields_of(records, "");
+                let roles: BTreeSet<Role> = fields
+                    .iter()
+                    .map(|(_, path, _)| role(leaf(path)))
+                    .filter(|r| *r != Role::Other)
+                    .collect();
+                let titled = roles.contains(&Role::Title) && roles.len() >= 2;
+                // A list under a name (`/Question`) over the same records
+                // under a generic one (`/items`).
+                let named = pointer
+                    .rsplit('/')
+                    .next()
+                    .is_some_and(|last| !GENERIC.contains(&last.to_ascii_lowercase().as_str()));
+                (
+                    titled,
+                    roles.len(),
+                    records.len(),
+                    named,
+                    fields,
+                    pointer,
+                    records,
+                )
+            })
+            .collect();
+        // A list with a title and something else to read wins; without one,
+        // the longest list, as drafts did before.
+        let best = scored
+            .iter()
+            .filter(|(titled, ..)| *titled)
+            .max_by_key(|(_, roles, len, named, ..)| (*roles, *len, *named))
+            .or_else(|| scored.iter().max_by_key(|(_, _, len, ..)| *len));
+        if let Some((_, _, _, _, fields, pointer, records)) = best
+            && !fields.is_empty()
+        {
+            let (fields, pointer, records) = (fields.clone(), *pointer, *records);
+            let what = what_of(pointer, records);
+            out.push(Listing {
+                key: key.clone(),
+                pointer: pointer.clone(),
+                what,
+                fields,
+                count: records.len(),
+            });
+        }
+    }
+    out.truncate(MAX_LISTS);
+    out
+}
+
+/// ld+json types that describe the site or the page, never a list of things.
+const BOILERPLATE: &[&str] = &[
+    "Organization",
+    "WebSite",
+    "WebPage",
+    "BreadcrumbList",
+    "ListItem",
+    "SearchAction",
+    "ImageObject",
+    "Brand",
+    "SiteNavigationElement",
+];
+
+fn ld_json_lists(root: &Value) -> Vec<Listing> {
+    let mut out = Vec::new();
+    ld_json_walk(root, "", 0, &mut out);
+    out
+}
+
+fn ld_json_walk(value: &Value, pointer: &str, depth: usize, out: &mut Vec<Listing>) {
+    if depth > 8 || out.len() >= 3 {
+        return;
+    }
+    match value {
+        Value::Object(object) => {
+            let kind = object
+                .get("@type")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if kind == "ItemList"
+                && let Some(elements) = object.get("itemListElement").and_then(Value::as_array)
+                && elements.len() >= 3
+                && elements.iter().all(Value::is_object)
+            {
+                let pointer = format!("{pointer}/itemListElement");
+                let nested = elements
+                    .iter()
+                    .all(|e| e.get("item").is_some_and(Value::is_object));
+                let (fields, item_type) = if nested {
+                    let items: Vec<Value> = elements
+                        .iter()
+                        .filter_map(|e| e.get("item").cloned())
+                        .collect();
+                    (fields_of(&items, "item."), ld_type(&items))
+                } else {
+                    (fields_of(elements, ""), String::new())
+                };
+                let what = if !item_type.is_empty() {
+                    plural(&words(&item_type))
+                } else {
+                    object
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(|name| words(&slug(name)))
+                        .filter(|name| !name.is_empty())
+                        .unwrap_or_else(|| "items".into())
+                };
+                if !fields.is_empty() {
+                    out.push(Listing {
+                        key: "ld+json".into(),
+                        pointer,
+                        what,
+                        fields,
+                        count: elements.len(),
+                    });
+                }
+                return;
+            }
+            for (name, child) in object.iter().take(100) {
+                ld_json_walk(
+                    child,
+                    &format!("{pointer}/{}", escape(name)),
+                    depth + 1,
+                    out,
+                );
+            }
+        }
+        Value::Array(items) => {
+            let kind = ld_type(items);
+            if items.len() >= 3 && !kind.is_empty() && !BOILERPLATE.contains(&kind.as_str()) {
+                let fields = fields_of(items, "");
+                if !fields.is_empty() {
+                    out.push(Listing {
+                        key: "ld+json".into(),
+                        pointer: pointer.to_owned(),
+                        what: plural(&words(&kind)),
+                        fields,
+                        count: items.len(),
+                    });
+                    return;
+                }
+            }
+            for (index, item) in items.iter().enumerate().take(50) {
+                ld_json_walk(item, &format!("{pointer}/{index}"), depth + 1, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The one `@type` every object in the list has, or nothing.
+fn ld_type(items: &[Value]) -> String {
+    let mut kinds = items.iter().map(|item| {
+        item.get("@type")
+            .and_then(|t| t.as_str().or_else(|| t.as_array()?.first()?.as_str()))
+            .unwrap_or_default()
+    });
+    let first = kinds.next().unwrap_or_default();
+    if first.is_empty() || kinds.any(|k| k != first) {
+        String::new()
+    } else {
+        first.to_owned()
+    }
+}
+
+fn escape(key: &str) -> String {
+    key.replace('~', "~0").replace('/', "~1")
+}
+
+/// Every list of at least three records (objects) in the payload, with its
+/// JSON pointer.
+fn lists_in<'a>(
+    value: &'a Value,
+    pointer: &str,
+    depth: usize,
+    out: &mut Vec<(String, &'a Vec<Value>)>,
+) {
+    if depth > 12 || out.len() >= 400 {
+        return;
+    }
+    match value {
+        Value::Array(items) => {
+            if items.len() >= 3 && items.iter().all(Value::is_object) {
+                out.push((pointer.to_owned(), items));
+            }
+            for (index, item) in items.iter().enumerate().take(50) {
+                lists_in(item, &format!("{pointer}/{index}"), depth + 1, out);
+            }
+        }
+        Value::Object(object) => {
+            for (name, child) in object.iter().take(200) {
+                lists_in(
+                    child,
+                    &format!("{pointer}/{}", escape(name)),
+                    depth + 1,
+                    out,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The fields a model keeps from these records: the plain values every
+/// record has, at the top or one object down (`issue.title`), ids and
+/// titles first, links and dates next, at most eight, never one that looks
+/// like a credential. `prefix` puts them all under a nested object
+/// (`item.`).
+fn fields_of(records: &[Value], prefix: &str) -> Vec<(String, String, &'static str)> {
+    const MAX_FIELDS: usize = 8;
+    let mut fields: Vec<(Role, String, String, &'static str)> = Vec::new();
+    for (key, kind) in plain_fields(records) {
+        fields.push((role(&key), key.clone(), format!("{prefix}{key}"), kind));
+    }
+    for key in shared_keys(records) {
+        let nested: Vec<Value> = records
+            .iter()
+            .filter_map(|record| record.get(&key))
+            .filter(|value| value.is_object())
+            .cloned()
+            .collect();
+        if nested.len() != records.len() {
+            continue;
+        }
+        for (name, kind) in plain_fields(&nested) {
+            fields.push((
+                role(&name),
+                name.clone(),
+                format!("{prefix}{key}.{name}"),
+                kind,
+            ));
+        }
+    }
+    // `id` before `post_id`, `title` before `name`; two ids are enough.
+    let rank = |key: &str| match key.to_ascii_lowercase().replace(['-', '_'], "").as_str() {
+        "id" | "title" | "url" => 0,
+        "slug" | "urlslug" | "headline" | "href" | "link" => 1,
+        _ => 2,
+    };
+    // The record's own fields first, then what sits one object down.
+    let depth = |path: &str| path.trim_start_matches(prefix).matches('.').count();
+    fields.sort_by(|a, b| {
+        depth(&a.2)
+            .cmp(&depth(&b.2))
+            .then_with(|| a.0.cmp(&b.0))
+            .then_with(|| rank(&a.1).cmp(&rank(&b.1)))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+    let mut ids = 0;
+    fields.retain(|(role, _, _, _)| {
+        if *role != Role::Id {
+            return true;
+        }
+        ids += 1;
+        ids <= 2
+    });
+    // A nested field keeps its own name (`issue.title` is `title`) unless
+    // the record already has a field in that role or of that name: then
+    // `author.name` is `author_name` and `issue.id` next to `id` is `issue_id`.
+    let top_roles: BTreeSet<Role> = fields
+        .iter()
+        .filter(|(_, _, path, _)| !path.trim_start_matches(prefix).contains('.'))
+        .map(|(role, ..)| *role)
+        .collect();
+    let mut taken = BTreeSet::new();
+    fields
+        .into_iter()
+        .take(MAX_FIELDS)
+        .map(|(role, name, path, kind)| {
+            let inner = path.trim_start_matches(prefix);
+            let nested = inner.contains('.');
+            let shadowed = nested && role < Role::Date && top_roles.contains(&role);
+            let field = if !shadowed && taken.insert(name.clone()) {
+                name
+            } else {
+                let long = inner.replace('.', "_");
+                taken.insert(long.clone());
+                long
+            };
+            (field, path, kind)
+        })
+        .collect()
+}
+
+/// Keys every record has.
+fn shared_keys(records: &[Value]) -> BTreeSet<String> {
+    records
+        .iter()
+        .filter_map(Value::as_object)
+        .map(|object| object.keys().cloned().collect::<BTreeSet<_>>())
+        .reduce(|a, b| a.intersection(&b).cloned().collect())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|key| {
+            !key.is_empty()
+                && !key.starts_with('@')
+                && !key.starts_with("__")
+                && key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                && !secret_field(key)
+        })
+        .collect()
+}
+
+/// The shared keys whose values are strings, numbers or booleans, with the
+/// type of the first value that is not null.
+fn plain_fields(records: &[Value]) -> Vec<(String, &'static str)> {
+    shared_keys(records)
+        .into_iter()
+        .filter_map(|key| {
+            let value = records
+                .iter()
+                .filter_map(|record| record.get(&key))
+                .find(|value| !value.is_null())?;
+            value_is_plain(value).then(|| (key, Kind::of_json(value).name()))
+        })
+        .collect()
+}
+
+fn value_is_plain(value: &Value) -> bool {
+    matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
+}
+
+/// What the records at `pointer` are, from the key that holds them or,
+/// when that says nothing (`data`, `items`), from their own type.
+fn what_of(pointer: &str, records: &[Value]) -> String {
+    // A type every record names the same way: `__typename`, `@type`,
+    // `itemType: "issue"`.
+    let typename = [
+        "__typename",
+        "@type",
+        "itemType",
+        "item_type",
+        "type",
+        "kind",
+    ]
+    .into_iter()
+    .find_map(|key| {
+        let mut values = records.iter().map(|r| r.get(key).and_then(Value::as_str));
+        let first = values.next().flatten()?;
+        (!first.is_empty() && values.all(|v| v == Some(first))).then(|| first.to_owned())
+    })
+    .map(|t| {
+        // A constant such as `REPO_ITEM_TYPE_ISSUES` says it last.
+        let constant = t
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b == b'_' || b.is_ascii_digit());
+        let t = if constant {
+            t.rsplit('_').next().unwrap_or(&t).to_owned()
+        } else {
+            t
+        };
+        plural(&words(&slug(&t)))
+    })
+    .filter(|t| !t.is_empty());
+    let from_key = pointer
+        .split('/')
+        .rev()
+        .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
+        .filter(|segment| !segment.is_empty() && segment.parse::<u64>().is_err())
+        .map(|segment| words(&slug(&segment)))
+        .find(|segment| {
+            !segment.is_empty() && !GENERIC.contains(&segment.replace(' ', "").as_str())
+        })
+        .map(|segment| plural(&segment));
+    let what = typename.or(from_key).unwrap_or_else(|| "items".into());
+    if slug(&what).is_empty() {
+        "items".into()
+    } else {
+        what
+    }
 }
 
 /// A form as an action: a search as a read, a post as a change whose tokens

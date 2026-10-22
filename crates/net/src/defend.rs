@@ -71,7 +71,7 @@ impl Observation {
 }
 
 pub fn classify(o: &Observation) -> (Class, &'static str) {
-    if o.status_code == 429 || !o.header("retry-after").is_empty() {
+    if o.status_code == 429 || crate::retry_after(&o.headers).is_some() {
         return (Class::RateLimit, "status-429/retry-after");
     }
     if o.status_code < 400 {
@@ -206,6 +206,16 @@ mod tests {
             body_snippet: "{\"captcha_key\":[\"You need to update your app\"],\"captcha_sitekey\":\"a9b5fb07\"}".into(),
         });
         assert_eq!(cls, Class::Captcha);
+    }
+
+    #[test]
+    fn a_retry_after_of_zero_is_not_a_rate_limit() {
+        let (cls, _) = classify(&Observation {
+            status_code: 200,
+            headers: vec![("retry-after".into(), "0".into())],
+            body_snippet: "<html>a page</html>".into(),
+        });
+        assert_eq!(cls, Class::None);
     }
 
     #[test]
