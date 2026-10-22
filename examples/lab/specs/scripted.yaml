@@ -1,0 +1,54 @@
+# The scripted board in the lab (http://127.0.0.1:8087, intranet/scripted.py):
+# /board is an empty shell a script fills from GET /api/notices, so
+# `itda setup http://127.0.0.1:8087/board --watch-only` opens a browser, watches
+# the XHR and drafts the list read by itself. Reading the list needs no account;
+# posting does. This is the watched draft, reviewed: the list read got a default
+# page and a response check, and the write was added by hand, since no post
+# happens while itda only watches. The write posts JSON to /api/notices with the
+# session cookie and the X-CSRF-Token the shell carries in <meta name="csrf-token">.
+spec_version: 1
+site:
+  name: scripted
+  title: Scripted portal (lab)
+  base_url: http://127.0.0.1:8087
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:SCRIPTED_SESSION
+    login:
+      path: /login
+      user: username
+      password: password
+operations:
+  - name: list-notices
+    desc: List the notices, newest first, ten per page
+    method: GET
+    path: /api/notices
+    effect: read
+    evidence: the script on /board calls GET /api/notices?page=N, which answers with {items, page, pages, total}
+    query:
+      page: {type: int, default: 1}
+    pagination:
+      style: page
+      send: {query: page}
+    response:
+      format: json
+      required_pointers: [/items, /page, /pages, /total]
+  - name: post-notice
+    desc: Post a notice
+    method: POST
+    path: /api/notices
+    auth: session
+    effect: write
+    evidence: the shell posts JSON to /api/notices with the session cookie and the X-CSRF-Token from <meta name="csrf-token">, and answers with the created notice
+    preflight:
+      - name: shell
+        path: /board
+        extract:
+          csrf: css:meta[name="csrf-token"]@content
+    headers:
+      X-CSRF-Token: "{{step.shell.csrf}}"
+    body:
+      json:
+        title: {type: string, required: true}
+        body: {type: string}

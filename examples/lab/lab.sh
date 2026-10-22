@@ -19,6 +19,9 @@ REDMINE=http://127.0.0.1:8082
 WORDPRESS=http://127.0.0.1:8083
 MEDIAWIKI=http://127.0.0.1:8084
 INTRANET=http://127.0.0.1:8085
+FRAMED=http://127.0.0.1:8086
+SCRIPTED=http://127.0.0.1:8087
+URLTOKEN=http://127.0.0.1:8088
 
 compose() {
   docker compose "$@"
@@ -131,12 +134,15 @@ EOF
 up() {
   local started
   started=$(date +%s)
-  compose up -d gitea redmine db wordpress mediawiki intranet
+  compose up -d gitea redmine db wordpress mediawiki intranet framed scripted urltoken
   wait_healthy gitea
   wait_healthy redmine
   wait_healthy wordpress
   wait_healthy mediawiki
   wait_healthy intranet
+  wait_healthy framed
+  wait_healthy scripted
+  wait_healthy urltoken
   say "seeding gitea"
   seed_gitea
   say "seeding redmine"
@@ -151,13 +157,16 @@ up() {
 
 status() {
   local service url
-  for service in gitea redmine wordpress mediawiki intranet; do
+  for service in gitea redmine wordpress mediawiki intranet framed scripted urltoken; do
     case $service in
       gitea) url=$GITEA ;;
       redmine) url=$REDMINE ;;
       wordpress) url=$WORDPRESS ;;
       mediawiki) url=$MEDIAWIKI ;;
       intranet) url=$INTRANET ;;
+      framed) url=$FRAMED ;;
+      scripted) url=$SCRIPTED ;;
+      urltoken) url=$URLTOKEN ;;
     esac
     local id state
     id=$(compose ps -q "$service" 2>/dev/null || true)

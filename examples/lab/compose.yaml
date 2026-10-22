@@ -6,6 +6,9 @@
 #   127.0.0.1:8083  WordPress 6.8.3 (MariaDB 11.4.13 behind it)
 #   127.0.0.1:8084  MediaWiki 1.43.11
 #   127.0.0.1:8085  the legacy intranet in intranet/server.py (Python 3.12)
+#   127.0.0.1:8086  framed: the board inside an iframe (intranet/framed.py)
+#   127.0.0.1:8087  scripted: a table a script draws from an XHR (intranet/scripted.py)
+#   127.0.0.1:8088  urltoken: the session carried in the URL (intranet/urltoken.py)
 #
 # One account everywhere: lab / labpassword. `lab.sh up` seeds it.
 name: itda-lab
@@ -121,6 +124,45 @@ services:
       - ./intranet:/app:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  framed:
+    image: python:3.12-alpine@sha256:92abd2ba1bdfb48b1e2ac224b582dd1558d0d4bb11c903b126b5bf9c448fd656
+    command: ["python", "/app/framed.py", "8086"]
+    ports:
+      - "127.0.0.1:8086:8086"
+    volumes:
+      - ./intranet:/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8086/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  scripted:
+    image: python:3.12-alpine@sha256:92abd2ba1bdfb48b1e2ac224b582dd1558d0d4bb11c903b126b5bf9c448fd656
+    command: ["python", "/app/scripted.py", "8087"]
+    ports:
+      - "127.0.0.1:8087:8087"
+    volumes:
+      - ./intranet:/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8087/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  urltoken:
+    image: python:3.12-alpine@sha256:92abd2ba1bdfb48b1e2ac224b582dd1558d0d4bb11c903b126b5bf9c448fd656
+    command: ["python", "/app/urltoken.py", "8088"]
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - ./intranet:/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/health')"]
       interval: 5s
       timeout: 5s
       retries: 12
