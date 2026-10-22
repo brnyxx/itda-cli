@@ -59,7 +59,7 @@ with a response check, so `itda check` notices when the page changes:
 | A list in data embedded for scripts: an `ItemList` or a list of one type (`NewsArticle`, `Product`...) in `ld+json`. In `__NEXT_DATA__`, `__NEXT_F__`, `__APOLLO_STATE__` (grouped by typename), `__PRELOADED_STATE__` and similar data, choose the object list with the most to read (a title, a link, a date), then the longest among ties. | One read per list, named for its contents (`list-news-articles`), with `ssr_json`, `extract_pointer` to the list and `required_pointers` on its first record. Its `model` keeps up to eight plain fields per record, ids and titles first, excluding credentials. |
 | Data embedded for its scripts with no list in it | `ssr_json` with `required_pointers` on the whole payload, and a note saying what to add |
 | Only a title | `required_html_fields` on its `h1` or `title`, and a note saying what to add |
-| Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | An optional query input named after that key (`int`, no default, so the read asks for the address it was drafted from until an agent or a page handle asks for another; counting starts at 1 for `page` and the like, at 0 for `offset` and `start`), and a key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
+| Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | An optional query input named after that key (`int`, no default, so the read asks for the address it was drafted from until an agent or a page handle asks for another; counting starts at 1 for `page` and the like, at 0 for `offset` and `start`). A key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
 | A `GET` form | A read with the form's fields as `query` inputs |
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
 | A sign-in form | Left out; `itda setup --user` and `itda login <site>` sign in through it, see `auth` below |
@@ -148,29 +148,27 @@ the templates: setup fills their placeholder `base_url`.
 ## Sites with a ready-made definition
 
 A page on `pypi.org`, `github.com`, `www.npmjs.com` (or `npmjs.com`) or
-`crates.io` gets the definition `itda add` installs for that site
-(`pypi`, `github`, `npm`, `crates-io`), which reads the site's own API
-instead of its pages. `itda setup` says so in one line, "This is PyPI. Using
-its JSON API.", does not fetch the page, saves the definition under its own
-name and tries its reads once as on any site. `--no-template` reads the page
-like any other and `--as <software>` uses that template instead; over MCP,
-`itda_setup` takes the same path, with `template: none` to skip it, and puts
-the line in its notes. A site set up this way has no sources to draft again
-from, so `itda refresh` does not apply; `itda add <site> --force` installs
-the current definition.
+`crates.io` gets the site's `itda add` definition (`pypi`, `github`, `npm`,
+`crates-io`). It reads the site's own API instead of its pages. `itda setup`
+says so in one line, "This is PyPI. Using its JSON API.", and does not fetch the
+page. It saves the definition under its own name and tries its reads once as on
+any site. `--no-template` reads the page like any other; `--as <software>` uses
+that template instead. Over MCP, `itda_setup` takes the same path, with
+`template: none` to skip it, and puts the line in its notes. A site set up this
+way has no sources to redraft from, so `itda refresh` does not apply.
+`itda add <site> --force` installs the current definition.
 
 ## When setup tries the reads
 
-`itda setup` tries every read once while you watch, and a read the site
-blocks or challenges (a 403 from a bot manager, a captcha, a 200 page titled
-as a challenge) is handled as a finding of the setup rather than a refusal
-to remember: that read is left out with one line, "<path>: the site does not
-give itda this page", nothing more is sent to the site in that run (the
-reads after it are kept and shown as not tried, so the next `itda check`
-tries them), and the site is not paused, since nothing was retried. The
-reads that already answered are installed. `itda check`, `itda call` and the
-MCP tools on an installed site keep the rule that a block or challenge
-pauses the site until you resume it.
+`itda setup` tries every read once while you watch. A read the site blocks or
+challenges (a 403 from a bot manager, a captcha, a 200 page titled as a
+challenge) is a finding of the setup, not a refusal to remember: that read is
+left out with one line, "<path>: the site does not give itda this page", and
+nothing more is sent to the site in that run. The reads after it are kept and
+shown as not tried, so the next `itda check` tries them. The site is not paused,
+since nothing was retried. itda installs reads that already answered.
+`itda check`, `itda call` and the MCP tools on an installed site keep the rule
+that a block or challenge pauses the site until you resume it.
 
 ## Start from a browser recording
 

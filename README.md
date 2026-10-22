@@ -79,19 +79,19 @@ install step:
 
 ## What it can and cannot do
 
-Every line here is true of the code today; `itda setup` says which case it
-met, and `itda draft page` or `itda record` say what they left out.
+Every line here is true of the code today. `itda setup` says which case it met;
+`itda draft page` or `itda record` say what they left out.
 
 **Works today**
 
-- Pages drawn on the server: tables, lists and repeated cards become
-  records, a page that is one thing becomes a read of its fields, search
-  forms become reads, post forms become changes, and feeds come along.
+- Pages drawn on the server: tables, lists and repeated cards become records,
+  and a page that is one thing becomes a read of its fields. Search forms become
+  reads, post forms become changes, and feeds come along.
 - Pages that embed their data for their scripts (`__NEXT_DATA__`,
   `ld+json`, an Apollo or preloaded state): one read per list in it.
-- Pages drawn by scripts that call an API answering JSON, a React or Vue
-  portal say: `itda setup` opens your browser on the page, watches what it
-  loads by itself and drafts from those calls. Nothing is clicked or typed.
+- Pages drawn by scripts that call an API answering JSON, a React or Vue portal
+  say: `itda setup` opens your browser on the page and watches what it loads by
+  itself. It drafts from those calls. It does not click or type.
 - Forms that want a CSRF token: a preflight step reads a fresh one from the
   form page right before each approved post.
 - Cookie sessions: a sign-in through the site's own form with your user name
@@ -104,59 +104,57 @@ met, and `itda draft page` or `itda record` say what they left out.
 
 **Works after you record it**
 
-- A page that shows a plain fetch nothing and loads nothing by itself: what
-  it only fetches after you click, search or sign in. `itda record` watches
-  you use it and drafts from the calls it saw.
+- A page that shows a plain fetch nothing and loads nothing by itself. It
+  fetches only after you click, search or sign in. `itda record` watches you use
+  it and drafts from the calls it saw.
 
 **Does not work**
 
 - WebSocket. itda speaks plain HTTP, and a recording keeps no socket traffic.
-- APIs that sign every request (a signature or nonce computed per call). A
-  fixed token or API key is kept in the keyring; a value that changes with
-  every call is not reproduced, so the site refuses the request.
-- Pages assembled from HTML fragments (htmx and the like). Not by design: a
-  fragment that is a whole table on its own may still be read, but what the
-  script does with it is not.
+- APIs that sign every request (a signature or nonce computed per call). itda
+  keeps a fixed token or API key in the keyring. It does not reproduce a value
+  that changes with every call, so the site refuses the request.
+- Pages assembled from HTML fragments (htmx and the like). Not by design: itda
+  may still read a fragment containing a whole table, but not what the script
+  does with it.
 - Content drawn on a canvas or into an image. itda reads text in HTML, JSON
   and XML; it does not look at pixels.
 - Sites behind a challenge or a bot manager (Cloudflare, Akamai, a captcha).
-  itda identifies itself, never imitates a browser, and pauses the site until
+  itda identifies itself and never imitates a browser. It pauses the site until
   you resume it. See [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - Anything your account cannot see. itda has no account of its own; it uses
   yours.
 
 ## When the site changes
 
-`itda check <site>` runs every read that needs no input, never sends a
-change, and ends with one verdict: `ok`, `signed_out`, `site_changed`,
-`blocked` or `unreachable`. The exit code follows it (11 for `site_changed`),
-so a scheduled job can warn you before an agent runs into it. Over MCP,
-`itda_check` returns the same.
+`itda check <site>` runs every read needing no input and never sends a change.
+It ends with one verdict: `ok`, `signed_out`, `site_changed`, `blocked` or
+`unreachable`. The exit code follows it (11 for `site_changed`), so a scheduled
+job can warn you before an agent runs into it. Over MCP, `itda_check` returns
+the same.
 
-When the verdict is `site_changed`, `itda refresh <site>` drafts the site
-again from what it was set up from (its pages, the API description, the
-GraphQL endpoint, or the kept shape of the recording, every value blanked),
-shows what would change per action, and writes nothing until you say yes.
-An action you edited by hand is kept as it is; one the new draft changed
-takes the new version; one the sources no longer draft is dropped only when
-its read also failed; a new one is tried once and added when it answers.
-Approvals waiting for the site are withdrawn, and the site is checked again
-right after. A definition installed with `itda add` has no sources and cannot
-be refreshed; edit it by hand.
+When the verdict is `site_changed`, `itda refresh <site>` drafts the site again
+from what it was set up from: its pages, the API description, the GraphQL
+endpoint, or the kept shape of the recording, every value blanked. It shows what
+would change per action and writes nothing until you say yes. itda keeps actions
+you edited by hand and updates actions the new draft changed. It drops an action
+the sources no longer draft only if its read also failed, and tries each new
+action once, adding it if it answers. itda withdraws approvals waiting for the
+site and checks the site again right after. A definition installed with
+`itda add` has no sources and cannot be refreshed; edit it by hand.
 
 That is the trade-off. A browser agent adapts on every run, and is slow and
-nondeterministic for it. itda is one request and the same answer every time,
-and breaks loudly when the site moves.
+nondeterministic for it. itda is one request and the same answer every time. It
+breaks loudly when the site moves.
 
 ## Next to browser agents
 
-Playwright MCP, browser-use and computer use drive a browser on every task,
-and itda does not replace them: a page you will use once, or a site from the
-list above that itda does not cover, is theirs. itda is for the site an
-agent will call again and again: record it once in a browser, review the
-actions, then run them over HTTP with a typed answer, a single-use approval
-for every change and a log. Use both: a browser agent to explore, itda for
-the calls that run every day.
+Playwright MCP, browser-use and computer use drive a browser on every task. itda
+does not replace them: a page you will use once, or a site from the list above
+that itda does not cover, is theirs. itda is for the site an agent will call
+again and again. Record it once in a browser, review the actions, then run them
+over HTTP with a typed answer, a single-use approval for every change and a log.
+Use both: a browser agent to explore, itda for the calls that run every day.
 
 ## Quick start
 

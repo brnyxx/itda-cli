@@ -214,7 +214,7 @@
         <div class="win scope-col rec">
           <div class="bar"><span></span><em data-i18n="scope.rec">works after you record it</em></div>
           <ul>
-            <li data-i18n="scope.r1">A page that shows a plain fetch nothing and loads nothing by itself: what it only fetches after you click, search or sign in</li>
+            <li data-i18n="scope.r1">A page that shows a plain fetch nothing and loads nothing by itself. It fetches only after you click, search or sign in</li>
           </ul>
           <p class="scope-note" data-i18n="scope.rec.note"><code>itda record</code> watches you use it and drafts from the calls it saw.</p>
         </div>
@@ -236,13 +236,13 @@
     <section class="section wrap" id="changes">
       <p class="eyebrow"><b>[ 04 ]</b> <span data-i18n="eyebrow.changes">When the site changes</span></p>
       <h2 data-i18n="changes.h2">Noticed by a check, drafted again, reviewed by you.</h2>
-      <p class="section-lede" data-i18n="changes.lede">A browser agent adapts on every run, and is slow and nondeterministic for it. itda is one request and the same answer every time, and breaks loudly when the site moves.</p>
+      <p class="section-lede" data-i18n="changes.lede">A browser agent adapts on every run, and is slow and nondeterministic for it. itda is one request and the same answer every time. It breaks loudly when the site moves.</p>
       <ol class="steps">
         <li class="win">
           <div class="bar"><span></span><em>step 01</em></div>
           <span class="step-n">1</span>
           <h3 data-i18n="changes.1">Notice</h3>
-          <p data-i18n="changes.1p">itda check runs every read that needs no input, never sends a change, and ends with one verdict: ok, signed_out, site_changed, blocked or unreachable. Exit code 11 means the site changed. Run it on a schedule.</p>
+          <p data-i18n="changes.1p">itda check runs every read needing no input and never sends a change. It ends with one verdict: ok, signed_out, site_changed, blocked or unreachable. Exit code 11 means the site changed. Run it on a schedule.</p>
           <code>itda check board</code>
         </li>
         <li class="win">
@@ -256,7 +256,7 @@
           <div class="bar"><span></span><em>step 03</em></div>
           <span class="step-n">3</span>
           <h3 data-i18n="changes.3">Review</h3>
-          <p data-i18n="changes.3p">It shows what would change per action and writes nothing until you say yes. What you edited by hand is kept, a new action is tried once before it is added, and the site is checked again right after.</p>
+          <p data-i18n="changes.3p">It shows what would change per action and writes nothing until you say yes. itda keeps what you edited by hand. It tries a new action once before adding it and checks the site again right after.</p>
           <code>Write these changes to 'board'? [y/N]</code>
         </li>
       </ol>
@@ -291,7 +291,7 @@
           <p class="lane-note" data-i18n="cmp.ours.note">One answer per action. Every change waits for you; stops when refused.</p>
         </div>
       </div>
-      <p class="cmp-next" data-i18n="cmp.next">Playwright MCP, browser-use and computer use drive a browser on every task, and itda does not replace them: a page you will use once, or a site itda does not cover, is theirs. itda is for the site an agent will call again and again: record it once in a browser, review the actions, then run them over HTTP. Use both: a browser agent to explore, itda for the calls that run every day.</p>
+      <p class="cmp-next" data-i18n="cmp.next">Playwright MCP, browser-use and computer use drive a browser on every task. itda does not replace them: a page you will use once, or a site itda does not cover, is theirs. itda is for the site an agent will call again and again. Record it once in a browser, review the actions, then run them over HTTP. Use both: a browser agent to explore, itda for the calls that run every day.</p>
     </section>
 
     <section class="section wrap">

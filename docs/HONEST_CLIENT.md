@@ -21,12 +21,12 @@ rules are fixed. The maintainer declines pull requests that weaken them.
 | The window itda opens for sign-in, recording or watching a page load is the person's own. itda opens the named page and watches, scrolling to the bottom once when watching a load by itself, but never clicking, typing or navigating. | `itda-browser` `SignIn`, `Recorder` |
 | Sign-in through a site's own form belongs to the person: they type the user name and password. itda sends the form once as `itda/<version>` to its own action on the same site, with the page's fields. itda reports a refused sign-in without retrying or pausing anything. itda never keeps the password; an agent cannot start this path. | `itda-setup` `login::form` |
 
-One step is treated differently: while `itda setup` tries each read of a new
+One step is treated differently. While `itda setup` tries each read of a new
 site once, with the person watching, a read the site blocks or challenges is
-dropped from the draft with a line saying the site does not give itda that
-page, and nothing more is sent to the site in that run. The site is not left
-paused, because nothing was retried: the remaining reads wait for the next
-`itda check`, and from then on a block or challenge pauses the site as above.
+dropped from the draft with a line saying the site does not give itda that page.
+Nothing more is sent to the site in that run. The site is not left paused,
+because nothing was retried. The remaining reads wait for the next `itda check`,
+and from then on a block or challenge pauses the site as above.
 
 ## What itda will not do
 

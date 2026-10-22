@@ -123,16 +123,15 @@ itda is before 1.0, so the version says this:
 
 Each change that users will notice gets a line in `CHANGELOG.md` under
 `Unreleased`, in one of `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
-`Security`, each heading at most once. `cargo xtask check-changelog` (run by
-CI) checks that, that the newest release heading matches the workspace
-version, and that `site/index.html` and `docs/quickstart.md` print the same
-version.
+`Security`. Each heading appears at most once. `cargo xtask check-changelog`
+(run by CI) checks that. It also checks that the newest release heading,
+`site/index.html` and `docs/quickstart.md` carry the workspace version.
 
 ## Releasing
 
 1. Move the `Unreleased` notes in CHANGELOG.md under the new version with the
-   date, bump `version` in the root Cargo.toml, and update the version shown
-   in `site/index.html` and `docs/quickstart.md`. `cargo xtask check-changelog`
+   date. Bump `version` in the root Cargo.toml and update the version shown in
+   `site/index.html` and `docs/quickstart.md`. `cargo xtask check-changelog`
    passes when the four agree.
 2. On GitHub, open Actions → Release → Run workflow, and enter the tag, such as
    `v0.2.0`. The workflow builds every platform. It creates the tag and
