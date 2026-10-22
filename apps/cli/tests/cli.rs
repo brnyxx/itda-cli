@@ -555,6 +555,20 @@ async fn a_recorded_session_becomes_actions() {
     let spec = std::fs::read_to_string(home.join("specs/fixture/spec.yaml")).unwrap();
     assert!(!spec.contains("recorded-token"));
     assert!(spec.contains("name: list-items"));
+    // The copy kept for a refresh holds the shape of the recording, not its
+    // values, and the refresh drafts the same actions from it.
+    let kept = std::fs::read_to_string(home.join("specs/fixture/recording.har")).unwrap();
+    assert!(!kept.contains("recorded-token"), "{kept}");
+    assert!(kept.contains("Bearer <redacted>"), "{kept}");
+    let sources: Value =
+        serde_json::from_slice(&std::fs::read(home.join("specs/fixture/sources.json")).unwrap())
+            .unwrap();
+    assert_eq!(sources["recording"], "recording.har");
+    let refreshed = itda(&home, &["refresh", "fixture", "-y"], &[("ITDA_LANG", "en")]).await;
+    assert!(refreshed.status.success(), "{refreshed:?}");
+    let said = String::from_utf8_lossy(&refreshed.stderr);
+    assert!(said.contains("from its recording"), "{said}");
+    assert!(said.contains("draft the same actions"), "{said}");
 
     let called = itda(&home, &["call", "fixture.list-items"], &[]).await;
     assert_eq!(called.status.code(), Some(10), "{called:?}");
@@ -1351,5 +1365,186 @@ async fn check_counts_the_records_of_a_typed_embedded_read() {
     assert_eq!(data[0]["name"], "Lamp");
     assert_eq!(data[0]["id"], 1);
     assert!(data[0].get("token").is_none(), "{data}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+const BOARD_V1: &str = "<html><head><title>Notices</title><link rel='alternate' type='application/rss+xml' href='/feed.xml'><script type='application/ld+json'>[{\"@type\":\"NewsArticle\",\"headline\":\"Third\",\"url\":\"/n/3\"},{\"@type\":\"NewsArticle\",\"headline\":\"Second\",\"url\":\"/n/2\"},{\"@type\":\"NewsArticle\",\"headline\":\"First\",\"url\":\"/n/1\"}]</script></head><body><h1>Notices</h1>
+<table><thead><tr><th>No</th><th>Title</th></tr></thead>
+<tr><td>2</td><td><a href='/n/2'>Second</a></td></tr>
+<tr><td>1</td><td><a href='/n/1'>First</a></td></tr></table></body></html>";
+
+/// The same board after a redesign: the heading and a column are renamed
+/// and the feed moved.
+const BOARD_V2: &str = "<html><head><title>Notices</title><link rel='alternate' type='application/rss+xml' href='/rss.xml'><script type='application/ld+json'>[{\"@type\":\"NewsArticle\",\"headline\":\"Third\",\"url\":\"/n/3\"},{\"@type\":\"NewsArticle\",\"headline\":\"Second\",\"url\":\"/n/2\"},{\"@type\":\"NewsArticle\",\"headline\":\"First\",\"url\":\"/n/1\"}]</script></head><body><h2>Notices</h2>
+<table><thead><tr><th>Subject</th><th>Posted</th></tr></thead>
+<tr><td><a href='/n/2'>Second</a></td><td>today</td></tr>
+<tr><td><a href='/n/1'>First</a></td><td>yesterday</td></tr></table></body></html>";
+
+const FEED: &str = "<?xml version='1.0'?><rss><channel><title>Notices</title></channel></rss>";
+
+/// A board whose page changes once `redesigned` is set.
+async fn serve_changing_board() -> (String, Arc<std::sync::atomic::AtomicBool>) {
+    use axum::{http::StatusCode, response::IntoResponse};
+    let redesigned = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = redesigned.clone();
+    let board = move || {
+        let flag = flag.clone();
+        async move {
+            axum::response::Html(if flag.load(Ordering::SeqCst) {
+                BOARD_V2
+            } else {
+                BOARD_V1
+            })
+        }
+    };
+    let feed = |expect: bool| {
+        let flag = redesigned.clone();
+        move || {
+            let flag = flag.clone();
+            async move {
+                if flag.load(Ordering::SeqCst) == expect {
+                    ([("content-type", "application/rss+xml")], FEED).into_response()
+                } else {
+                    StatusCode::NOT_FOUND.into_response()
+                }
+            }
+        }
+    };
+    let router = Router::new()
+        .route("/board", get(board))
+        .route("/feed.xml", get(feed(false)))
+        .route("/rss.xml", get(feed(true)));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    (base, redesigned)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn refresh_drafts_a_changed_site_again_and_keeps_what_was_edited_by_hand() {
+    let home = home();
+    let (base, redesigned) = serve_changing_board().await;
+    let url = format!("{base}/board");
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &url,
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    assert!(done.status.success(), "{done:?}");
+    let sources: Value =
+        serde_json::from_slice(&std::fs::read(home.join("specs/board/sources.json")).unwrap())
+            .unwrap();
+    assert_eq!(sources["pages"], json!([url]));
+    assert!(sources["drafted"]["get-board"].is_string(), "{sources}");
+    assert!(sources["drafted"]["feed"].is_string(), "{sources}");
+
+    // The person renames the embedded list's read by hand.
+    let path = home.join("specs/board/spec.yaml");
+    let spec = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        spec.contains("name: list-news-articles\n  desc: "),
+        "{spec}\n{}",
+        String::from_utf8_lossy(&done.stderr)
+    );
+    let edited = spec.replace(
+        "name: list-news-articles\n  desc: ",
+        "name: list-news-articles\n  desc: Find the latest notices, not ",
+    );
+    assert_ne!(edited, spec);
+    std::fs::write(&path, &edited).unwrap();
+
+    // Nothing changed yet: a refresh has nothing to write.
+    let same = itda(
+        &home,
+        &["refresh", "board", "--yes"],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    assert!(same.status.success(), "{same:?}");
+    let said = String::from_utf8_lossy(&same.stderr);
+    assert!(said.contains("draft the same actions"), "{said}");
+    assert!(said.contains("= list-news-articles"), "{said}");
+
+    redesigned.store(true, Ordering::SeqCst);
+    let changed = itda(&home, &["check", "board"], &[("ITDA_LANG", "en")]).await;
+    assert_eq!(changed.status.code(), Some(11), "{changed:?}");
+    let text = String::from_utf8_lossy(&changed.stdout);
+    assert!(
+        text.contains("verdict  site_changed: the site changed; run itda refresh board"),
+        "{text}"
+    );
+    let all = itda(&home, &["check", "--all"], &[("ITDA_LANG", "en")]).await;
+    assert_eq!(all.status.code(), Some(11), "{all:?}");
+    let text = String::from_utf8_lossy(&all.stdout);
+    assert!(text.starts_with("board  site_changed: "), "{text}");
+    assert_eq!(text.lines().count(), 1, "{text}");
+
+    let asked = itda(&home, &["refresh", "board"], &[("ITDA_LANG", "en")]).await;
+    assert!(asked.status.success(), "{asked:?}");
+    let said = String::from_utf8_lossy(&asked.stderr);
+    assert!(said.contains("As installed: site_changed"), "{said}");
+    assert!(said.contains("~ get-board"), "{said}");
+    assert!(said.contains("changed: "), "{said}");
+    assert!(said.contains("~ feed"), "{said}");
+    assert!(said.contains("= list-news-articles"), "{said}");
+    assert!(said.contains("Kept 'board' as it is"), "{said}");
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        edited,
+        "without a yes nothing is written"
+    );
+
+    let written = itda(&home, &["refresh", "board", "-y"], &[("ITDA_LANG", "en")]).await;
+    assert!(written.status.success(), "{written:?}");
+    let said = String::from_utf8_lossy(&written.stderr);
+    assert!(said.contains("Updated 'board'"), "{said}");
+    let text = String::from_utf8_lossy(&written.stdout);
+    assert!(
+        text.contains("verdict  ok: every read still matches"),
+        "{text}"
+    );
+    let after = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        after.contains("desc: Find the latest notices, not "),
+        "{after}"
+    );
+    assert!(after.contains("subject:"), "{after}");
+    assert!(after.contains("path: /rss.xml"), "{after}");
+    assert!(!after.contains("/feed.xml"), "{after}");
+    let sources: Value =
+        serde_json::from_slice(&std::fs::read(home.join("specs/board/sources.json")).unwrap())
+            .unwrap();
+    assert_eq!(sources["pages"], json!([url]));
+
+    let ok = itda(&home, &["check", "board", "--json"], &[("ITDA_LANG", "en")]).await;
+    assert_eq!(ok.status.code(), Some(0), "{ok:?}");
+    assert_eq!(stdout_json(&ok)["verdict"], "ok");
+    let called = itda(
+        &home,
+        &["call", "board.get-board", "--json"],
+        &[("ITDA_LANG", "en")],
+    )
+    .await;
+    assert_eq!(
+        stdout_json(&called)["data"]["items"][0]["subject"],
+        "Second"
+    );
+
+    // A site installed by hand has no sources to refresh from.
+    install(&home, &base);
+    let none = itda(&home, &["refresh", "fixture", "-y"], &[("ITDA_LANG", "en")]).await;
+    assert_eq!(none.status.code(), Some(2), "{none:?}");
+    let said = String::from_utf8_lossy(&none.stderr);
+    assert!(said.contains("No sources are known"), "{said}");
     std::fs::remove_dir_all(home).ok();
 }

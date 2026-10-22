@@ -3,9 +3,11 @@
 A site definition (`spec.yaml`) tells itda which actions a website has, what
 each one sends, what a correct answer looks like and whether it changes
 anything. itda reads it from `<data dir>/specs/<site>/spec.yaml` (next to it,
-`check.json` keeps the time and verdict of the last `itda check`); `itda add
-spec.yaml` copies it there after a short review, `itda doctor` prints the data
-directory, and `ITDA_HOME` moves it.
+`check.json` keeps the time and verdict of the last `itda check`, and
+`sources.json` what a drafted definition was made from; see
+[Keep it working](#keep-it-working)); `itda add spec.yaml` copies it there
+after a short review, `itda doctor` prints the data directory, and
+`ITDA_HOME` moves it.
 
 ## Start from an OpenAPI document
 
@@ -450,6 +452,71 @@ Changes are never sent. Each site ends with one verdict (`ok`, `signed_out`,
 `site_changed`, `blocked` or `unreachable`) and the exit code follows it, as
 the [contract](agents.md) lists: 11 when a site no longer matches its
 definition, so a scheduled job can warn you before an agent runs into it.
+`itda check --all` checks every installed site and prints one verdict line
+each.
+
+### Draft a changed site again
+
+A definition that `itda setup`, `itda draft ... --install` or `itda record
+--install` made remembers where it came from, in `sources.json` next to it:
+
+```json
+{
+  "pages": ["https://board.example/board"],
+  "description": "https://board.example/openapi.json",
+  "graphql": ["https://board.example/graphql"],
+  "recording": "recording.har",
+  "lang": "en",
+  "drafted": {"get-board": "<sha256 of the operation as drafted>"},
+  "drafted_at": "2026-10-22T09:00:00.000Z"
+}
+```
+
+`pages` are the addresses the draft read, `description` the API description
+it found (an address, or the file given to `itda draft openapi`), `graphql`
+the endpoints it asked what they offer, and `recording` the HAR kept under
+the site when `itda draft har` or `itda record --save ... --install` had
+one. That copy keeps the shape of the recording and not its values: cookie,
+token and session values, private query and body fields and the answers of
+sign-in calls are blanked to `<redacted>` before it is written, since a
+refresh needs names and shapes only; `itda remove` deletes it with the site. `template` names the ready-made template a
+site came from, once there are any. `base_url`, `include` and `lang` are the
+choices the draft was made with, each left out when it was not given. Nothing in the file is a secret. `drafted`
+holds a hash of every operation as it was drafted, which is how a refresh
+tells an operation you edited by hand from one it may replace. A definition
+installed with `itda add` has no sources and cannot be refreshed.
+
+When a check says `site_changed`, draft the site again from those sources:
+
+```console
+$ itda refresh board
+Drafting 'board' again from its pages...
+    Looking at board.example...
+    As installed: site_changed (the site changed; run itda refresh board to draft it again from the same sources).
+What would change:
+    ~ get-board    changed: evidence, response
+    ~ feed         changed: path, evidence
+    = list-notices kept as you edited it
+    + search-board added: Search on Notices
+    Write these changes to 'board'? [y/N] y
+Updated 'board'. Checking it...
+board.get-board     ok                 HTTP 200 131 ms
+...
+verdict  ok: every read still matches the site
+```
+
+The merge keeps the site's name, title and `base_url`, `defaults`, `auth`
+and the header comments as they are, and goes through the operations by
+name: one whose YAML differs from what the sources drafted last time was
+edited by hand and is kept as it is; one the new draft changed (a renamed
+column, a moved endpoint, a response check) takes the new version; one the
+sources no longer draft is dropped only when its read also failed in the
+check; one the draft now has is tried once and added when it answers.
+Approvals are untouched. `-y` writes without asking; without it, nothing is
+written until you say yes. The site is checked right after and the verdict
+is printed, so the exit code says whether the new definition matches.
+Over MCP, `itda_manage` with `refresh` does the same after you confirm the
+diff in a form.
 
 ## Checklist before sharing a definition
 

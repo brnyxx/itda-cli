@@ -688,6 +688,215 @@ fn parts_at(
     })
 }
 
+/// What goes in the place of a recorded value that is kept on disk.
+pub const REDACTED: &str = "<redacted>";
+
+/// A recording with its secrets blanked, for the copy `itda refresh` keeps
+/// under the site. The drafter reads names and shapes, never values, so the
+/// copy keeps every name and blanks: every cookie's value in `Cookie` and
+/// `Set-Cookie` (the names stay, so a sign-in cookie is still found), the
+/// `Authorization` value after its scheme (`Bearer <redacted>`, so the
+/// prefix is still drafted), every header whose name holds `token`, `key`,
+/// `secret` or `session` or looks like a credential, query parameters and
+/// form or JSON body fields with such names, and the whole response body of
+/// a call that was a sign-in (a path segment such as `login`, or a body with
+/// a password).
+pub fn redacted_recording(text: &[u8]) -> AppResult<Vec<u8>> {
+    let mut doc: Value = serde_json::from_slice(text).map_err(|_| not_har())?;
+    let Some(entries) = doc["log"]["entries"].as_array_mut() else {
+        return Err(not_har());
+    };
+    for entry in entries {
+        let sign_in = sign_in_call(entry);
+        if let Some(request) = entry.get_mut("request") {
+            if let Some(url) = request
+                .get("url")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+            {
+                request["url"] = Value::String(redacted_url(&url));
+            }
+            redact_pairs(request.get_mut("headers"), redact_header);
+            redact_pairs(request.get_mut("cookies"), |_, _| Some(REDACTED.into()));
+            redact_pairs(request.get_mut("queryString"), redact_named);
+            if let Some(post) = request.get_mut("postData") {
+                redact_pairs(post.get_mut("params"), redact_named);
+                let mime = post
+                    .get("mimeType")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                if let Some(body) = post.get("text").and_then(Value::as_str).map(str::to_owned) {
+                    post["text"] = Value::String(redacted_body(&mime, &body));
+                }
+            }
+        }
+        if let Some(response) = entry.get_mut("response") {
+            redact_pairs(response.get_mut("headers"), redact_header);
+            redact_pairs(response.get_mut("cookies"), |_, _| Some(REDACTED.into()));
+            if sign_in && let Some(content) = response.get_mut("content").filter(|c| c.is_object())
+            {
+                content["text"] = Value::String(String::new());
+                content["size"] = 0.into();
+            }
+        }
+    }
+    Ok(serde_json::to_vec(&doc)?)
+}
+
+/// A name that holds a credential: the words `token`, `key`, `secret` or
+/// `session`, or what [`secret_field`] knows (`password`, `csrf`...).
+fn private_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    ["token", "key", "secret", "session"]
+        .iter()
+        .any(|word| lower.contains(word))
+        || secret_field(name)
+}
+
+/// A call that signed the person in: its path says so, or its body carries
+/// a password.
+fn sign_in_call(entry: &Value) -> bool {
+    let request = &entry["request"];
+    let by_path = request["url"]
+        .as_str()
+        .and_then(|url| url::Url::parse(url).ok())
+        .is_some_and(|url| {
+            url.path().split('/').any(|segment| {
+                matches!(
+                    segment.to_ascii_lowercase().as_str(),
+                    "login" | "signin" | "sign-in" | "sign_in" | "sso" | "oauth" | "authenticate"
+                )
+            })
+        });
+    let password = |name: &str| {
+        let lower = name.to_ascii_lowercase();
+        lower.contains("password") || lower.contains("passwd")
+    };
+    let in_params = request["postData"]["params"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|p| p["name"].as_str().is_some_and(password));
+    let in_text = request["postData"]["text"].as_str().is_some_and(|text| {
+        let mime = request["postData"]["mimeType"].as_str().unwrap_or_default();
+        if mime.contains("json") {
+            serde_json::from_str::<Value>(text)
+                .ok()
+                .and_then(|v| v.as_object().map(|o| o.keys().any(|k| password(k))))
+                .unwrap_or(false)
+        } else {
+            url::form_urlencoded::parse(text.as_bytes()).any(|(name, _)| password(&name))
+        }
+    });
+    by_path || in_params || in_text
+}
+
+/// Blank the `value` of every `{name, value}` pair `redact` says to.
+fn redact_pairs(pairs: Option<&mut Value>, redact: impl Fn(&str, &str) -> Option<String>) {
+    for pair in pairs.and_then(Value::as_array_mut).into_iter().flatten() {
+        let name = pair["name"].as_str().unwrap_or_default().to_owned();
+        let value = pair["value"].as_str().unwrap_or_default().to_owned();
+        if let Some(blanked) = redact(&name, &value) {
+            pair["value"] = Value::String(blanked);
+        }
+    }
+}
+
+fn redact_named(name: &str, _value: &str) -> Option<String> {
+    private_name(name).then(|| REDACTED.to_owned())
+}
+
+/// A header's value with its secret blanked: cookies keep their names, the
+/// `Authorization` header keeps its scheme.
+fn redact_header(name: &str, value: &str) -> Option<String> {
+    let lower = name.to_ascii_lowercase();
+    match lower.as_str() {
+        "cookie" => Some(
+            value
+                .split(';')
+                .map(|pair| match pair.split_once('=') {
+                    Some((name, _)) => format!("{}={REDACTED}", name.trim()),
+                    None => pair.trim().to_owned(),
+                })
+                .collect::<Vec<_>>()
+                .join("; "),
+        ),
+        "set-cookie" => Some(match value.split_once('=') {
+            Some((name, _)) => format!("{}={REDACTED}", name.trim()),
+            None => REDACTED.to_owned(),
+        }),
+        "authorization" | "proxy-authorization" => Some(match value.split_once(' ') {
+            Some((scheme, _)) if !scheme.is_empty() => format!("{scheme} {REDACTED}"),
+            _ => REDACTED.to_owned(),
+        }),
+        _ => private_name(name).then(|| REDACTED.to_owned()),
+    }
+}
+
+/// The address with the values of private query parameters blanked.
+fn redacted_url(url: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return url.to_owned();
+    };
+    let pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(name, value)| {
+            let value = if private_name(&name) {
+                REDACTED.to_owned()
+            } else {
+                value.into_owned()
+            };
+            (name.into_owned(), value)
+        })
+        .collect();
+    if pairs.iter().all(|(name, _)| !private_name(name)) {
+        return url.to_owned();
+    }
+    parsed.query_pairs_mut().clear().extend_pairs(pairs);
+    parsed.into()
+}
+
+/// A request body with its private fields blanked: JSON fields by name at
+/// any depth, form fields by name. Other bodies are left as they are.
+fn redacted_body(mime: &str, text: &str) -> String {
+    if mime.contains("json") {
+        let Ok(mut value) = serde_json::from_str::<Value>(text) else {
+            return text.to_owned();
+        };
+        redact_json(&mut value);
+        return value.to_string();
+    }
+    if mime.contains("x-www-form-urlencoded") {
+        let mut out = url::form_urlencoded::Serializer::new(String::new());
+        for (name, value) in url::form_urlencoded::parse(text.as_bytes()) {
+            if private_name(&name) {
+                out.append_pair(&name, REDACTED);
+            } else {
+                out.append_pair(&name, &value);
+            }
+        }
+        return out.finish();
+    }
+    text.to_owned()
+}
+
+fn redact_json(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for (name, child) in map.iter_mut() {
+                if private_name(name) && !child.is_null() {
+                    *child = Value::String(REDACTED.into());
+                } else {
+                    redact_json(child);
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(redact_json),
+        _ => {}
+    }
+}
+
 /// A page the person saw: a successful `GET` whose answer was HTML with
 /// its text recorded.
 pub(crate) fn html_page(entry: &Value) -> bool {

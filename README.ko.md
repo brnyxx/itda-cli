@@ -170,7 +170,8 @@ itda login <site> --browser              # 또는 내 브라우저로 한 번 �
 itda accounts / logout <site>            # 저장된 로그인 보기·삭제
 itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # 에이전트가 한 일
-itda check [<site>]                      # 모든 읽기가 아직 사이트와 맞는지 확인
+itda check [<site>|--all]                # 모든 읽기가 아직 사이트와 맞는지 확인
+itda refresh <site>                      # 사이트가 바뀌었을 때 다시 초안 잡기, 내가 정한 건 유지
 itda resume <site>                       # 사이트가 거부했거나 키가 만료된 뒤 재개
 itda feedback                            # 문제 신고: 버전과 환경이 채워진 새 이슈 열기
 ```

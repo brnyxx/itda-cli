@@ -11,7 +11,7 @@ pub mod label;
 mod openapi;
 mod page;
 
-pub use har::from_har;
+pub use har::{from_har, redacted_recording};
 pub use openapi::{from_openapi, is_openapi};
 pub use page::{DESCRIPTION_PATH, Description, Page, from_pages, from_pages_and_description};
 
@@ -207,6 +207,30 @@ impl Parts {
         self.notes.extend(other.notes);
         self.operations.len() - before
     }
+}
+
+/// The addresses of the pages a recording holds under `base_url`, the ones
+/// [`from_recording`] drafts from, so they can be fetched again later.
+pub fn pages_in_recording(text: &[u8], base_url: &str) -> Vec<String> {
+    let doc: serde_json::Value = serde_json::from_slice(text).unwrap_or_default();
+    let mut pages: Vec<String> = Vec::new();
+    for entry in doc["log"]["entries"].as_array().into_iter().flatten() {
+        if !har::html_page(entry) {
+            continue;
+        }
+        let Some(url) = entry["request"]["url"].as_str() else {
+            continue;
+        };
+        let url = url.split('#').next().unwrap_or(url);
+        if pages.iter().any(|page| page == url) || !url.starts_with(base_url) {
+            continue;
+        }
+        pages.push(url.to_owned());
+        if pages.len() == 20 {
+            break;
+        }
+    }
+    pages
 }
 
 /// A recording of a person using a site: the calls its pages made, drafted

@@ -71,6 +71,13 @@ pub fn load(home: &Path, site: &str) -> AppResult<Spec> {
     read(site, &path)
 }
 
+/// Where an installed site's definition is; `None` when it is not installed.
+pub fn path(home: &Path, site: &str) -> Option<PathBuf> {
+    util::valid_id(site)
+        .then(|| spec_file(&specs_dir(home).join(site)))
+        .flatten()
+}
+
 fn spec_file(dir: &Path) -> Option<PathBuf> {
     FILE_NAMES
         .iter()

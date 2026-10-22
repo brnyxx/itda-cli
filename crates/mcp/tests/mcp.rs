@@ -654,3 +654,124 @@ async fn removing_a_site_asks_the_person_and_drops_its_tools() {
     assert!(!home.join("specs/fixture").exists());
     std::fs::remove_dir_all(home).ok();
 }
+
+/// The board after a redesign: the heading and a column renamed.
+const BOARD_AFTER: &str = "<html lang='ko'><title>공지사항 - 사내</title><h2>공지</h2>
+<table><thead><tr><th>Subject</th><th>Posted</th></tr></thead>
+<tr><td><a href='/n/2'>Second</a></td><td>today</td></tr>
+<tr><td><a href='/n/1'>First</a></td><td>yesterday</td></tr></table></html>";
+
+/// A board that is redesigned once the flag is set.
+async fn site_with_changing_board() -> (String, Arc<std::sync::atomic::AtomicBool>) {
+    use std::sync::atomic::Ordering;
+    let redesigned = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = redesigned.clone();
+    let router = Router::new().route(
+        "/board",
+        get(move || {
+            let flag = flag.clone();
+            async move {
+                axum::response::Html(if flag.load(Ordering::SeqCst) {
+                    BOARD_AFTER
+                } else {
+                    BOARD
+                })
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    (base, redesigned)
+}
+
+#[tokio::test]
+async fn refreshing_a_changed_site_asks_the_person_and_drafts_it_again() {
+    let (base, redesigned) = site_with_changing_board().await;
+    let Managed { server, home } = managed(&base);
+    let mut client = Client::start_with(server, json!({"elicitation": {}})).await;
+    let done = client
+        .exchange(
+            "itda_setup",
+            json!({"url": format!("{base}/board"), "name": "board"}),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(done.result["isError"], false, "{}", done.result);
+    assert!(home.join("specs/board/sources.json").exists());
+
+    // Nothing changed: nothing to confirm, nothing written.
+    let same = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "refresh", "site": "board"}),
+            json!({"action": "decline"}),
+        )
+        .await;
+    assert_eq!(same.result["isError"], false, "{}", same.result);
+    assert_eq!(same.result["structuredContent"]["written"], false);
+    assert!(same.forms.is_empty());
+
+    redesigned.store(true, std::sync::atomic::Ordering::SeqCst);
+    let checked = client.call("itda_check", json!({})).await;
+    assert_eq!(checked["structuredContent"]["verdict"], "site_changed");
+    let sites = checked["structuredContent"]["sites"].as_array().unwrap();
+    assert_eq!(sites.len(), 2, "every site when none is named: {checked}");
+    let board = sites.iter().find(|s| s["site"] == "board").unwrap();
+    assert!(
+        board["hint"]
+            .as_str()
+            .unwrap()
+            .contains("itda refresh board"),
+        "{board}"
+    );
+
+    let declined = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "refresh", "site": "board"}),
+            json!({"action": "decline"}),
+        )
+        .await;
+    assert_eq!(declined.result["structuredContent"]["status"], "declined");
+    assert_eq!(declined.forms.len(), 1);
+    let message = declined.forms[0]["message"].as_str().unwrap();
+    assert!(message.contains("get-board: changed"), "{message}");
+
+    let unanswered = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "refresh", "site": "board"}),
+            json!({"error": {"code": -1, "message": "nobody answered"}}),
+        )
+        .await;
+    assert_eq!(
+        unanswered.result["structuredContent"]["status"],
+        "unanswered"
+    );
+
+    let refreshed = client
+        .exchange(
+            "itda_manage",
+            json!({"action": "refresh", "site": "board"}),
+            json!({"action": "accept", "content": {"confirm": true}}),
+        )
+        .await;
+    assert_eq!(refreshed.result["isError"], false, "{}", refreshed.result);
+    let structured = &refreshed.result["structuredContent"];
+    assert_eq!(structured["written"], true);
+    assert_eq!(structured["verdict"], "ok", "{structured}");
+    assert_eq!(structured["changes"][0]["kind"], "changed");
+    assert_eq!(structured["changes"][0]["name"], "get-board");
+    assert!(
+        refreshed
+            .notifications
+            .contains(&"notifications/tools/list_changed".to_owned())
+    );
+    let read = client.call("board.get-board", json!({})).await;
+    assert_eq!(
+        read["structuredContent"]["data"]["items"][0]["subject"],
+        "Second"
+    );
+    std::fs::remove_dir_all(home).ok();
+}

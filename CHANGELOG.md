@@ -9,6 +9,27 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda refresh <site>`: when `itda check` says `site_changed`, draft the
+  site again from the sources it was set up from and merge the result with
+  the installed definition. The site's name, title and address, `defaults`,
+  `auth` and every action edited by hand are kept; actions the draft
+  changed take the new version, ones it no longer drafts are dropped only
+  when their read also failed, and new ones are tried once and added when
+  they answer. The diff is printed in plain words (added, removed, changed,
+  kept as edited) and written after a yes, or at once with `-y`; the site
+  is checked right after and the verdict printed. Approvals are untouched.
+  To make that possible, `itda setup`, `itda draft ... --install` and `itda
+  record --install` now write `specs/<site>/sources.json` next to the
+  definition: the pages, the API description, the GraphQL endpoints asked,
+  the recording when one was kept (copied under the site as
+  `recording.har` with its cookie, token and session values, private
+  fields and sign-in answers blanked), the draft's options and a hash of
+  every operation as drafted. `itda check` now points at `itda refresh <site>` when a site
+  changed, and `itda check --all` prints one verdict line per site.
+- `itda_manage` over MCP gains `refresh`: the person confirms the diff in a
+  form (a form nobody answers counts as no), and the site's tools are
+  reloaded and checked. `itda_check` without a site already checks every
+  site; the docs now say so.
 - Five MCP tools so an agent never needs a terminal to set a site up or
   look after it: `itda_setup` (look at a page as itda, draft, try every
   read once, keep what works; the site's actions become tools in the same

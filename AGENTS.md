@@ -73,7 +73,7 @@ to do:
 |---|---|---|
 | `ok` | every read still matches | retry the action; the failure was not the site |
 | `signed_out` | the account is no longer accepted | ask the user to run `itda login <site>`, or call `itda_login` over MCP |
-| `site_changed` | a page or answer no longer matches its definition | ask the user to run `itda setup <url>` again, or call `itda_setup` with `replace` over MCP |
+| `site_changed` | a page or answer no longer matches its definition | ask the user to run `itda refresh <site>`, or call `itda_manage` with `refresh` over MCP: the site is drafted again from the same sources, the user confirms what changes, and what they decided (sign-in, name, hand-edited actions) is kept |
 | `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site in a browser, then run `itda resume <site>` (or confirm `itda_manage` `resume` over MCP) |
 | `unreachable` | the site did not answer | wait, then check again |
 
@@ -99,11 +99,12 @@ tries every read and asks the user before saving and before connecting an
 agent. Let the user answer those questions. Public APIs with a ready-made
 definition install with `itda add github` (also `npm`, `crates-io`, `pypi`).
 
-`itda_manage` covers the rest without a terminal: `remove` and `resume`
-ask the user to confirm in a form the client shows them (a client that
-cannot show forms gets the command for the user to run), `approvals` lists
-the changes waiting for the user, and `audit` shows the last entries of the
-audit log. None of them approves a change.
+`itda_manage` covers the rest without a terminal: `refresh`, `remove` and
+`resume` ask the user to confirm in a form the client shows them (a client
+that cannot show forms gets the command for the user to run; a form nobody
+answers counts as no), `approvals` lists the changes waiting for the user,
+and `audit` shows the last entries of the audit log. None of them approves
+a change.
 
 ## Report a problem
 

@@ -14,6 +14,7 @@ pub mod description;
 pub mod introspect;
 pub mod login;
 pub mod record;
+pub mod refresh;
 pub mod sites;
 
 use itda_html::evidence;
@@ -306,9 +307,10 @@ pub async fn run(
         }
     }
     let mut recording = None;
+    let mut har = Vec::new();
     if record {
         let rec = record_site(url.as_str(), answers.recording_done(), report).await?;
-        let har = serde_json::to_vec(&rec.har)?;
+        har = serde_json::to_vec(&rec.har)?;
         let endpoints = itda_prep::graphql::endpoints_in_recording(&har);
         options.schemas = introspect(ctx, &endpoints, report).await;
         draft = Some(itda_prep::from_recording(&har, &options, "`itda setup`")?);
@@ -320,6 +322,13 @@ pub async fn run(
     // 2. Show what was found.
     let spec = itda_spec::parse(draft.yaml.as_bytes())?;
     report(Progress::Drafted(&spec));
+    // The recording stays in memory, so a refresh reads its pages again.
+    let pages = if record {
+        itda_prep::pages_in_recording(&har, &spec.site.base_url)
+    } else {
+        vec![request.url.clone()]
+    };
+    let sources = refresh::Sources::of_pages(&pages, &draft, &options);
 
     // 3. Save, replacing only with a yes.
     let path = sites::specs_dir(&ctx.home).join(&site).join("spec.yaml");
@@ -362,6 +371,7 @@ pub async fn run(
         let yaml = without(&draft.yaml, &removed)?;
         itda_types::util::atomic_file(&path, yaml.as_bytes())?;
     }
+    refresh::remember(&ctx.home, &site, sources)?;
     report(Progress::Saved { site: &site });
     let spec = sites::load(&ctx.home, &site)?;
     Ok(Finished::Done(Box::new(Done {
@@ -456,8 +466,25 @@ pub async fn draft_page(
     options: &mut Options,
     report: &mut (dyn FnMut(Progress<'_>) + Send),
 ) -> AppResult<Draft> {
-    let pages = std::slice::from_ref(page);
-    let endpoints = introspect::endpoints_in_pages(pages);
+    draft_pages(ctx, std::slice::from_ref(page), &[], options, report).await
+}
+
+/// Draft from pages: ask the GraphQL endpoints they name (and `endpoints`,
+/// known from before), read the API description they publish, then draft
+/// from all of it.
+pub async fn draft_pages(
+    ctx: &Context,
+    pages: &[Page],
+    endpoints: &[String],
+    options: &mut Options,
+    report: &mut (dyn FnMut(Progress<'_>) + Send),
+) -> AppResult<Draft> {
+    let mut endpoints: Vec<String> = endpoints.to_vec();
+    for endpoint in introspect::endpoints_in_pages(pages) {
+        if !endpoints.contains(&endpoint) {
+            endpoints.push(endpoint);
+        }
+    }
     options.schemas = introspect(ctx, &endpoints, report).await;
     let description = description::find(&ctx.net, pages).await;
     let draft = itda_prep::from_pages_and_description(pages, description.as_ref(), options)?;

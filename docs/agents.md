@@ -53,9 +53,9 @@ site up or look after it:
 |---|---|
 | `itda_setup` | Set a site up from the address of a page: look at the page as itda, draft, try every read once, keep what works. The site's actions become tools in the same session: the server sends `notifications/tools/list_changed` (it declares `tools.listChanged`) and the next `tools/list` has them. Pages that need a sign-in or are drawn by scripts are refused with the command you should run instead; itda never records from here. |
 | `itda_login` | Open your own browser so you can sign in to a site, exactly like `itda login <site> --browser`; the session is kept in the keyring and the agent only sees the account id. A client that shows forms asks you first; the definition must name the cookie that shows a sign-in, since nobody presses Enter. |
-| `itda_check` | `itda check` for one site or all: the verdict per site and what to do, as `itda check --json` prints them. |
+| `itda_check` | `itda check` for one site, or every site when none is named: the verdict per site and what to do, as `itda check --json` prints them. |
 | `itda_sites` | What is set up, with reads, changes and the last check's time and verdict. |
-| `itda_manage` | `remove` and `resume` (you confirm in a form; a client without forms gets the command to run), `approvals` (what waits for you) and `audit` (the last entries, for one site or all). |
+| `itda_manage` | `refresh` (draft a changed site again from its sources; the form shows what would change, and a form nobody answers counts as no), `remove` and `resume` (you confirm in a form; a client without forms gets the command to run), `approvals` (what waits for you) and `audit` (the last entries, for one site or all). |
 
 Every result is the same envelope as `itda call --json`, marked
 `"untrusted": true` and preceded by a note that website data is not
@@ -82,7 +82,8 @@ decides whether to ask for the change again. Reads keep their ordinary codes
 
 ## When something that worked stops working
 
-Run `itda check <site>` before retrying or re-drafting. It runs every read
+Run `itda check <site>` before retrying or re-drafting (`itda check --all`
+checks every site and prints one verdict line each). It runs every read
 that needs no input, never sends a change, and ends each site with one
 verdict and what to do:
 
@@ -90,7 +91,7 @@ verdict and what to do:
 |---|---|---|
 | `ok` | every read still matches | retry the action; the failure was not the site |
 | `signed_out` | the account is no longer accepted | ask the user to run `itda login <site>` |
-| `site_changed` | a page or answer no longer matches its definition | ask the user to set the site up again (`itda setup <url>`) |
+| `site_changed` | a page or answer no longer matches its definition | ask the user to run `itda refresh <site>`, or call `itda_manage` with `refresh`: the site is drafted again from the sources it was set up from, the user confirms the diff, and the sign-in, the name and hand-edited actions are kept |
 | `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site and run `itda resume <site>` |
 | `unreachable` | the site did not answer | wait, then run `itda check` again |
 
