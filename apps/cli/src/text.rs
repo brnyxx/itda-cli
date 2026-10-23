@@ -28,39 +28,10 @@ pub fn lang() -> &'static str {
     LANG.get_or_init(|| resolve(&crate::lang()))
 }
 
-/// The supported tag a locale names: BCP 47 (`ja`, `zh-TW`, `pt-BR`) or POSIX
-/// (`ja_JP.UTF-8`, `zh_TW.Big5`, `C`). Encoding and modifier are dropped;
-/// case does not matter. Traditional Chinese for Taiwan, Hong Kong and Macao,
-/// Simplified for the rest of `zh`; every Portuguese is `pt-BR`; `in` is the
-/// old code for Indonesian. Anything else falls back to English.
+/// The supported tag a locale names, else English; see
+/// [`itda_types::lang::supported`].
 pub fn resolve(locale: &str) -> &'static str {
-    let tag = locale
-        .split(['.', '@'])
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .replace('_', "-")
-        .to_ascii_lowercase();
-    let mut parts = tag.split('-').filter(|p| !p.is_empty());
-    let Some(language) = parts.next() else {
-        return "en";
-    };
-    let rest: Vec<&str> = parts.collect();
-    match language {
-        "zh" => {
-            let traditional = rest
-                .iter()
-                .any(|p| matches!(*p, "tw" | "hk" | "mo") || p.starts_with("hant"));
-            if traditional { "zh-Hant" } else { "zh-Hans" }
-        }
-        "pt" => "pt-BR",
-        "in" => "id",
-        other => SUPPORTED
-            .iter()
-            .map(|(tag, _)| *tag)
-            .find(|tag| tag.eq_ignore_ascii_case(other))
-            .unwrap_or("en"),
-    }
+    itda_types::lang::resolve(locale)
 }
 
 fn table(tag: &str) -> &'static HashMap<String, String> {
@@ -223,6 +194,12 @@ mod tests {
         ] {
             assert_eq!(resolve(locale), tag, "{locale:?}");
         }
+    }
+
+    #[test]
+    fn the_strings_cover_the_languages_drafts_are_written_in() {
+        let tags: Vec<&str> = SUPPORTED.iter().map(|(tag, _)| *tag).collect();
+        assert_eq!(tags, itda_types::lang::LANGUAGES);
     }
 
     #[test]

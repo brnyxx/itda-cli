@@ -2,6 +2,7 @@
 //! this crate depends on no other workspace crate.
 pub mod error;
 pub mod json;
+pub mod lang;
 pub mod paths;
 pub mod url;
 pub mod util;
