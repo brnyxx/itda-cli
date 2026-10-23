@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+PackageIdentifier: brnyxx.itda
+PackageVersion: 0.7.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: itda.exe
+    PortableCommandAlias: itda
+Commands:
+  - itda
+ReleaseDate: "2026-10-24"
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/brnyxx/itda-cli/releases/download/v0.7.0/itda-cli-x86_64-pc-windows-msvc.zip
+    InstallerSha256: B990B3063E6548E556494E32446415949BC1E0F540EEF8D7C4470C65B61955EC
+ManifestType: installer
+ManifestVersion: 1.12.0
