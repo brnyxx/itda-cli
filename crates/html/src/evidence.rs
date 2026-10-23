@@ -2120,7 +2120,9 @@ pub fn description_link(html: &str, base: &str) -> Option<(DescriptionRel, Strin
                 || lower.ends_with("openapi.yaml")
                 || lower.ends_with("swagger.json");
             let kind = DescriptionRel::of(rel.split_whitespace())
-                .or(named.then_some(DescriptionRel::ServiceDesc))?;
+                .into_iter()
+                .chain(named.then_some(DescriptionRel::ServiceDesc))
+                .min()?;
             Some((kind, base.join(href).ok()?.to_string()))
         })
         .min_by_key(|(kind, _)| *kind)
@@ -2646,6 +2648,12 @@ mod tests {
         assert_eq!(
             description_link(r#"<a rel="not-service-desc" href="/x">"#, BASE),
             None
+        );
+        // A description file name is the description, whatever else the
+        // link says.
+        assert_eq!(
+            openapi_link(r#"<link rel="describedby" href="/openapi.json">"#, BASE).as_deref(),
+            Some("https://example.test/openapi.json")
         );
         assert!(script_shell(
             "<div id=root></div><script src=/app.js></script>"
