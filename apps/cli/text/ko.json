@@ -122,5 +122,8 @@
   "lost_landed": "{read}에서 반영 확인",
   "lost_not_found": "{read}에 보이지 않음",
   "lost_unknown": "확인용 읽기 {read}도 실패",
-  "lost_unchecked": "확인용 읽기 없음, 사이트를 확인하세요"
+  "lost_unchecked": "확인용 읽기 없음, 사이트를 확인하세요",
+  "returns_file": "파일을 돌려줍니다: {types}, {dir} 아래에 저장",
+  "sends_file": "{input}에 적은 파일을 보냅니다. 이름, 크기, 해시를 보고 허락합니다",
+  "saved_file": "{path}에 저장했습니다 ({bytes}바이트, sha256 {sha256})"
 }

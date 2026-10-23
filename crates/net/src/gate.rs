@@ -103,7 +103,32 @@ impl Lease<'_> {
         self.released = true;
         Ok(())
     }
+
+    /// Keep the turn for another [`LEASE_MS`] while a long transfer runs.
+    /// Fails with `request_lease_lost` when the turn is no longer this
+    /// lease's: the transfer stops and is never retried.
+    pub async fn renew(&self) -> AppResult<()> {
+        let (scope, token, now) = (self.scope.clone(), self.token.clone(), self.gate.now());
+        let kept = self
+            .gate
+            .store
+            .call(move |conn| {
+                Ok(conn.execute(
+                    "UPDATE request_gate SET lease_until=?3 WHERE scope=?1 AND lease=?2",
+                    params![scope, token, now + LEASE_MS],
+                )?)
+            })
+            .await?;
+        if kept == 1 {
+            Ok(())
+        } else {
+            Err(AppError::api("request_lease_lost", 409))
+        }
+    }
 }
+
+/// How long a turn lasts once taken; a transfer longer than this renews it.
+pub const LEASE_MS: i64 = 120_000;
 
 impl Drop for Lease<'_> {
     fn drop(&mut self) {
@@ -286,7 +311,7 @@ fn try_acquire(
         };
         tx.execute(
             "UPDATE request_gate SET lease=?2,lease_until=?3,next_at=?4 WHERE scope=?1",
-            params![scope, token, now + 120_000, now + interval_ms + jitter],
+            params![scope, token, now + LEASE_MS, now + interval_ms + jitter],
         )?;
         tx.execute(
             "INSERT INTO request_event(scope,at) VALUES(?1,?2)",

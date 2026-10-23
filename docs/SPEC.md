@@ -62,6 +62,8 @@ with a response check, so `itda check` notices when the page changes:
 | Links to `?page=2` on the same path, or a link marked `rel="next"` with a number in its query | An optional query input named after that key (`int`, no default, so the read asks for the address it was drafted from until an agent or a page handle asks for another; counting starts at 1 for `page` and the like, at 0 for `offset` and `start`). A key the page's own address carries keeps its value. The reads that return records also get `pagination` on that key (`style: page`, or `style: offset` for a key that starts at 0) |
 | A `GET` form | A read with the form's fields as `query` inputs |
 | A `POST` form | A change with the fields as `body.form`, using `auth: session`; a hidden token such as `_csrf` becomes a `preflight` step read from the form page |
+| A `POST` form with `enctype=multipart/form-data` and a file control | A change with the fields as `body.multipart.fields` and the file control as `body.multipart.file`, with an input of its own for the path of the file to send |
+| Links the page labels as attachments: a `download` attribute, the words download, attachment, 첨부 or 다운로드 in the link's text, title, label or class, or an icon named for one | A file read (`download-file`) with `response: {format: file}`. Links of one shape become one read with an input (`/files/{file_id}`, or a varying query key); `media_types` lists the kinds the link names say, or the usual document types when they say nothing. A link to a document the page does not call an attachment stays a page |
 | A sign-in form | Left out; `itda setup --user` and `itda login <site>` sign in through it, see `auth` below |
 | `<link rel="alternate">` to RSS or Atom | A read with `format: xml` |
 | A link to an OpenAPI document (`rel="service-desc"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or, when nothing is linked, `/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` makes them, under the page's address. Its changes appear as notes. See below. |
@@ -261,7 +263,12 @@ you add with `itda login`. Calls with a sign-in cookie (by name, such as
 `JSESSIONID` or `SID`) but no token get a `kind: browser` entry.
 `itda login <site> --browser` signs them in. A form token such as `_csrf`
 becomes a `preflight` step. It reads the token from the form page recorded
-before the post, so each change sends a fresh one. A header such as
+before the post, so each change sends a fresh one. A recorded
+`multipart/form-data` post whose parts the browser kept (their names, and the
+file part's file name, never the file) becomes a change with `body.multipart`;
+a recording without the part names lists the call instead. An answer the site
+sent as `Content-Disposition: attachment` becomes a file read of the media type
+it carried. A header such as
 `X-CSRF-Token` gets the same treatment using a `<meta name="csrf-token">` tag on
 an earlier page, as Rails, Laravel and many single-page apps do. A session the
 site carries in the URL rather than a cookie also gets a `kind: browser` entry,
@@ -274,8 +281,8 @@ the value in the keyring, never in the definition. At run time, itda adds it to
 each request's query, just as it sends a `cookie:` session as a cookie. itda
 leaves out the sign-in call: a person signs in, never an agent. itda omits and
 lists other token and session fields, since they come from sign-in, never the
-agent. itda skips calls to other addresses, file uploads and failed calls.
-Delete the HAR file when you are done with it.
+agent. itda skips calls to other addresses and failed calls. Delete the HAR
+file when you are done with it.
 
 ## Write one by hand
 
@@ -360,7 +367,7 @@ Each operation is one action, called as `itda call <site>.<name>`.
 | `auth` | Name of an `auth` entry, for actions that need an account. |
 | `params` | Path inputs, all required. |
 | `query` | Query string inputs. |
-| `body` | Request body inputs: `json:` or `form:` fields, or a `json_template`. |
+| `body` | Request body inputs: `json:` or `form:` fields, a `json_template`, or `multipart:` for a form that sends a file. See below. |
 | `headers` | Extra headers for this action only. |
 | `response` | What a correct answer looks like. Strongly recommended for reads. |
 | `model` | Name of an entry in `models` that picks and renames fields from the JSON. |
@@ -380,6 +387,44 @@ query:
 anything; agents see them as a JSON Schema. itda refuses inputs with names
 resembling credentials (`password`, `token`, `api_key`…): those go in `auth`,
 never through the agent.
+
+### Sending a file
+
+A form that takes a file is a `multipart/form-data` body. `fields` are its
+text inputs, declared like `form` fields; `file` names the form field the file
+goes in and the input (`from`) that carries the path of a file on this
+computer:
+
+```yaml
+operations:
+  - name: attach-file
+    desc: Attach a file to a notice
+    method: POST
+    path: /board/{id}/attach
+    auth: session
+    effect: write
+    evidence: the attach form on /board/42 posts multipart/form-data
+    params:
+      id: {type: int}
+    body:
+      multipart:
+        fields:
+          memo: {type: string}
+        file: {name: attachment, from: file}
+```
+
+The agent gives `file` as a path. itda reads the file once, and the approval
+the user sees names it by name, size and SHA-256 (`file  plan.csv (8 bytes,
+sha256 3a1f…)`). The approval is for those bytes: other bytes under the same
+path withdraw it (`approval_expired`, `reason: file_changed`), and the agent
+asks again. itda streams the file from disk in small chunks, checking its size
+and modification time before every chunk and its hash at the end. A file that
+changes during the send stops it; the call ends with `action_outcome_unknown`
+and `reason: file_changed`, like any change whose answer was lost. The audit
+log records the hash. An action with a file is always a change, whatever its
+method or name says, and its body goes only to the site's own origin. A
+multipart body without a `file` sends its `fields` as parts. `multipart` is
+one of the three body encodings; declare one of `json`, `form` or `multipart`.
 
 ### Read or write
 
@@ -422,7 +467,7 @@ page, an error page or a redesigned site.
 
 ```yaml
 response:
-  format: json                       # json | html | text | xml | empty
+  format: json                       # json | html | text | xml | empty | file
   required_pointers: [/items, /total]  # JSON Pointers that must exist
 ```
 
@@ -453,6 +498,53 @@ response:
 
 When the answer does not match, the call fails with `response_mismatch` (exit
 11) instead of returning the wrong page as data.
+
+### Reading a file
+
+A read whose answer is a file to keep, an attachment on a board or a report
+to download, declares `format: file` and the media types it accepts:
+
+```yaml
+operations:
+  - name: get-attachment
+    desc: Download an attachment from a notice
+    method: GET
+    path: /board/files/{file_id}
+    effect: read
+    evidence: /board/42 links to it as an attachment
+    params:
+      file_id: {type: int}
+    response:
+      format: file
+      media_types: [application/pdf, application/vnd.ms-excel]
+      max_bytes: 20000000            # optional; 64 MiB when left out, 1 GiB at most
+      allow_empty: false             # optional; an empty answer is a failure
+```
+
+itda streams the answer to a file instead of reading it into memory. The
+answer's content type (before any `;`) must be one of `media_types`; an HTML
+answer counts only when the site marks it `Content-Disposition: attachment`,
+so a sign-in page in place of the file is a failure, not a file. A 206 or an
+answer with `Content-Range`, a body shorter than its `Content-Length`, an empty
+body (unless `allow_empty`) and anything over `max_bytes` fail too, by name:
+`wrong_media_type`, `partial_answer`, `empty_answer`, `too_large` (exit 11, or
+30 for `too_large`). Nothing is kept from a failed answer. A good answer is
+sealed at its end and gets its name from the site's `Content-Disposition`, else
+the address, reduced to plain characters; a name already taken gets `-2`, `-3`.
+The file lands under `files/<site>/` in the data directory, or in the folder
+`itda call ... --out <dir>` names. The read returns a manifest, never the
+bytes:
+
+```json
+{"path": "/home/you/.local/share/itda/files/board/minutes.pdf", "bytes": 48213,
+ "media_type": "application/pdf", "sha256": "9c1e…"}
+```
+
+Over MCP the result carries the same manifest and a `resource_link` to the
+file. A file read has no `model`, `pagination`, pointers or extraction, and
+`itda check` skips it ("saves a file") rather than fill the folder. A transfer
+longer than the pace allows keeps its turn at the gate by renewing it; a turn
+lost mid-transfer stops it (`request_lease_lost`, exit 30), never retried.
 
 ## `auth`
 

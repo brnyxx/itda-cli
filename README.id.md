@@ -113,6 +113,11 @@ mereka tinggalkan.
 - Situs yang menjalankan GitLab, Jira, Confluence, Redmine, Discourse,
   MediaWiki, WordPress, Gitea atau Forgejo: API-nya sendiri, dari templat siap
   pakai.
+- Berkas masuk dan berkas keluar: tautan yang ditandai halaman sebagai
+  lampiran menjadi pembacaan yang menyimpan berkas di komputer Anda dan
+  mengembalikan path, ukuran, dan hash-nya, tidak pernah isinya. Formulir
+  dengan kolom berkas menjadi perubahan yang mengirim berkas yang Anda tunjuk;
+  Anda menyetujuinya berdasarkan nama, ukuran, dan hash.
 - Apa pun yang Anda rekam sendiri saat memakainya, di browser Anda atau sebagai
   berkas HAR.
 

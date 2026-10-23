@@ -37,9 +37,17 @@ Read only as many pages as the question needs, never a whole site. On
 `pagination_expired` or `pagination_invalid` (exit 23), start again without
 `next`.
 
+A read whose description says it returns a file saves it on the user's
+computer: `data` is `{path, bytes, media_type, sha256}`, never the bytes.
+`wrong_media_type`, `partial_answer`, `empty_answer` and `too_large` mean no
+file was saved.
+
 ## Changes
 
 - Run a change only when the user asked for exactly that change.
+- A change that sends a file takes the path of a file on the user's
+  computer. The user approves that exact file by name, size and hash; a
+  changed file needs a new approval.
 - The first call returns `approval_required` with an `approval` id (exit 20).
   Show the user what will change and ask them to run `itda approve <id>`.
   No agent tool can approve; only the user can, in their terminal.

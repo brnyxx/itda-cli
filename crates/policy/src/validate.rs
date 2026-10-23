@@ -169,6 +169,48 @@ fn check_operation(
     }
     if let Some(response) = &op.response {
         check_response(response, &id, out);
+        if response.is_file() {
+            if operation_effect(op, &Default::default()) != Effect::Read {
+                out.add(
+                    "data_invalid",
+                    format!("{id}.response.format"),
+                    "only a read saves its answer as a file",
+                );
+            }
+            if !op.model.is_empty() || op.pagination.is_some() {
+                out.add(
+                    "data_invalid",
+                    format!("{id}.response.format"),
+                    "a file read has no model and turns no pages",
+                );
+            }
+        }
+    }
+    if let Some(from) = op.file_input() {
+        let plain = op.params.contains_key(from)
+            || op.query.contains_key(from)
+            || op
+                .body
+                .as_ref()
+                .is_some_and(|b| b.json.contains_key(from) || b.form.contains_key(from));
+        if plain || util::secret_field(from) {
+            out.add(
+                "data_invalid",
+                format!("{id}.body.multipart.file.from"),
+                "the file input must have a name of its own that is not a credential's",
+            );
+        }
+        if let (Ok(site), Ok(target)) = (
+            validate_url(&sp.site.base_url),
+            validate_url(sp.operation_base(op)),
+        ) && site.origin() != target.origin()
+        {
+            out.add(
+                "unsafe_target",
+                format!("{id}.body.multipart"),
+                "a file goes only to the site's own origin",
+            );
+        }
     }
     if op.preflight.len() > 4 {
         out.add(
@@ -381,8 +423,17 @@ fn check_operation_auth(
 
 fn check_response(response: &itda_spec::ResponseExpectation, id: &str, out: &mut Problems) {
     let field = format!("{id}.response");
-    if !["json", "html", "text", "xml", "empty"].contains(&response.format.as_str()) {
+    if !["json", "html", "text", "xml", "empty", "file"].contains(&response.format.as_str()) {
         out.add("data_invalid", format!("{field}.format"), "unknown format");
+    }
+    if response.is_file() {
+        check_file_response(response, &field, out);
+    } else if !response.media_types.is_empty() || response.max_bytes != 0 || response.allow_empty {
+        out.add(
+            "data_invalid",
+            field.clone(),
+            "media_types, max_bytes and allow_empty belong to format file",
+        );
     }
     if response.required_pointers.len() > 30
         || response
@@ -433,6 +484,50 @@ fn check_response(response: &itda_spec::ResponseExpectation, id: &str, out: &mut
             "data_invalid",
             format!("{field}.required_html_fields"),
             "at most 30 fields with valid CSS selectors",
+        );
+    }
+}
+
+/// A file read names the media types it accepts, nothing else about the
+/// answer's shape, and a size cap itda can hold.
+fn check_file_response(response: &itda_spec::ResponseExpectation, field: &str, out: &mut Problems) {
+    let media_type = |value: &str| {
+        value.len() <= 120
+            && value
+                .split_once('/')
+                .is_some_and(|(kind, subtype)| !kind.is_empty() && !subtype.is_empty())
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"/.+-_".contains(&b))
+    };
+    if response.media_types.is_empty()
+        || response.media_types.len() > 20
+        || !response.media_types.iter().all(|value| media_type(value))
+    {
+        out.add(
+            "data_invalid",
+            format!("{field}.media_types"),
+            "a file read lists up to 20 lower-case media types such as application/pdf",
+        );
+    }
+    if response.max_bytes > itda_spec::MAX_FILE_BYTES {
+        out.add(
+            "data_invalid",
+            format!("{field}.max_bytes"),
+            format!("at most {} bytes", itda_spec::MAX_FILE_BYTES),
+        );
+    }
+    if !response.required_pointers.is_empty()
+        || !response.required_html_fields.is_empty()
+        || response.html.is_some()
+        || !response.strip_prefix.is_empty()
+        || !response.ssr_json.is_empty()
+        || !response.extract_pointer.is_empty()
+    {
+        out.add(
+            "data_invalid",
+            field.to_owned(),
+            "a file is saved as it is: no pointers, fields or extraction",
         );
     }
 }

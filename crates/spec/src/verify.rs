@@ -57,6 +57,8 @@ impl Operation {
             return true;
         };
         match expected.format.as_str() {
+            // A file is checked as it is saved, never from a buffered body.
+            "file" => false,
             "json" => self.parse_json_response(response).is_some_and(|body| {
                 expected
                     .required_pointers

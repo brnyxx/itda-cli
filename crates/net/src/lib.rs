@@ -13,8 +13,10 @@
 //! - Pure URL checks moved to `itda_types::url`; pacing moved from the approval
 //!   store into [`Gate`].
 pub mod defend;
+pub mod files;
 pub mod gate;
 
+pub use files::{Download, FileToSend, Multipart, SavedFile};
 pub use gate::{Gate, Lease, Outcome, not_sent, sent};
 
 use futures_util::StreamExt;
@@ -60,6 +62,12 @@ pub struct Request {
     /// turn this off: the answer is still classified and reported, and the
     /// caller sends nothing more to the site in that run.
     pub pause_on_block: bool,
+    /// Save a successful answer to a file instead of reading it into
+    /// memory; see [`files`].
+    pub download: Option<Download>,
+    /// Send a `multipart/form-data` body streamed from disk; `body` is then
+    /// ignored.
+    pub multipart: Option<Multipart>,
 }
 impl Request {
     /// A bounded anonymous GET that follows same-origin redirects.
@@ -76,6 +84,8 @@ impl Request {
             follow_redirects: true,
             interval: None,
             pause_on_block: true,
+            download: None,
+            multipart: None,
         }
     }
 }
@@ -83,9 +93,12 @@ pub struct Response {
     pub url: String,
     pub status: u16,
     pub headers: Vec<(String, String)>,
+    /// The body, or nothing when it was saved to `file`.
     pub bytes: Vec<u8>,
     pub duration_ms: i64,
     pub defense: String,
+    /// Where a downloaded answer was saved, with its size and hash.
+    pub file: Option<SavedFile>,
 }
 impl Response {
     pub fn header(&self, key: &str) -> &str {
@@ -123,6 +136,7 @@ impl std::fmt::Debug for Response {
             .field("headers", &self.headers.len())
             .field("bytes", &self.bytes.len())
             .field("defense", &self.defense)
+            .field("file", &self.file)
             .finish()
     }
 }
@@ -158,20 +172,25 @@ impl Network {
         self.gate.resume(&format!("{origin}|*")).await
     }
 
+    /// A client for the host. A buffered request gets a timeout for the
+    /// whole exchange; a file transfer (`streaming`) gets one per read
+    /// instead, so a long transfer is bounded by silence, not by size.
     fn pooled_client(
         &self,
         host: &str,
         ua: &str,
         addresses: &[SocketAddr],
         timeout: Duration,
+        streaming: bool,
     ) -> AppResult<reqwest::Client> {
         let mut addr_keys: Vec<String> = addresses.iter().map(ToString::to_string).collect();
         addr_keys.sort();
         let pool_key = format!(
-            "{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}",
             host,
             ua,
             timeout.as_secs(),
+            if streaming { "stream" } else { "buffer" },
             addr_keys.join(",")
         );
         if let Ok(guard) = self.clients.lock()
@@ -179,10 +198,15 @@ impl Network {
         {
             return Ok(existing.clone());
         }
-        let client = reqwest::Client::builder()
+        let builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
-            .retry(reqwest::retry::never())
-            .timeout(timeout.min(Duration::from_secs(90)))
+            .retry(reqwest::retry::never());
+        let builder = if streaming {
+            builder.read_timeout(timeout.min(Duration::from_secs(90)))
+        } else {
+            builder.timeout(timeout.min(Duration::from_secs(90)))
+        };
+        let client = builder
             .connect_timeout(Duration::from_secs(10))
             .pool_idle_timeout(Duration::from_secs(90))
             .pool_max_idle_per_host(6)
@@ -215,22 +239,35 @@ impl Network {
             let host_lease = self.gate.acquire(&host_scope, input.interval).await?;
             let scope = format!("{origin}|{}", input.account_id);
             let lease = self.gate.acquire(&scope, input.interval).await?;
+            let streaming = input.download.is_some() || input.multipart.is_some();
             let client = self.pooled_client(
                 target.host_str().expect("validated host"),
                 USER_AGENT,
                 &addresses,
                 input.timeout,
+                streaming,
             )?;
             let headers = default_headers(&target, &input, &origin)?;
             let method = Method::from_bytes(input.method.as_bytes())
                 .map_err(|_| AppError::api("data_invalid", 400))?;
             let mut request = client.request(method, target.clone()).headers(headers);
-            if let Some(body) = &input.body {
+            let mut upload = None;
+            if let Some(parts) = &input.multipart {
+                let body = files::multipart_body(parts).await.map_err(not_sent)?;
+                request = request
+                    .header(reqwest::header::CONTENT_TYPE, &body.content_type)
+                    .header(reqwest::header::CONTENT_LENGTH, body.length)
+                    .body(body.body);
+                upload = Some((body.changed, body.complete));
+            } else if let Some(body) = &input.body {
                 request = request.body(body.clone());
             }
-            let response = match request.send().await {
-                Ok(response) => response,
-                Err(error) => {
+            // A long upload keeps its turn: both leases are renewed while
+            // the body is being sent.
+            let sending = request.send();
+            let response = match renewing(sending, &[&lease, &host_lease]).await {
+                Ok(Ok(response)) => response,
+                Ok(Err(error)) => {
                     let is_timeout = error.is_timeout();
                     drop(lease);
                     drop(host_lease);
@@ -239,7 +276,7 @@ impl Network {
                         tokio::time::sleep(Duration::from_secs(2)).await;
                         continue;
                     }
-                    let failed = AppError::api(
+                    let mut failed = AppError::api(
                         if is_timeout {
                             "timeout"
                         } else {
@@ -247,12 +284,22 @@ impl Network {
                         },
                         502,
                     );
+                    if upload.as_ref().is_some_and(|(changed, _)| {
+                        changed.load(std::sync::atomic::Ordering::SeqCst)
+                    }) {
+                        failed = failed.with("reason", "file_changed");
+                    }
                     // A connection that never opened carried nothing.
                     return Err(if error.is_connect() {
                         not_sent(failed)
                     } else {
                         failed
                     });
+                }
+                Err(lost) => {
+                    drop(lease);
+                    drop(host_lease);
+                    return Err(lost);
                 }
             };
             let status = response.status().as_u16();
@@ -273,25 +320,83 @@ impl Network {
             } else {
                 Outcome::Done
             };
-            let mut too_large = response
-                .content_length()
-                .is_some_and(|length| length > input.limit as u64);
+            // A 2xx answer to a file read goes to disk when its headers say
+            // it is the file; anything else is read into memory as usual,
+            // so a refusal or a block is classified from what it says.
+            let header = |name: &str| {
+                headers
+                    .iter()
+                    .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                    .map(|(_, value)| value.as_str())
+                    .unwrap_or_default()
+            };
+            let content_length = response.content_length();
+            let mut refused = None;
+            if let Some(download) = &input.download
+                && (200..300).contains(&status)
+            {
+                refused = Some(files::refusal(
+                    download,
+                    status,
+                    header("content-type"),
+                    header("content-disposition"),
+                    header("content-range"),
+                    content_length,
+                ));
+            }
+            let mut file = None;
+            let mut too_large = false;
             let mut bytes = Vec::new();
-            if !too_large {
-                let mut stream = response.bytes_stream();
-                while let Some(chunk) = stream.next().await {
-                    let chunk = chunk.map_err(|_| AppError::api("request_failed", 502))?;
-                    if bytes.len() + chunk.len() > input.limit {
-                        too_large = true;
-                        break;
+            let mut failed = None;
+            match (&input.download, refused) {
+                (Some(download), Some(None)) => {
+                    let (content_type, disposition) = (
+                        header("content-type").to_owned(),
+                        header("content-disposition").to_owned(),
+                    );
+                    let stream = response.bytes_stream();
+                    match files::receive(
+                        download,
+                        target.as_str(),
+                        &content_type,
+                        &disposition,
+                        content_length,
+                        stream,
+                        &[&lease, &host_lease],
+                    )
+                    .await
+                    {
+                        Ok((saved, sniff)) => {
+                            bytes = sniff;
+                            file = Some(saved);
+                        }
+                        Err(error) => failed = Some(error),
                     }
-                    bytes.extend_from_slice(&chunk);
+                }
+                _ => {
+                    too_large = content_length.is_some_and(|length| length > input.limit as u64);
+                    if !too_large {
+                        let mut stream = response.bytes_stream();
+                        while let Some(chunk) = stream.next().await {
+                            let chunk = chunk.map_err(|_| AppError::api("request_failed", 502))?;
+                            if bytes.len() + chunk.len() > input.limit {
+                                too_large = true;
+                                break;
+                            }
+                            bytes.extend_from_slice(&chunk);
+                        }
+                    }
                 }
             }
             if too_large {
                 lease.release(host_outcome).await?;
                 host_lease.release(host_outcome).await?;
                 return Err(AppError::api("too_large", 413));
+            }
+            if let Some(error) = failed {
+                lease.release(host_outcome).await?;
+                host_lease.release(host_outcome).await?;
+                return Err(error);
             }
             let (defense, _) = defend::classify(&defend::Observation {
                 status_code: status,
@@ -363,6 +468,27 @@ impl Network {
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             }
+            // The site answered as if it had the file but did not send one
+            // (a page, a part, a type the read does not take): the read
+            // fails by that name. A block or refusal above says more.
+            if let Some(Some(why)) = refused
+                && defense == defend::Class::None
+            {
+                return Err(AppError::api(why, 502).with("upstream_status", status));
+            }
+            // A change answered before its file was all sent: the site has
+            // the answer, itda does not know what it did with the file.
+            if let Some((_, complete)) = &upload
+                && !complete.load(std::sync::atomic::Ordering::SeqCst)
+                && (200..300).contains(&status)
+            {
+                return Err(
+                    AppError::api("request_failed", 502).with("reason", "upload_incomplete")
+                );
+            }
+            if file.is_some() {
+                bytes = Vec::new();
+            }
             return Ok(Response {
                 url: target.to_string(),
                 status,
@@ -370,7 +496,28 @@ impl Network {
                 bytes,
                 duration_ms: start.elapsed().as_millis() as i64,
                 defense: defense.as_str().into(),
+                file,
             });
+        }
+    }
+}
+
+/// Drive `sending` to its end, renewing both leases every
+/// [`files::RENEW_EVERY`] so a long upload keeps the site's turn. A lost
+/// turn ends the wait with `request_lease_lost`.
+async fn renewing<T>(sending: impl Future<Output = T>, leases: &[&Lease<'_>]) -> AppResult<T> {
+    let mut ticks = tokio::time::interval(files::RENEW_EVERY);
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    ticks.tick().await;
+    tokio::pin!(sending);
+    loop {
+        tokio::select! {
+            done = &mut sending => return Ok(done),
+            _ = ticks.tick() => {
+                for lease in leases {
+                    lease.renew().await?;
+                }
+            }
         }
     }
 }

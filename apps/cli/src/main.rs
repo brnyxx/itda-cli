@@ -713,13 +713,15 @@ struct Parts {
 
 impl Parts {
     /// Reads run directly; changes wait for the user's approval. Everything
-    /// is recorded in the audit log, and reads that turn pages keep their
-    /// markers in the local database.
-    fn runtime(self) -> Runtime {
+    /// is recorded in the audit log, reads that turn pages keep their
+    /// markers in the local database, and reads that save files put them
+    /// under `files/<site>/` in the data directory.
+    fn runtime(self, home: &Path) -> Runtime {
         Runtime::new(self.net, self.vault)
             .with_approvals(self.approvals)
             .with_pagination(self.cursors)
             .with_audit(self.audit)
+            .with_files(home.join("files"))
     }
 
     /// The same parts, with a runtime built on them, for the setup steps.
@@ -732,7 +734,7 @@ impl Parts {
         );
         itda_setup::Context {
             home: home.to_path_buf(),
-            runtime: Arc::new(self.runtime()),
+            runtime: Arc::new(self.runtime(home)),
             net,
             vault,
             approvals,
@@ -870,6 +872,24 @@ fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
                 &[("command", &example_command(&spec.site.name, op))]
             )
         );
+        if let Some(response) = op.response.as_ref().filter(|r| r.is_file()) {
+            println!(
+                "         {}",
+                text::tf(
+                    "returns_file",
+                    &[
+                        ("types", &response.media_types.join(", ")),
+                        (
+                            "dir",
+                            &home.join("files").join(&spec.site.name).to_string_lossy()
+                        ),
+                    ]
+                )
+            );
+        }
+        if let Some(input) = op.file_input() {
+            println!("         {}", text::tf("sends_file", &[("input", input)]));
+        }
         if effect != itda_policy::Effect::Read {
             println!("         {}", text::t("approve_note"));
         }
@@ -878,7 +898,7 @@ fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
 }
 
 fn describe_json(spec: &Spec, op: &Operation) -> Value {
-    json!({
+    let mut row = json!({
         "site": spec.site.name,
         "action": op.name,
         "effect": operation_effect(op, &BTreeMap::new()).as_str(),
@@ -890,7 +910,14 @@ fn describe_json(spec: &Spec, op: &Operation) -> Value {
             "default": default,
         })).collect::<Vec<_>>(),
         "example": example_command(&spec.site.name, op),
-    })
+    });
+    if let Some(response) = op.response.as_ref().filter(|r| r.is_file()) {
+        row["returns"] = json!({
+            "file": {"path": "string", "bytes": "integer", "media_type": "string", "sha256": "string"},
+            "media_types": response.media_types,
+        });
+    }
+    row
 }
 
 /// The inputs an agent may give: name, type, whether the action cannot run
@@ -931,14 +958,16 @@ struct CallFlags {
     account: Option<String>,
     approval: Option<String>,
     next: Option<String>,
+    out: Option<PathBuf>,
     as_json: bool,
 }
 
 /// `--name value` or `--name=value` inputs, plus `--account`, `--approval`,
-/// `--next` and `--json`.
+/// `--next`, `--out` (where a file read saves its answer) and `--json`.
 fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
     let mut args = BTreeMap::new();
-    let (mut account, mut approval, mut next, mut as_json) = (None, None, None, false);
+    let (mut account, mut approval, mut next, mut out, mut as_json) =
+        (None, None, None, None, false);
     let mut words = rest.into_iter();
     while let Some(word) = words.next() {
         let Some(flag) = word.strip_prefix("--") else {
@@ -967,6 +996,7 @@ fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
             "account" => account = Some(value),
             "approval" => approval = Some(value),
             "next" => next = Some(value),
+            "out" => out = Some(PathBuf::from(value)),
             _ => {
                 args.insert(name, value);
             }
@@ -977,6 +1007,7 @@ fn parse_call(rest: Vec<String>) -> AppResult<CallFlags> {
         account,
         approval,
         next,
+        out,
         as_json,
     })
 }
@@ -993,11 +1024,13 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
         account,
         approval,
         next,
+        out,
         as_json,
     } = parse_call(rest)?;
     let spec = sites::load(home, site)?;
+    let saves_file = spec.op(action).is_ok_and(Operation::saves_file);
     let envelope = open(home)?
-        .runtime()
+        .runtime(home)
         .call(
             &spec,
             Call {
@@ -1007,9 +1040,32 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
                 approval,
                 next,
                 discovery: false,
+                out,
             },
         )
         .await?;
+    if saves_file && let Some(path) = envelope.data.get("path").and_then(Value::as_str) {
+        eprintln!(
+            "{}",
+            text::tf(
+                "saved_file",
+                &[
+                    ("path", path),
+                    (
+                        "bytes",
+                        &envelope.data["bytes"]
+                            .as_u64()
+                            .unwrap_or_default()
+                            .to_string()
+                    ),
+                    (
+                        "sha256",
+                        envelope.data["sha256"].as_str().unwrap_or_default()
+                    ),
+                ]
+            )
+        );
+    }
     if as_json {
         let mut value = serde_json::to_value(&envelope)?;
         if let Value::Object(object) = &mut value {
@@ -1041,7 +1097,7 @@ async fn check(
             .filter_map(|site| site.spec.ok())
             .collect(),
     };
-    let outcomes = check::run(&open(home)?.runtime(), &specs, account).await;
+    let outcomes = check::run(&open(home)?.runtime(home), &specs, account).await;
     let verdicts = check::verdicts(&outcomes);
     check::remember(home, &verdicts)?;
     let status = check::exit_status(&outcomes);

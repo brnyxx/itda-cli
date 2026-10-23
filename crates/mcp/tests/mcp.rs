@@ -1380,3 +1380,106 @@ async fn on_2026_07_28_a_confirmation_is_the_result_and_the_answer_comes_on_the_
     assert!(!home.join("specs/fixture").exists());
     std::fs::remove_dir_all(home).ok();
 }
+
+/// A site with an attachment to download and a form that takes a file.
+async fn file_site() -> String {
+    let router = Router::new().route(
+        "/files/{id}",
+        get(|| async {
+            (
+                [
+                    (axum::http::header::CONTENT_TYPE, "application/pdf"),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"minutes.pdf\"",
+                    ),
+                ],
+                "%PDF-1.4 minutes",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    base
+}
+
+fn file_spec(base: &str) -> itda_spec::Spec {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "board", "title": "Board", "base_url": base},
+        "operations": [
+            {"name": "get-attachment", "desc": "Download an attachment", "method": "GET", "path": "/files/{id}", "effect": "read", "evidence": "doc",
+             "params": {"id": {"type": "int"}},
+             "response": {"format": "file", "media_types": ["application/pdf"]}},
+            {"name": "upload-file", "desc": "Attach a file", "method": "POST", "path": "/upload", "effect": "write", "evidence": "doc",
+             "body": {"multipart": {"fields": {"title": {"type": "string"}}, "file": {"name": "upload", "from": "attachment"}}}}
+        ]
+    });
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn a_file_read_says_so_in_its_tool_and_links_the_saved_file() {
+    let base = file_site().await;
+    let files = std::env::temp_dir().join(format!("itda-mcp-files-{}", itda_types::util::id()));
+    let store = Store::in_memory().unwrap();
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let runtime = Runtime::new(Arc::new(Network::new(gate, true)), vault).with_files(&files);
+    let server = Server::new(
+        Arc::new(runtime),
+        Catalog::new(vec![file_spec(&base)]),
+        None,
+    );
+    let mut client = Client::start(server).await;
+
+    let tools = client.request("tools/list", json!({})).await;
+    let tools = tools["tools"].as_array().unwrap();
+    let download = tools
+        .iter()
+        .find(|t| t["name"] == "board.get-attachment")
+        .unwrap();
+    let description = download["description"].as_str().unwrap();
+    assert!(
+        description.contains("{path, bytes, media_type, sha256}"),
+        "{description}"
+    );
+    assert!(description.contains("never its contents"), "{description}");
+    let upload = tools
+        .iter()
+        .find(|t| t["name"] == "board.upload-file")
+        .unwrap();
+    let attachment = &upload["inputSchema"]["properties"]["attachment"];
+    assert_eq!(attachment["type"], "string");
+    assert!(
+        attachment["description"]
+            .as_str()
+            .unwrap()
+            .contains("path of a file on this computer")
+    );
+    assert_eq!(upload["inputSchema"]["required"], json!(["attachment"]));
+
+    let result = client.call("board.get-attachment", json!({"id": 7})).await;
+    assert_eq!(result["isError"], false, "{result}");
+    let data = &result["structuredContent"]["data"];
+    let path = data["path"].as_str().unwrap().to_owned();
+    assert!(path.ends_with("minutes.pdf"), "{path}");
+    assert_eq!(data["bytes"], 16);
+    assert_eq!(data["sha256"], itda_types::util::hash(b"%PDF-1.4 minutes"));
+    let link = result["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|block| block["type"] == "resource_link")
+        .unwrap();
+    assert!(
+        link["uri"].as_str().unwrap().starts_with("file://"),
+        "{link}"
+    );
+    assert_eq!(link["name"], "minutes.pdf");
+    assert_eq!(link["mimeType"], "application/pdf");
+    assert_eq!(link["size"], 16);
+    assert!(!result.to_string().contains("%PDF-1.4"));
+    std::fs::remove_dir_all(&files).ok();
+}

@@ -110,6 +110,11 @@ se deparou; `itda draft page` ou `itda record` dizem o que deixaram de fora.
 - Sites que rodam GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki,
   WordPress, Gitea ou Forgejo: a própria API deles, a partir de um modelo
   pronto.
+- Arquivos para dentro e para fora: um link que a página marca como anexo vira
+  uma leitura que salva o arquivo no seu computador e retorna seu caminho,
+  tamanho e hash, nunca os bytes. Um formulário com um campo de arquivo vira
+  uma alteração que envia um arquivo que você indica; você o aprova pelo nome,
+  tamanho e hash.
 - Qualquer coisa que você gravou usando, no seu navegador ou como arquivo HAR.
 
 **Funciona depois de gravar**

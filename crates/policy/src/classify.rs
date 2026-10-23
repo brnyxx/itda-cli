@@ -95,6 +95,11 @@ const INTENT_KEYS: [&str; 6] = ["action", "operation", "op", "method", "command"
 
 pub fn operation_effect(op: &Operation, args: &BTreeMap<String, String>) -> Effect {
     let method = op.method.to_ascii_uppercase();
+    // A body that carries a file puts something on the site, whatever the
+    // method says.
+    if op.file_input().is_some() {
+        return Effect::Write;
+    }
     if dangerous_intent(&op.path) || dangerous_intent(&op.name) {
         return Effect::Write;
     }

@@ -63,6 +63,7 @@ window.ITDA_I18N["zh-Hant"] = {
   "scope.y5b": "由頁框組成的頁面，即使個別頁框需要另外登入也能使用",
   "scope.y6": "網站公開的 OpenAPI 說明或 GraphQL 端點",
   "scope.y7": "GitLab、Jira、Confluence、Redmine、Discourse、MediaWiki、WordPress、Gitea",
+  "scope.y8b": "附件：下載儲存到你的電腦，傳送的是你指定的檔案，在你按雜湊核准之後",
   "scope.y8": "任何你自己錄製過使用過程的東西",
   "scope.rec": "錄製後能用",
   "scope.r1": "直接擷取時沒有內容，也不會自動載入內容的頁面。這類頁面只有在你點擊、搜尋或登入後才會擷取資料",

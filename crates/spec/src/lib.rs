@@ -13,7 +13,7 @@ mod validate;
 mod verify;
 
 pub use model::*;
-pub use request::{FormEncoder, interpolate_template_str, render_json_template};
+pub use request::{FormEncoder, MultipartParts, interpolate_template_str, render_json_template};
 
 /// What running an operation does to the website. `Unknown` is treated like a write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

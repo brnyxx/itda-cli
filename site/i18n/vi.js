@@ -63,6 +63,7 @@ window.ITDA_I18N["vi"] = {
   "scope.y5b": "Trang dựng từ các frame, kể cả khi một frame đòi đăng nhập riêng",
   "scope.y6": "Mô tả OpenAPI hoặc endpoint GraphQL mà trang web công bố",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "Tệp đính kèm: tải xuống được lưu trên máy của bạn, tệp bạn chỉ định được gửi sau khi bạn phê duyệt theo hash",
   "scope.y8": "Bất cứ gì bạn tự ghi lại khi dùng",
   "scope.rec": "chạy được sau khi bạn ghi lại",
   "scope.r1": "Trang không hiện gì khi tải thẳng và không tự tải gì. Nó chỉ tải sau khi bạn bấm, tìm kiếm hoặc đăng nhập",

@@ -98,6 +98,61 @@ pub fn read_bounded(path: &Path, limit: usize) -> AppResult<Vec<u8>> {
     }
     Ok(result)
 }
+/// The size and SHA-256 of a regular file, read in bounded chunks. A path
+/// that is not a regular file (a directory, a pipe, a device) is refused.
+pub fn file_digest(path: &Path) -> AppResult<(u64, String)> {
+    use std::io::Read;
+    let mut file = fs::File::open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(AppError::api("data_invalid", 400));
+    }
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 64 * 1024];
+    let mut bytes = 0u64;
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        bytes += read as u64;
+    }
+    let digest = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    Ok((bytes, digest))
+}
+/// The media type a file name's extension says; a stream of bytes when
+/// the extension says nothing itda knows.
+pub fn media_type_of(name: &str) -> &'static str {
+    let extension = name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    match extension.as_str() {
+        "pdf" => "application/pdf",
+        "zip" => "application/zip",
+        "json" => "application/json",
+        "xml" => "application/xml",
+        "csv" => "text/csv",
+        "txt" | "md" | "log" => "text/plain",
+        "html" | "htm" => "text/html",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "xls" => "application/vnd.ms-excel",
+        "doc" => "application/msword",
+        "hwp" => "application/x-hwp",
+        _ => "application/octet-stream",
+    }
+}
 pub fn plain(value: &serde_json::Value) -> String {
     value
         .as_str()

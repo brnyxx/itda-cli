@@ -125,6 +125,12 @@ struct Call {
     json: Fields,
     form: Fields,
     multipart: bool,
+    /// Text parts of a multipart body, and the name of the part that
+    /// carried a file.
+    parts: Fields,
+    file_part: Option<String>,
+    /// The media types of answers the site sent as attachments.
+    attachments: BTreeSet<String>,
     left_out: BTreeSet<String>,
     /// Top-level response fields present in every JSON sample.
     response_keys: Option<BTreeSet<String>>,
@@ -381,6 +387,9 @@ fn parts_at(
             None => sent,
         });
         record_response(call, &entry["response"]["content"]);
+        if let Some(media) = attachment_answer(entry) {
+            call.attachments.insert(media);
+        }
     }
     if !elsewhere.is_empty() {
         notes.push(format!(
@@ -462,9 +471,9 @@ fn parts_at(
             ));
             continue;
         }
-        if call.multipart {
+        if call.multipart && call.file_part.is_none() && call.parts.0.is_empty() {
             notes.push(format!(
-                "{label}: skipped; drafts do not cover file uploads yet."
+                "{label}: skipped; the recording keeps no field names for this upload. Add body: {{multipart: {{file: {{name: <field>, from: file}}}}}} by hand."
             ));
             continue;
         }
@@ -744,10 +753,44 @@ fn parts_at(
                 body.insert("form".into(), Yaml::Mapping(form));
             }
         }
+        if call.multipart {
+            let mut multipart = Mapping::new();
+            let fields = call.parts.yaml(call.samples);
+            if !fields.is_empty() {
+                multipart.insert("fields".into(), Yaml::Mapping(fields));
+            }
+            if let Some(part) = &call.file_part {
+                let mut from = Some(slug(part))
+                    .filter(|from| !from.is_empty() && !secret_field(from))
+                    .unwrap_or_else(|| "file".into());
+                if call.parts.0.contains_key(&from) {
+                    from = format!("{from}-file");
+                }
+                let mut file = Mapping::new();
+                file.insert("name".into(), part.clone().into());
+                file.insert("from".into(), from.clone().into());
+                multipart.insert("file".into(), Yaml::Mapping(file));
+                notes.push(format!(
+                    "{label}: sends a file. The agent gives its path in {from}; you approve the file by name, size and hash."
+                ));
+            }
+            body.insert("multipart".into(), Yaml::Mapping(multipart));
+        }
         if !body.is_empty() {
             entry.insert("body".into(), Yaml::Mapping(body));
         }
-        if call.response_json {
+        if read && !call.attachments.is_empty() {
+            let mut response = Mapping::new();
+            response.insert("format".into(), "file".into());
+            response.insert(
+                "media_types".into(),
+                Yaml::Sequence(call.attachments.iter().cloned().map(Yaml::from).collect()),
+            );
+            entry.insert("response".into(), Yaml::Mapping(response));
+            notes.push(format!(
+                "{label}: the site sent it as an attachment; the read saves it as a file."
+            ));
+        } else if call.response_json {
             let mut response = Mapping::new();
             response.insert("format".into(), "json".into());
             let pointers: Vec<Yaml> = call
@@ -1209,6 +1252,41 @@ fn redact_json(value: &mut Value) {
 
 /// A page the person saw: a successful `GET` whose answer was HTML with
 /// its text recorded.
+/// The media type of an answer the site marked `Content-Disposition:
+/// attachment`, for a successful GET; `None` for every other answer.
+fn attachment_answer(entry: &Value) -> Option<String> {
+    if entry["request"]["method"].as_str() != Some("GET")
+        || !entry["response"]["status"]
+            .as_u64()
+            .is_some_and(|s| (200..300).contains(&s))
+    {
+        return None;
+    }
+    let attachment = entry["response"]["headers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|header| {
+            header["name"]
+                .as_str()
+                .is_some_and(|n| n.eq_ignore_ascii_case("content-disposition"))
+                && header["value"]
+                    .as_str()
+                    .and_then(|v| v.split(';').next())
+                    .is_some_and(|v| v.trim().eq_ignore_ascii_case("attachment"))
+        });
+    if !attachment {
+        return None;
+    }
+    let media = entry["response"]["content"]["mimeType"]
+        .as_str()
+        .and_then(|m| m.split(';').next())
+        .map(|m| m.trim().to_ascii_lowercase())
+        .filter(|m| m.contains('/'))
+        .unwrap_or_else(|| "application/octet-stream".into());
+    Some(media)
+}
+
 pub(crate) fn html_page(entry: &Value) -> bool {
     let content = &entry["response"]["content"];
     entry["request"]["method"].as_str() == Some("GET")
@@ -1343,7 +1421,10 @@ fn api_call(entry: &Value) -> bool {
         .is_some_and(|m| m.contains("json"));
     let method = entry["request"]["method"].as_str().unwrap_or("GET");
     match status {
-        200..=299 => json || !matches!(method, "GET" | "HEAD" | "OPTIONS"),
+        200..=299 => {
+            json || !matches!(method, "GET" | "HEAD" | "OPTIONS")
+                || attachment_answer(entry).is_some()
+        }
         300..=399 => !matches!(method, "GET" | "HEAD" | "OPTIONS"),
         _ => false,
     }
@@ -1365,6 +1446,26 @@ fn record_body(call: &mut Call, post: &Value) {
     let text = post["text"].as_str().unwrap_or_default();
     if mime.contains("multipart") {
         call.multipart = true;
+        // A recording keeps the parts' names, and a file part's file name,
+        // never the file; a part without a name says nothing.
+        for part in post["params"].as_array().into_iter().flatten() {
+            let Some(name) = part["name"].as_str().filter(|n| !n.is_empty()) else {
+                continue;
+            };
+            if part["fileName"].is_string() {
+                call.file_part.get_or_insert_with(|| name.to_owned());
+            } else {
+                if secret_field(name) {
+                    call.form_tokens.insert(name.to_owned());
+                }
+                add_input(
+                    &mut call.parts,
+                    &mut call.left_out,
+                    name,
+                    Kind::of_text(part["value"].as_str().unwrap_or_default()),
+                );
+            }
+        }
     } else if mime.contains("json") {
         if let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(text) {
             if let Some(graphql) = &mut call.graphql {

@@ -63,6 +63,7 @@ window.ITDA_I18N["de"] = {
   "scope.y5b": "Seiten aus Frames, auch wenn ein Frame seine eigene Anmeldung verlangt",
   "scope.y6": "Eine OpenAPI-Beschreibung oder ein GraphQL-Endpunkt, den die Site veröffentlicht",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "Anhänge: ein Download, gespeichert auf Ihrem Computer; eine von Ihnen benannte Datei, gesendet, nachdem Sie sie per Hash freigegeben haben",
   "scope.y8": "Alles, was Sie selbst beim Benutzen aufgezeichnet haben",
   "scope.rec": "funktioniert nach dem Aufzeichnen",
   "scope.r1": "Eine Seite, die bei einem einfachen Abruf nichts zeigt und nichts von selbst lädt. Sie holt erst etwas, nachdem Sie klicken, suchen oder sich anmelden",

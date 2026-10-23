@@ -497,6 +497,7 @@ mod tests {
             bytes: Vec::new(),
             duration_ms: 1,
             defense: "none".into(),
+            file: None,
         };
         let action = url::Url::parse("https://site.example/login").unwrap();
         let query = session_in_redirect(&action, &answer);
@@ -540,6 +541,7 @@ mod tests {
             bytes: Vec::new(),
             duration_ms: 1,
             defense: "none".into(),
+            file: None,
         }
     }
 

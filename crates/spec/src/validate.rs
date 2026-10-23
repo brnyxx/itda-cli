@@ -221,13 +221,44 @@ impl Spec {
                     *counts.entry(k).or_default() += 1;
                 }
                 if let Some(b) = &op.body {
-                    if (!b.json.is_empty() || b.json_template.is_some()) && !b.form.is_empty() {
+                    let encodings = [
+                        !b.json.is_empty() || b.json_template.is_some(),
+                        !b.form.is_empty(),
+                        b.multipart.is_some(),
+                    ];
+                    if encodings.iter().filter(|used| **used).count() > 1 {
                         add(
                             &mut out,
                             &format!("{id}.body"),
                             "Choose one body encoding".into(),
-                            "Use body.json/json_template or body.form, not both.",
+                            "Use body.json/json_template, body.form or body.multipart, not two.",
                         );
+                    }
+                    if let Some(file) = b.multipart.as_ref().and_then(|m| m.file.as_ref()) {
+                        let plain = |name: &str| {
+                            !name.is_empty()
+                                && name.len() <= 80
+                                && !name.contains(['\r', '\n', '"', '\\', ';'])
+                        };
+                        if !plain(&file.name) || !plain(&file.from) {
+                            add(
+                                &mut out,
+                                &format!("{id}.body.multipart.file"),
+                                "must name the form field (name) and the input the path comes in (from)".into(),
+                                "Example: file: {name: upload, from: attachment}",
+                            );
+                        }
+                        if b.multipart
+                            .as_ref()
+                            .is_some_and(|m| m.fields.contains_key(&file.from))
+                        {
+                            add(
+                                &mut out,
+                                &format!("{id}.body.multipart.file.from"),
+                                format!("{} is also a text field", file.from),
+                                "Give the file input its own name",
+                            );
+                        }
                     }
                     for (k, _) in b.inputs() {
                         *counts.entry(k).or_default() += 1;
@@ -269,6 +300,13 @@ impl Spec {
                 if let Some(b) = &op.body {
                     check(&format!("{id}.body.json"), &b.json, &mut out);
                     check(&format!("{id}.body.form"), &b.form, &mut out);
+                    if let Some(multipart) = &b.multipart {
+                        check(
+                            &format!("{id}.body.multipart.fields"),
+                            &multipart.fields,
+                            &mut out,
+                        );
+                    }
                 }
             }
         }

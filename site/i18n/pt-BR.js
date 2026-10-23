@@ -63,6 +63,7 @@ window.ITDA_I18N["pt-BR"] = {
   "scope.y5b": "Páginas feitas de frames, mesmo quando um frame pede seu próprio login",
   "scope.y6": "Uma descrição OpenAPI ou um endpoint GraphQL que o site publica",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "Anexos: um download salvo no seu computador, um arquivo que você indica enviado depois que você o aprova pelo hash",
   "scope.y8": "Qualquer coisa que você gravou usando",
   "scope.rec": "funciona depois de gravar",
   "scope.r1": "Uma página que não mostra nada numa busca simples e não carrega nada sozinha. Só busca dados depois que você clica, pesquisa ou entra",

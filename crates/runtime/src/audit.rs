@@ -37,6 +37,8 @@ pub struct Event {
     /// `landed`, `not_found` or `unknown`, and the read's name.
     pub outcome_check: String,
     pub confirm_read: String,
+    /// The SHA-256 of the file a change sent, when it sent one.
+    pub file_sha256: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -68,6 +70,10 @@ pub struct Record {
     pub outcome_check: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub confirm_read: String,
+    /// The SHA-256 of the file a change sent. Records without one keep
+    /// their shape, so a log written before this field verifies as before.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub file_sha256: String,
     pub prev: String,
     pub hash: String,
 }
@@ -128,6 +134,7 @@ impl AuditLog {
             http_status: event.http_status,
             outcome_check: event.outcome_check,
             confirm_read: event.confirm_read,
+            file_sha256: event.file_sha256,
             prev: last.map(|r| r.hash).unwrap_or_default(),
             hash: String::new(),
         };

@@ -63,6 +63,7 @@ window.ITDA_I18N["id"] = {
   "scope.y5b": "Halaman yang dibangun dari frame, bahkan saat sebuah frame minta masuk sendiri",
   "scope.y6": "Deskripsi OpenAPI atau endpoint GraphQL yang diterbitkan situs",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",
+  "scope.y8b": "Lampiran: unduhan disimpan di komputer Anda, file yang Anda tunjuk dikirim setelah Anda menyetujuinya berdasarkan hash",
   "scope.y8": "Apa pun yang Anda rekam sendiri saat memakainya",
   "scope.rec": "berfungsi setelah Anda rekam",
   "scope.r1": "Halaman yang tidak menampilkan apa pun pada pengambilan biasa dan tidak memuat apa pun dengan sendirinya. Ia baru mengambil data setelah Anda klik, cari, atau masuk",

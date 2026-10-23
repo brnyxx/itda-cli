@@ -35,6 +35,7 @@ pub(crate) fn binding(
             .collect(),
         spec_hash: util::hash(&serde_json::to_vec(spec)?),
         credential_hash: credential_hash.to_owned(),
+        file_hash: String::new(),
     }
     .digest()
 }

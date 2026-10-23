@@ -139,6 +139,17 @@ fn remedy(public_code: &str) -> &'static str {
         "request_failed" | "timeout" => {
             "Check the website and your connection, then retry the read."
         }
+        "wrong_media_type" => {
+            "The website answered with another kind of content than the file this read expects, so nothing was saved. Check the inputs; the site may be showing a page instead of the file."
+        }
+        "partial_answer" => {
+            "The website sent only part of the file, so nothing was saved. Retry the read."
+        }
+        "empty_answer" => "The website sent an empty file, so nothing was saved.",
+        "too_large" => "The answer is larger than this read accepts; nothing was saved.",
+        "request_lease_lost" => {
+            "itda lost its turn on the site during a long transfer and stopped it. Retry the read."
+        }
         _ => "",
     }
 }

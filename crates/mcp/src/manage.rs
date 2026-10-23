@@ -713,13 +713,17 @@ fn actions(spec: &Spec) -> Vec<Value> {
                 .map(String::as_str)
                 .filter(|n| !matches!(*n, "query" | "operationName"))
                 .collect();
-            json!({
+            let mut action = json!({
                 "tool": format!("{}.{}", spec.site.name, op.name),
                 "action": op.name,
                 "effect": operation_effect(op, &BTreeMap::new()).as_str(),
                 "description": op.desc,
                 "inputs": inputs,
-            })
+            });
+            if op.saves_file() {
+                action["returns"] = json!({"file": {"path": "string", "bytes": "integer", "media_type": "string", "sha256": "string"}});
+            }
+            action
         })
         .collect()
 }

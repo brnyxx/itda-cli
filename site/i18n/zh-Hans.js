@@ -63,6 +63,7 @@ window.ITDA_I18N["zh-Hans"] = {
   "scope.y5b": "由框架组成的页面，即使其中的框架需要单独登录也支持",
   "scope.y6": "站点公开的 OpenAPI 说明或 GraphQL 端点",
   "scope.y7": "GitLab、Jira、Confluence、Redmine、Discourse、MediaWiki、WordPress、Gitea",
+  "scope.y8b": "附件：下载保存到你的电脑，发送的是你指定的文件，在你按哈希批准之后",
   "scope.y8": "任何你自己录制过使用过程的东西",
   "scope.rec": "录制后能用",
   "scope.r1": "直接抓取无法获得内容、也不会自动加载内容的页面。只有在你点击、搜索或登录后，页面才会获取内容",

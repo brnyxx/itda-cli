@@ -38,6 +38,40 @@ change the definition format or the CLI.
   evidence says so. The lab gets `lossy` (8089), the scripted portal whose
   post is saved and then the line drops, and every reviewed lab definition
   names its confirming read.
+- Files out: a read may declare `response: {format: file, media_types: [...],
+  max_bytes: N, allow_empty: false}`. itda streams the answer to a file under
+  `files/<site>/` in the data directory (or `itda call ... --out <dir>`),
+  seals it at the end, and returns a manifest `{path, bytes, media_type,
+  sha256}`, never the bytes; over MCP the result adds a `resource_link` to
+  the file and the tool's description says what comes back. The content type
+  must be one of `media_types` (an HTML answer only as an attachment), and a
+  206 or `Content-Range`, a body shorter than its `Content-Length`, an empty
+  body or one over the cap fail by name (`wrong_media_type`, `partial_answer`,
+  `empty_answer`, `too_large`) and leave nothing on disk. File names come
+  from the site's `Content-Disposition` or the address, reduced to plain
+  characters, and never replace a file already there. `itda check` skips file
+  reads. A transfer longer than the gate's turn renews it (`Lease::renew`)
+  every 30 seconds; a lost turn stops the transfer (`request_lease_lost`).
+- Files in: a change may declare `body: {multipart: {fields: {...}, file:
+  {name, from}}}`. The agent gives the path of a file on this computer in the
+  `from` input; the approval shows the file's name, size and SHA-256 and is
+  bound to that hash, so other bytes under the same path withdraw it
+  (`approval_expired`, `reason: file_changed`). The file is streamed from one
+  open handle in 64 KiB chunks with `Content-Length` set, its size and
+  modification time checked before every chunk and its hash at the end; a
+  file that changes mid-send aborts the send (`action_outcome_unknown`,
+  `reason: file_changed`). The audit log records the hash. A body with a file
+  is always a change and goes only to the site's own origin.
+- Drafts: a page form with `enctype=multipart/form-data` and a file control
+  becomes such a change (`Upload a file to <page>`), and links the page
+  labels as attachments (a `download` attribute, download or attachment
+  words in English or Korean, or an icon named for one) become file reads
+  grouped by shape (`download-file` with a `file_id` input), with
+  `media_types` from the kinds the links name or the usual document types.
+  `itda draft har` and `itda record` draft a recorded multipart post from its
+  part names and a recorded `Content-Disposition: attachment` answer as a file
+  read. `itda describe` says what a file read returns and where it lands, and
+  which input a change sends as a file.
 
 - Storage sessions: a site that keeps no session cookie and instead holds a
   token in the browser's `localStorage` (or `sessionStorage`) and sends it as

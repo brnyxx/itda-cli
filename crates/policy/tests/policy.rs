@@ -148,6 +148,7 @@ fn request(inputs: &[(&str, &str)]) -> ExecutionRequest {
             .collect(),
         spec_hash: "spec-hash".into(),
         credential_hash: "cred-hash".into(),
+        file_hash: String::new(),
     }
 }
 
@@ -834,4 +835,108 @@ fn bundled_reads_stay_reads_when_the_rendered_request_is_read() {
     }
     eprintln!("bundled definitions: {reads} reads stay reads, {changes} changes untouched");
     assert!(reads > 50, "{reads}");
+}
+
+#[test]
+fn a_body_that_carries_a_file_is_always_a_change() {
+    let sp = spec_from(
+        json!({"spec_version":1,"site":{"name":"fixture","base_url":"https://example.com"},"operations":[
+            {"name":"search-files","method":"GET","path":"/search","effect":"read","evidence":"doc",
+             "body":{"multipart":{"fields":{"title":{"type":"string"}},"file":{"name":"upload","from":"attachment"}}}}
+        ]}),
+    );
+    let op = &sp.operations[0];
+    assert_eq!(operation_effect(op, &BTreeMap::new()), Effect::Write);
+    let names: Vec<&str> = op
+        .body
+        .as_ref()
+        .unwrap()
+        .inputs()
+        .map(|(n, _)| n.as_str())
+        .collect();
+    assert_eq!(names, ["title", "attachment"]);
+    assert_eq!(op.file_input().map(String::as_str), Some("attachment"));
+}
+
+#[test]
+fn file_reads_and_uploads_are_checked_before_install() {
+    let base = json!({"spec_version":1,"site":{"name":"fixture","base_url":"https://example.com"},"operations":[
+        {"name":"get-attachment","method":"GET","path":"/files/{id}","effect":"read","evidence":"doc",
+         "params":{"id":{"type":"int"}},
+         "response":{"format":"file","media_types":["application/pdf"]}},
+        {"name":"upload-file","method":"POST","path":"/files","effect":"write","evidence":"doc",
+         "body":{"multipart":{"fields":{"title":{"type":"string"}},"file":{"name":"upload","from":"attachment"}}}}
+    ]});
+    validate_spec(&spec_from(base.clone())).unwrap();
+    let refused = |what: &str, f: &dyn Fn(&mut serde_json::Value), code: &str, field: &str| {
+        let mut value = base.clone();
+        f(&mut value);
+        let problems = spec_problems(&spec_from(value));
+        let found = problems.iter().find(|p| p.field == field);
+        assert!(found.is_some(), "{what}: {problems:?}");
+        assert_eq!(found.unwrap().code, code, "{what}");
+    };
+    refused(
+        "no media types",
+        &|v| v["operations"][0]["response"] = json!({"format": "file"}),
+        "data_invalid",
+        "operations.get-attachment.response.media_types",
+    );
+    refused(
+        "a model on a file",
+        &|v| {
+            v["models"] = json!({"m": {"id": {"type": "int"}}});
+            v["operations"][0]["model"] = json!("m");
+        },
+        "data_invalid",
+        "operations.get-attachment.response.format",
+    );
+    refused(
+        "pointers on a file",
+        &|v| v["operations"][0]["response"]["required_pointers"] = json!(["/a"]),
+        "data_invalid",
+        "operations.get-attachment.response",
+    );
+    refused(
+        "media types on a json read",
+        &|v| {
+            v["operations"][0]["response"] =
+                json!({"format": "json", "media_types": ["application/pdf"]})
+        },
+        "data_invalid",
+        "operations.get-attachment.response",
+    );
+    refused(
+        "a file from a change",
+        &|v| v["operations"][0]["method"] = json!("DELETE"),
+        "data_invalid",
+        "operations.get-attachment.response.format",
+    );
+    refused(
+        "a cap past what itda holds",
+        &|v| v["operations"][0]["response"]["max_bytes"] = json!(2_u64 * 1024 * 1024 * 1024),
+        "data_invalid",
+        "operations.get-attachment.response.max_bytes",
+    );
+    refused(
+        "a file to another origin",
+        &|v| v["operations"][1]["base_url"] = json!("https://uploads.example.com"),
+        "unsafe_target",
+        "operations.upload-file.body.multipart",
+    );
+    refused(
+        "a credential-named file input",
+        &|v| v["operations"][1]["body"]["multipart"]["file"]["from"] = json!("token"),
+        "data_invalid",
+        "operations.upload-file.body.multipart.file.from",
+    );
+    refused(
+        "a file input that is also a text field",
+        &|v| {
+            v["operations"][1]["body"]["multipart"]["fields"]["attachment"] =
+                json!({"type": "string"})
+        },
+        "data_invalid",
+        "operations.upload-file.body.multipart.file.from",
+    );
 }

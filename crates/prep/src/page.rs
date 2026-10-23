@@ -346,12 +346,6 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
                 });
                 continue;
             }
-            if form.multipart {
-                notes.push(format!(
-                    "{label}: skipped; drafts do not cover file uploads yet."
-                ));
-                continue;
-            }
             let Ok(action) = url::Url::parse(&form.action) else {
                 continue;
             };
@@ -385,6 +379,18 @@ pub(crate) fn page_parts(pages: &[Page], options: &Options) -> AppResult<Parts> 
                 ),
                 &mut notes,
             );
+        }
+        for entry in attachment_actions(
+            &evidence::attachment_links(&page.html, url.as_str()),
+            &url,
+            &prefix,
+            &origin,
+            &page_title,
+            &mut names,
+            &mut notes,
+            &lang,
+        ) {
+            push(entry, &mut notes);
         }
         for feed in evidence::feeds(&page.html, url.as_str()) {
             let Ok(feed_url) = url::Url::parse(&feed.url) else {
@@ -1835,6 +1841,7 @@ fn form_action(
     lang: &str,
 ) -> Mapping {
     let read = form.method == "GET";
+    let upload = !read && form.multipart && form.file.is_some();
     let searches = form.controls.iter().any(|c| {
         !c.hidden && matches!(c.name.as_str(), "q" | "query" | "search" | "keyword" | "kw")
     });
@@ -1865,6 +1872,8 @@ fn form_action(
         describe(
             &if read {
                 Label::Search { title: &subject }
+            } else if upload {
+                Label::Upload { title: &subject }
             } else {
                 Label::Submit { title: &subject }
             },
@@ -1966,12 +1975,224 @@ fn form_action(
         notes.push(format!(
             "{label}: no response check yet; run it once, then declare what the result page shows."
         ));
+    } else if form.multipart {
+        // The form sends its fields as parts; a file control becomes the
+        // file part, with an input of its own for the path.
+        let mut multipart = Mapping::new();
+        if !inputs.is_empty() {
+            multipart.insert("fields".into(), Yaml::Mapping(inputs.clone()));
+        }
+        if let Some(control) = &form.file {
+            let mut from = Some(slug(control))
+                .filter(|from| !from.is_empty() && !secret_field(from))
+                .unwrap_or_else(|| "file".into());
+            if inputs.contains_key(Yaml::String(from.clone())) {
+                from = format!("{from}-file");
+            }
+            let mut file = Mapping::new();
+            file.insert("name".into(), control.clone().into());
+            file.insert("from".into(), from.clone().into());
+            multipart.insert("file".into(), Yaml::Mapping(file));
+            notes.push(format!(
+                "{label}: sends a file. The agent gives its path in {from}; you approve the file by name, size and hash."
+            ));
+        }
+        if !multipart.is_empty() {
+            let mut body = Mapping::new();
+            body.insert("multipart".into(), Yaml::Mapping(multipart));
+            entry.insert("body".into(), Yaml::Mapping(body));
+        }
     } else if !inputs.is_empty() {
         let mut body = Mapping::new();
         body.insert("form".into(), Yaml::Mapping(inputs));
         entry.insert("body".into(), Yaml::Mapping(body));
     }
     entry
+}
+
+/// Media types a file read accepts when the links say nothing about the
+/// kind of file: the documents and images a board attaches.
+const DOCUMENT_TYPES: [&str; 12] = [
+    "application/pdf",
+    "application/zip",
+    "application/octet-stream",
+    "text/csv",
+    "text/plain",
+    "image/png",
+    "image/jpeg",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/x-hwp",
+    "application/msword",
+];
+
+/// The links a page labels as attachments, as file reads: links of one
+/// shape (`/files/{file_id}`, or one path with a varying query key) become
+/// one read with an input; a lone fixed link becomes a read of that file.
+#[allow(clippy::too_many_arguments)]
+fn attachment_actions(
+    links: &[evidence::Attachment],
+    page: &url::Url,
+    prefix: &str,
+    origin: &url::Origin,
+    page_title: &str,
+    names: &mut BTreeSet<String>,
+    notes: &mut Vec<String>,
+    lang: &str,
+) -> Vec<Mapping> {
+    // Grouped by path shape and the query keys the links carry.
+    struct Group {
+        path: String,
+        params: Vec<String>,
+        keys: Vec<String>,
+        urls: Vec<url::Url>,
+    }
+    let mut groups: Vec<Group> = Vec::new();
+    for link in links {
+        let Ok(url) = url::Url::parse(&link.url) else {
+            continue;
+        };
+        let Some(rest) = url
+            .path()
+            .strip_prefix(prefix)
+            .filter(|_| url.origin() == *origin)
+        else {
+            continue;
+        };
+        if !itda_policy::safe_read_url(&url) {
+            continue;
+        }
+        let (path, params) = template(rest);
+        let mut keys: Vec<String> = url.query_pairs().map(|(k, _)| k.into_owned()).collect();
+        keys.sort();
+        keys.dedup();
+        match groups
+            .iter_mut()
+            .find(|g| g.path == path && g.params == params && g.keys == keys)
+        {
+            Some(group) => group.urls.push(url),
+            None => groups.push(Group {
+                path,
+                params,
+                keys,
+                urls: vec![url],
+            }),
+        }
+    }
+    let subject = if page_title.is_empty() {
+        page.path().to_owned()
+    } else {
+        page_title.to_owned()
+    };
+    let mut out = Vec::new();
+    for Group {
+        path,
+        params,
+        keys,
+        urls,
+    } in groups
+    {
+        let leaf = path
+            .split('/')
+            .rev()
+            .find(|s| !s.is_empty() && !s.starts_with('{'))
+            .map(|s| singular(&slug(s.split('.').next().unwrap_or(s))))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "file".into());
+        let name = unique(names, &format!("download-{leaf}"));
+        let label = format!("GET {path}");
+        let mut entry = Mapping::new();
+        entry.insert("name".into(), name.into());
+        entry.insert(
+            "desc".into(),
+            describe(&Label::Attachment { title: &subject }, lang).into(),
+        );
+        entry.insert("method".into(), "GET".into());
+        entry.insert("path".into(), path.clone().into());
+        entry.insert("effect".into(), "read".into());
+        entry.insert(
+            "evidence".into(),
+            format!(
+                "{} links to {label} as an attachment ({} link{})",
+                page.path(),
+                urls.len(),
+                if urls.len() == 1 { "" } else { "s" }
+            )
+            .into(),
+        );
+        if !params.is_empty() {
+            entry.insert("params".into(), Yaml::Mapping(required_strings(&params)));
+        }
+        if !keys.is_empty() {
+            let mut query = Mapping::new();
+            for key in &keys {
+                let values: Vec<String> = urls
+                    .iter()
+                    .filter_map(|u| {
+                        u.query_pairs()
+                            .find(|(k, _)| k == key)
+                            .map(|(_, v)| v.into_owned())
+                    })
+                    .collect();
+                let mut field = Mapping::new();
+                let all_int =
+                    !values.is_empty() && values.iter().all(|v| Kind::of_text(v) == Kind::Int);
+                // One link cannot show which key varies: a number is taken
+                // as the record's id, anything else as a fixed value.
+                let varies =
+                    values.windows(2).any(|w| w[0] != w[1]) || (urls.len() == 1 && all_int);
+                field.insert("type".into(), if all_int { "int" } else { "string" }.into());
+                if varies {
+                    field.insert("required".into(), true.into());
+                } else if let Some(value) = values.first() {
+                    field.insert(
+                        "default".into(),
+                        if all_int {
+                            value
+                                .parse::<i64>()
+                                .map(Yaml::from)
+                                .unwrap_or(value.as_str().into())
+                        } else {
+                            value.as_str().into()
+                        },
+                    );
+                }
+                query.insert(key.clone().into(), Yaml::Mapping(field));
+            }
+            entry.insert("query".into(), Yaml::Mapping(query));
+        }
+        let mut types: Vec<String> = urls
+            .iter()
+            .filter_map(|u| u.path_segments()?.next_back().map(str::to_owned))
+            .map(|segment| itda_types::util::media_type_of(&segment).to_owned())
+            .filter(|media| *media != "application/octet-stream")
+            .collect();
+        types.sort();
+        types.dedup();
+        let broad = types.is_empty();
+        if broad {
+            types = DOCUMENT_TYPES.iter().map(|t| (*t).to_owned()).collect();
+        }
+        let mut response = Mapping::new();
+        response.insert("format".into(), "file".into());
+        response.insert(
+            "media_types".into(),
+            Yaml::Sequence(types.into_iter().map(Yaml::from).collect()),
+        );
+        entry.insert("response".into(), Yaml::Mapping(response));
+        notes.push(if broad {
+            format!(
+                "{label}: saves the attachment as a file. The links do not say what kind, so the read accepts common document types; narrow media_types after a run."
+            )
+        } else {
+            format!(
+                "{label}: saves the attachment as a file of the types the links name; add to media_types if the site sends others."
+            )
+        });
+        out.push(entry);
+    }
+    out
 }
 
 /// The embedded payload to read, the pointer to the list inside it when
