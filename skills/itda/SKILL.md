@@ -85,6 +85,8 @@ for a new definition. The last line per site is the verdict:
   their own browser.
 - `itda_manage` refreshes, removes or resumes a site after the user confirms
   in a form, and lists approvals and the audit log. It never approves a
-  change.
+  change. With `fsck` (`itda fsck <site>`) it lists what was never tried, what
+  needs an input and which read gives it, and what fails now and then, each
+  with a remedy. `itda_shape` shows a page's or an answer's shape, never values.
 - Problem with itda: `itda feedback` prints a link to a new issue with the
   version and platform filled in. It sends nothing by itself.

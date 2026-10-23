@@ -15,6 +15,11 @@ from the roadmap that are not built yet.
 - The record of what was done (audit trail)
 - Files on disk: attachments itda saved, and files the user sends
 
+The knowledge base in `itda.db` adds no asset: it holds the shape of pages and
+answers (selectors, counts, field names, keys and types), verdicts, status
+codes and times, never an answer, input, cookie, header value, record or form
+value, and nothing that sends a request reads it.
+
 ## Threats and controls
 
 | Threat | Path | Today | Planned |

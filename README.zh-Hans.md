@@ -133,6 +133,7 @@ token。页面叫它点哪儿它就点哪儿，布局一变就悄悄坏掉。itd
 结论收尾：`ok`、`signed_out`、`site_changed`、`blocked` 或 `unreachable`。
 退出码随之而定（`site_changed` 为 11），所以定时任务可以在代理撞上之前
 提醒你。在 MCP 上，`itda_check` 返回同样的内容。
+`itda fsck <site>` 读取 itda 记下的本地尝试记录（只有结构和判定，没有值），列出从未尝试的、需要输入的以及时而失败的操作，并附上要运行的命令。
 
 当结论是 `site_changed` 时，`itda refresh <site>` 从当初设置时的来源重新
 起草站点：它的页面、API 说明、GraphQL 端点，或者保留下来的录制形状，每个

@@ -14,11 +14,11 @@ loaders is [skills/itda/SKILL.md](skills/itda/SKILL.md).
   `<site>.<action>`, with a JSON Schema for its inputs. With more, three
   tools stay fixed: `itda_search` (find by keywords), `itda_describe` (one
   action's inputs and effect) and `itda_call` (run one).
-- Over MCP, `itda_sites` lists what is set up with the last check's verdict,
-  and five tools (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`,
-  `itda_manage`) do what the commands below do without a terminal. When a
-  site is set up or removed, the server sends `notifications/tools/list_changed`
-  and the next `tools/list` has the new tools.
+- Over MCP, six tools (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`,
+  `itda_manage`, `itda_shape`) do what the commands below do without a
+  terminal. `itda_sites` adds the last verdict and the reads that fail now and
+  then. After a setup or remove the server sends
+  `notifications/tools/list_changed`; the next `tools/list` has the new tools.
 - Pick the action whose description matches what the user asked. Do not guess
   undeclared inputs; itda refuses unknown inputs.
 
@@ -85,6 +85,8 @@ do:
 
 `itda check --json` carries the verdict as `verdict` and per site under
 `sites`; the exit code follows the worst verdict. `itda_check` returns the same data.
+`itda fsck <site>` (over MCP, `itda_manage` `fsck`) sends nothing and lists what was never tried, what needs an input and which read gives it, and what fails now and then, each with a `remedy`.
+`itda_shape` shows the shape of a page or an answer, never its values. Follow a remedy only for what the user asked.
 
 ## Set up a new site
 
@@ -100,17 +102,15 @@ with the site. The user signs in in their own browser; you only ever see the
 account id.
 
 In a terminal, run `itda setup <url>`, or tell the user to type `itda` and
-paste the address. itda looks at the page, or opens the user's browser and
-watches when the page needs a sign-in. It names the actions and tries every
-read. It asks the user before saving and before connecting an agent. Let the
-user answer. Public APIs with a ready-made definition install with
-`itda add github` (also `npm`, `crates-io`, `pypi`).
+paste the address. itda looks at the page, or watches it in the user's browser
+when it needs a sign-in, names the actions, tries every read and asks before
+saving and connecting an agent. Let the user answer. Ready-made definitions
+install with `itda add github` (also `npm`, `crates-io`, `pypi`).
 
 `itda_manage` covers the rest without a terminal. `refresh`, `remove` and
-`resume` ask the user to confirm in a form shown by the client. Clients
-without forms get the command for the user to run. An unanswered form counts
-as no. `approvals` lists the changes waiting for the user, and `audit` shows
-the last entries of the audit log. None of them approves a change.
+`resume` ask the user to confirm in a form shown by the client (or give the
+command to run); an unanswered form counts as no. `approvals` lists the changes
+waiting, `audit` the last log entries. None of them approves a change.
 
 ## Report a problem
 

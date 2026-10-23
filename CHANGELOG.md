@@ -29,6 +29,33 @@ change the definition format or the CLI.
   stopped being used. `ITDA_TRANSPORT=http` keeps direct HTTP only, with the
   pauses it always had. `docs/HONEST_CLIENT.md` has the rules,
   `docs/TRANSPORT_BENCHMARKS.md` the measurements.
+- A local knowledge base per site, in `itda.db`. Setup, check, refresh and
+  every call write down what was found and tried: the pages and actions,
+  which list read can supply which detail read's input, every try with its
+  stage, verdict, HTTP status and time, and the hashes of the definition and
+  the last verdict. It keeps shapes only (selectors with match counts, field
+  names, keys and types), never an answer, input, cookie, header value or
+  record. Nothing that sends a request reads it, and `itda remove` deletes a
+  site's rows. A call itda refused before sending (waiting for an approval,
+  a bad input) is not counted as a try.
+- `itda fsck [site]` runs fixed rules over the knowledge base and lists,
+  worst first, the reads never tried, the reads that need an input (with the
+  list read and pointer that can supply it), the reads that fail every recent
+  try or now and then, and a definition or verdict file changed under itda,
+  each with the command to run. It sends nothing; exit 0, or 1 when a gap is
+  at priority 1. Over MCP, `itda_manage` takes `fsck`, and each gap carries the next tool to
+  call with its arguments. `itda setup` ends with the top three.
+- `itda_shape`, a read-only MCP tool: the shape of a page (selectors with
+  counts, named fields, the keys and types of embedded data) or of an
+  action's last answer (keys, types and pointers), from the knowledge base or,
+  with `fresh`, read now the way setup reads a page. At most 24 KB and no
+  values.
+- `itda ls --json` and `itda_sites` say per site how many actions answered on
+  their last try (`verified`), the recent `pass_rate` and the reads that fail
+  now and then (`unstable`). `itda ls --json` and `itda_sites` with a site add
+  a `user_guide` (what can be read, what can be changed, how one read feeds
+  another) and two to four `natural_prompts`, made by rule in the person's
+  language; `itda describe <site>` prints both.
 
 ### Changed
 

@@ -74,6 +74,7 @@ before. `ITDA_TRANSPORT=auto`, or leaving it unset, is the behaviour above.
 | A read the browser did not get past fails with `blocked_by_site` and `paused: false`. Nothing is paused; only that way of fetching is skipped for a few minutes. In direct-HTTP mode (`ITDA_TRANSPORT=http`) a block or challenge pauses the whole site until the user resumes it. | `itda-net` |
 | itda does not solve captchas and never downloads a browser; it uses the one installed. | `itda-browser` |
 | itda records every call, approval and change in a hash-chained log on the user's device, and hands website text to agents as untrusted data. | `itda-runtime` `audit`; `itda-mcp` |
+| The knowledge base does not choose how a request is sent: no transport, header, retry or account choice reads it. | `itda-kb` `Recorder` (write only); `itda-runtime` |
 | The window itda opens for sign-in, recording or watching a page load is the person's own. itda opens the named page and watches, scrolling to the bottom once when watching a load by itself, but never clicking, typing or navigating. The window a read recovers in is hidden and never shown. | `itda-browser` `SignIn`, `Recorder`, `transport` |
 | Sign-in through a site's own form belongs to the person: they type the user name and password. itda sends the form once as `itda/<version>` to its own action on the same site, with the page's fields. itda reports a refused sign-in without retrying or pausing anything. itda never keeps the password; an agent cannot start this path. | `itda-setup` `login::form` |
 

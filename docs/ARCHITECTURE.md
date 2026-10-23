@@ -12,8 +12,9 @@ runs `cargo xtask check-layers` to check the direction.
 | Layer | Crate | Responsibility | I/O |
 |---|---|---|---|
 | 0 | `itda-types` | Error contract and exit codes, URL checks with the Public Suffix List, redaction, file helpers | files |
-| 1 | `itda-html` | Script-free HTML and embedded-JSON extraction; what a page shows about itself (`evidence`) for drafting | none |
+| 1 | `itda-html` | Script-free HTML and embedded-JSON extraction; what a page shows about itself (`evidence`) for drafting; the shape of a page or an answer without its values (`shape`) | none |
 | 1 | `itda-store` | One SQLite connection on its own thread, with per-component migrations | SQLite |
+| 2 | `itda-kb` | The knowledge base per site: pages and actions, how they relate, every try with its verdict, notes, file hashes. Shapes only, never a value. The gap rules and the pass rates. Nothing that sends a request reads it | SQLite (through `itda-store`) |
 | 2 | `itda-spec` | Definition format, request building, response verification | none |
 | 3 | `itda-policy` | Read/write classification, definition safety checks, single-use approvals | SQLite |
 | 4 | `itda-browser` | Sign-in and recording; isolated read drivers, guarded browser egress, authenticated worker and bounded session pool | browser, loopback IPC |
@@ -22,7 +23,7 @@ runs `cargo xtask check-layers` to check the direction.
 | 7 | `itda-runtime` | Runs an action end to end; approvals for changes; audit log | files |
 | 8 | `itda-prep` | Drafts definitions from OpenAPI documents, recordings and fetched pages. Does no I/O; the CLI fetches | none |
 | 9 | `itda-setup` | Steps for `itda setup`, `login` and `check`: probe, draft, try every read, keep what works; installed sites. Questions use a trait and progress uses a callback, so the CLI and MCP server share them | network, files, browser |
-| 10 | `itda-mcp` | MCP server over stdio; with a setup context, `itda_setup`, `itda_login`, `itda_check`, `itda_sites` and `itda_manage` | stdio |
+| 10 | `itda-mcp` | MCP server over stdio; with a setup context, `itda_setup`, `itda_login`, `itda_check`, `itda_sites`, `itda_manage` and `itda_shape` | stdio |
 | 11 | `apps/cli` | The `itda` command; the only place that picks paths and settings | all |
 
 `itda-spec` never does I/O. Response checks take a `ResponseLike` trait, so
@@ -70,6 +71,8 @@ testing and reusing the format needs no network stack.
    and is not retried. itda then projects the data through a model and
    removes the secret.
 9. **Record.** The audit log gets a record; a change got one before step 6.
+   The knowledge base gets one line: the verdict, the status, the time it
+   took and the keys and types of the answer, never an input or a value.
 10. **Return.** The CLI prints the data or JSON envelope. MCP marks it
     untrusted, cuts it to 24 KB and returns it as `structuredContent`.
 
@@ -83,6 +86,7 @@ the user's local application-data directory instead.
 |---|---|
 | `specs/<site>/spec.yaml` | Installed definitions |
 | `itda.db` | Pacing, pauses, transport strategies, approvals, account names and which secrets exist (`vault_account`, `vault_secret`). No secret values. |
+| `itda.db`, `kb_*` tables | The knowledge base: pages and actions (`kb_node`) with their shapes (selectors and counts, field names, keys and types), how they relate (`kb_edge`), the last 200 tries of each action with stage, verdict, HTTP status and time (`kb_attempt`), notes with a full-text index (`kb_finding`), the hashes of the definition and the last verdict (`kb_artifact`), and the gaps the rules found (`kb_gap`). No answer, input, cookie, header value, record or form value. `itda remove` deletes a site's rows. |
 | `audit.jsonl` | Hash-chained audit records: names, outcomes, input digests. No input values. |
 | OS keyring, service `itda` | Secret values, one entry per site, account and name |
 | `browser-runtime/<namespace>/` | The browser worker's secret, its lock files, the installed browser's user agent, and the temporary browser profiles while they are in use. One directory per itda build; a directory of a build that is gone is removed once nothing has touched it for a day and no worker holds its lock. On Windows this lives under the user's local application data. |
@@ -138,6 +142,11 @@ kept; once the worker is known to have died, the read gets one more try.
 - **Local first.** No server, account or telemetry. Secrets stay in the OS
   keyring; a browser session a read recovers in lives in a private profile on
   this computer and is removed when it closes.
+- **The knowledge base informs; it does not decide.** It tells a person or an
+  agent what was tried, what failed and what needs an input. No transport,
+  header, retry or account choice reads it: the runtime gets a handle that
+  can only write a try, and a test makes the same requests with it empty and
+  full.
 
 ## Roadmap
 

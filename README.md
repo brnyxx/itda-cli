@@ -147,7 +147,9 @@ Every line here is true of the code today. `itda setup` says which case it met;
 It ends with one verdict: `ok`, `signed_out`, `site_changed`, `blocked` or
 `unreachable`. The exit code follows it (11 for `site_changed`), so a scheduled
 job can warn you before an agent runs into it. Over MCP, `itda_check` returns
-the same.
+the same. `itda fsck <site>` reads the local record itda keeps of what it tried
+(shapes and verdicts, never values) and lists what was never tried, what needs
+an input and what fails now and then, each with the command to run.
 
 When the verdict is `site_changed`, `itda refresh <site>` drafts the site again
 from what it was set up from: its pages, the API description, the GraphQL

@@ -932,6 +932,51 @@ An address the site answers with 404, 405 or 410 and a query it answers with
 errors count as `site_changed`. itda lists a refused read (`api_denied`) on its
 own line; it does not affect the site's verdict.
 
+### What itda knows about a site
+
+itda keeps a small knowledge base per site in `itda.db`: the pages it drafted
+from and the actions in the definition, which list read can supply which
+detail read's input, every try (from setup, check, refresh or a call) with its
+verdict, HTTP status and time, and the hashes of `spec.yaml` and the last
+verdict. It keeps shapes only: selectors with match counts, field names, the
+keys and types of an answer. Never an answer, an input, a cookie, a header
+value or a record. `itda ls --json` adds each action's `verified` (its last try
+answered) and `pass_rate`, and per site the reads that fail now and then
+(`unstable`).
+
+`itda fsck` runs fixed rules over it and prints what is worth a look, worst
+first, each with the command to run:
+
+```console
+$ itda fsck board
+board: 3 to look at
+  2 read_needs_input: get-notice needs notice_id; list-notices gives it at /items/0/id
+    fix: itda call board.list-notices --json
+  2 endpoint_untried: list-archive has never been tried
+    fix: itda check board
+  3 endpoint_untried: post-notice has never been tried
+    fix: itda describe board.post-notice
+```
+
+| Rule | Priority | When |
+|---|---|---|
+| `read_failing` | 1 | a read failed every one of its last tries (up to seven) |
+| `flapping_read` | 1 | a read failed at least twice in its last seven tries and passed at least once among them |
+| `artifact_changed`, `artifact_missing` | 1 | `spec.yaml` or the last verdict changed or went away since itda wrote it down |
+| `read_needs_input` | 2 | a read needs an input and was never tried; names a list read whose answer has a field of that name (or `id`) and a fitting type, and its pointer. That is a guess from shapes, never checked against a value |
+| `endpoint_untried` | 2 (read), 3 (change) | an action was never tried; itda never tries a change on its own, so a change stays here until someone asks for it |
+| `finding_without_evidence`, `dangling_edge` | 3 | a note or a link with nothing behind it |
+
+A call itda refused before sending (waiting for an approval, a bad input, an
+expired page handle) is kept as a record but is not a try; a 404 the site
+answered is one. `itda fsck` sends
+nothing. It exits 0 when no gap is at priority 1 and 1 when one is; `--json`
+prints `status` (`ok` or `problems`) and each site's gaps with `rule`,
+`subject`, `priority`, `reason` and `remedy` (`command`, plus the MCP `tool`
+and `arguments` to call next). `itda setup` ends with the top three. `itda
+describe <site>` adds what can be read and changed, how one read feeds another,
+and a few ways to ask an agent.
+
 ### Draft a changed site again
 
 A definition that `itda setup`, `itda draft ... --install` or `itda record
