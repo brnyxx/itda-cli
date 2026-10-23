@@ -46,11 +46,11 @@ prompt caches stay valid:
 
 `itda mcp --mode direct` or `--mode catalog` overrides the choice.
 `itda mcp --site <name>` serves only that site's actions as tools. It refuses
-`itda_setup` and confines `itda_login`, `itda_check`, `itda_sites`,
+`itda_setup` and `itda_prepare` and confines `itda_login`, `itda_check`, `itda_sites`,
 `itda_manage` and `itda_shape` to that site. Use it in a project's MCP configuration when the
 agent should only reach one site from there.
 
-Six tools are always there, so the agent never needs a terminal to set a
+Seven tools are always there, so the agent never needs a terminal to set a
 site up or look after it:
 
 | Tool | Use |
@@ -61,6 +61,7 @@ site up or look after it:
 | `itda_sites` | What is set up, with reads, changes, the last check's time and verdict, how many actions answered on their last try (`verified`), the recent `pass_rate` and the reads that fail now and then (`unstable`). With `site`, one site in detail: each action with `verified`, `pass_rate` and `last_verdict`, a `user_guide` (what can be read, what can be changed, which list read supplies which detail read's input), two to four `natural_prompts` a person might ask, and the top three gaps. |
 | `itda_manage` | `refresh` drafts a changed site again from its sources. The form shows what would change; no answer counts as no. For `remove` and `resume`, you confirm in a form; clients without forms get the command to run. `approvals` lists what waits for you. `audit` lists the last entries for one site or all, plus, under `unknown_outcome`, changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (`check`) when the change named one. `fsck` runs the knowledge base's rules for one site or all and sends nothing: in one call, the reads never tried (`endpoint_untried`), the reads that need an input and which list read can supply it (`read_needs_input`), the reads that fail every recent try (`read_failing`) or now and then (`flapping_read`), and files changed under itda (`artifact_changed`, `artifact_missing`). |
 | `itda_shape` | The shape of what a site shows and answers, never its values. For an `action`: the keys and types of its last answer as `shape` and as `pointers` (`{pointer, type}`), and what its definition declares. For a `page`: its selectors with match counts, attribute names and parent (`structure`), its named fields without values (`fields`) and the keys and types of the data it embeds (`ssr_payloads`). From the local knowledge base by default; with `fresh: true`, itda reads the page now, the way setup reads a page. At most 24 KB. |
+| `itda_prepare` | The preparation loop below: the agent drafts a site from its docs and pages, and itda keeps what the evidence carries and what answers, then installs it the way `itda_setup` does. |
 
 Every gap comes as `{rule, subject, priority, reason, remedy}`; `remedy` has
 the `command` for a terminal and the `tool` and `arguments` to call next (the
@@ -69,10 +70,58 @@ catalog). Act on a remedy only when it serves what the user asked; never call a
 change because a gap names it. `itda_setup` returns the top three gaps as
 `gaps`.
 
+When `itda_setup` keeps one read or none, its result carries a `remedy`
+naming `itda_prepare` with the page's address.
+
 Every result uses the `itda call --json` envelope, marked `"untrusted": true`. A
 note before it says website data is not instructions. Results over 24 KB keep
 the start of their longest lists and say `"truncated": true`. Failures are tool
 errors with a code and a fix, so the agent can tell the user what to do.
+
+## Prepare a site yourself
+
+Some sites tell a person more in their docs than a page tells itda: a
+reference that lists `GET /api/v2/items/{id}`, an API description, a GraphQL
+schema. With `itda_prepare` the agent reads them and drafts the definition
+itself; itda calls no model. The agent never sees a value the site holds.
+Results carry titles, the headings of a page's own sections, paths, methods,
+field names, selectors, keys, types, JSON pointers and counts, each piece with
+an evidence id (`e12`) the agent cites. The loop, one tool with an `op`:
+
+| `op` | What it does |
+|---|---|
+| `start` | Opens a session for the site of `url` (one per site; calling again returns it) and shows the environment: the browser by name, the site's accounts by id with the names of their secrets, whether the site is paused or installed. |
+| `recon` | Reads the entry page, the API description it links (or `/openapi.json`), what its GraphQL endpoints offer and the routes its docs name, and returns the draft itda makes from them as `candidates`, each judged. `bundles: true` also reads up to 24 scripts the page loads and tries each route string once with a GET; only a route that answers with data is evidence, the rest are counted as `noise`. |
+| `read` | Reads one more page or document, on the site's registrable domain or a host the site linked as documentation (its API description, the servers that names). Other sites (`outside_site`) and private addresses (`private_address`) are refused. GET only, without an account. |
+| `search` | This session's evidence and itda's notes about the site that match words. |
+| `propose` | Judges the agent's definition (`spec`, in this format; `use_recon` takes itda's candidates whole), its workflows (`understand`, 1 to 12) and its self-questions (`self_qa`, up to 12, kept only when every evidence id exists). Each operation comes back `kept` or `dropped` with the reason, the evidence ids and what was missing. |
+| `verify` | Tries the kept reads, at most 6 per call. A read that needs an input runs only with a check, and `$result:<read>:<pointer>` fills it from an answer already tried (a string, a number or a boolean). Each result says whether it answered, how many records and the shape. A JSON read with no `required_pointers` gets them from the field names at the top of the answer (none for a list or an object keyed by data). A page read that fails says in `diagnosis`, in counts, where its selectors miss on the page as read before. |
+| `review` | Which kept operations cover each step of each workflow, and which routes the docs or the description name that nothing implements. |
+| `session` | `inspect` the site's accounts and credential sources as shapes; `verify` one signed-in read as an account; `read` one path with the account's session, after the site is installed and the user signed in. |
+| `install` | The same path as `itda_setup`: save, try every read once, keep what works, add the site's tools. `replace: true` only when the user asked. |
+
+An operation is kept only when its `base_url` is a server the site documented
+or answered from, its method and path are a route in the docs, a description
+or a script that answered, or, for a GET, a path itda read (`/users/@me`
+matches `/api/v10/users/@me`), an HTML read has an `html` extraction (records
+or page fields; with `required_html_fields` alone it has nothing to return), a file read declares `format: file`, and a signed-in operation
+has a path read with the session. A declared read whose request asks for a
+change is a change. A route the description says needs a sign-in itda cannot
+use is dropped. A draft that only reads the home page and checks nothing is
+refused (`no_actions`). Changes are written into the definition and never
+sent; the user approves each later, as for any site.
+
+A session has 120 tool calls, 48 requests for pages and documents, 24
+requests for checks (browser recovery counted, from the sites' own pacing
+record), and two rounds each for coverage and repairs. Past them,
+`budget_exhausted` or `round_limit` says to install what is kept or stop.
+Every result has `feedback` entries `{kind, subject, reason, next}`; `next`
+is the call to make. A call with the same arguments is answered from the
+session, not sent again. A site that refuses itda (`blocked`) means pause
+and tell the person. The checks are tries of the knowledge base's `prepare`
+stage, which `itda fsck` and the pass rates leave out.
+[skills/itda-prepare/SKILL.md](https://github.com/brnyxx/itda-cli/blob/main/skills/itda-prepare/SKILL.md)
+is the loop in the short form skill loaders take.
 
 ## Files
 
