@@ -7,6 +7,17 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-23
+
+Files in and out, a check after a lost answer, sessions kept in browser
+storage, a gate that reads the request it is about to send, and twelve
+languages. A change can name the read that shows it landed, so after a lost
+answer itda checks once before anyone is asked to approve again. Reads can save
+an attachment, and a change can send a file whose hash you approved. A
+single-page app that keeps its session in `localStorage` now signs in. Setup,
+the landing page and the READMEs speak twelve languages, and the mark is a
+cursor striking a site.
+
 ### Added
 
 - Twelve languages. What `itda setup`, `itda login`, `itda refresh` and the
@@ -815,7 +826,8 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/brnyxx/itda-cli/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/brnyxx/itda-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/brnyxx/itda-cli/compare/v0.2.0...v0.3.0

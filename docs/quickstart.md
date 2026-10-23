@@ -30,7 +30,7 @@ Check the setup:
 
 ```console
 $ itda doctor
-itda 0.5.0
+itda 0.6.0
 ok    data directory   /home/you/.local/share/itda
 ok    secrets          system keyring; long secrets sealed in ~/.local/share/itda/vault.sealed with a key from the keyring
 ok    audit log        0 records, chain intact
