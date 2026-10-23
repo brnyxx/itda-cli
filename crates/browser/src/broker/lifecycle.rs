@@ -85,6 +85,9 @@ pub(super) fn generation_ended(
     previous: &wire::Endpoint,
     deadline: Instant,
 ) -> AppResult<bool> {
+    // Looking at the owner lock takes it for an instant when it is free; under
+    // the startup lock no new worker can be reaching for it at that moment.
+    let _startup = startup_lock(config, remaining(deadline)?)?;
     if !owner_alive(config)? {
         return Ok(true);
     }

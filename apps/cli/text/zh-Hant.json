@@ -101,7 +101,7 @@
   "ask_refresh": "把這些變更寫入 '{site}'？[y/N] ",
   "refresh_kept": "保留了 '{site}' 不變。要寫入變更，請加上 --yes 再執行。",
   "refresh_written": "已更新 '{site}'。正在檢查...",
-  "ask_sign_in": "在這裡用你的使用者名稱和密碼登入 {host}？itda 以自己的身分填寫網站自己的登入表單，並把工作階段封存在資料目錄下。[Y/n] ",
+  "ask_sign_in": "在這裡用你的使用者名稱和密碼登入 {host}？itda 替你填寫網站自己的登入表單，並把工作階段封存在資料目錄下。[Y/n] ",
   "ask_user": "{site} 的使用者名稱: ",
   "ask_password": "{site} 上 {user} 的密碼（只向網站自己的登入表單傳送一次，不會儲存）: ",
   "no_user": "沒有提供使用者名稱",

@@ -127,7 +127,9 @@ async fn page_frame_and_worker_queries_run_but_mutations_never_reach_server() {
                 credential_fingerprint: Some(String::new()),
                 read_only: true,
                 limit: 128 * 1024,
-                timeout: Duration::from_secs(15),
+                // The first call starts the browser, which a busy CI runner can take
+                // most of ten seconds to do.
+                timeout: Duration::from_secs(30),
                 allow_local: true,
                 mode: BrowserMode::Render,
                 cooldowns: Vec::new(),

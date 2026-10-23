@@ -101,7 +101,7 @@
   "ask_refresh": "Diese Änderungen in '{site}' schreiben? [y/N] ",
   "refresh_kept": "'{site}' bleibt, wie es ist. Führen Sie den Befehl mit --yes erneut aus, um die Änderungen zu schreiben.",
   "refresh_written": "'{site}' aktualisiert. Wird geprüft...",
-  "ask_sign_in": "Hier bei {host} anmelden, mit Benutzername und Passwort? itda füllt das Anmeldeformular der Site unter eigenem Namen aus und bewahrt die Sitzung versiegelt im Datenverzeichnis auf. [Y/n] ",
+  "ask_sign_in": "Hier bei {host} anmelden, mit Benutzername und Passwort? itda füllt das Anmeldeformular der Site für Sie aus und bewahrt die Sitzung versiegelt im Datenverzeichnis auf. [Y/n] ",
   "ask_user": "Benutzername für {site}: ",
   "ask_password": "Passwort für {user} auf {site} (wird einmal an das Anmeldeformular der Site gesendet, nie gespeichert): ",
   "no_user": "Es wurde kein Benutzername angegeben",

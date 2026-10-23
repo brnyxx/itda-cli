@@ -47,7 +47,7 @@ the page. When the page is drawn by scripts and shows itda only a title, it
 opens your browser on it for a few seconds. It watches what the page loads by
 itself and drafts from those calls. Nothing is clicked or typed, and the window
 closes on its own. If the page needs a sign-in, it asks for your user name and
-password and uses the site's own form as itself (`--user <name>` from a script,
+password and fills in the site's own form for you (`--user <name>` from a script,
 the password on stdin). Or it asks to open your browser and watch you use the
 site. It shows what agents can do and tries every read. After one more Enter, it
 connects the agent apps it finds on your computer. From then on, ask your agent

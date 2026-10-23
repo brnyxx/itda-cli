@@ -101,7 +101,7 @@
   "ask_refresh": "把这些更改写入 '{site}'？[y/N] ",
   "refresh_kept": "保留了 '{site}' 不变。要写入更改，请加上 --yes 再运行。",
   "refresh_written": "已更新 '{site}'。正在检查...",
-  "ask_sign_in": "在这里用你的用户名和密码登录 {host}？itda 以自己的身份填写站点自己的登录表单，并把会话封存在数据目录下。[Y/n] ",
+  "ask_sign_in": "在这里用你的用户名和密码登录 {host}？itda 替你填写站点自己的登录表单，并把会话封存在数据目录下。[Y/n] ",
   "ask_user": "{site} 的用户名: ",
   "ask_password": "{site} 上 {user} 的密码（只向站点自己的登录表单发送一次，不会保存）: ",
   "no_user": "没有给出用户名",

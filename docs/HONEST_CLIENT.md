@@ -23,10 +23,13 @@ minutes (five for direct HTTP, three for the browser). This cache holds no
 secrets.
 
 The browser is the one installed. itda downloads neither a browser nor a
-captcha solver, and does not solve captchas. A read in this mode carries that
-browser's user agent, over HTTP too, so the direct request and the browser look
-the same to the site. itda does not copy the browser's TLS fingerprint, and
-nothing here guarantees that a challenge passes.
+captcha solver, and does not solve captchas. Every request in this mode, a
+change and a sign-in form included, carries that browser's user agent, over
+HTTP too, and the hidden window keeps the browser's own client hints. The site
+sees one client whichever way a request goes, so a session or a challenge
+clearance the browser earned also holds for the direct requests. itda does not
+copy the browser's TLS fingerprint, and nothing here guarantees that a
+challenge passes.
 
 Each site and account gets its own browser session, isolated from every other.
 A worker process starts on first need, keeps up to four sessions warm across
@@ -56,7 +59,7 @@ supervisor process closes a browser whose worker died, even before the browser
 has reported its DevTools port. While itda does not know whether a read ended,
 it keeps the account's turn rather than start a second read next to it.
 
-`ITDA_TRANSPORT=http` keeps every read on direct HTTP with the `itda/<version>`
+`ITDA_TRANSPORT=http` keeps every request on direct HTTP with the `itda/<version>`
 user agent; a block or challenge then pauses the site until `itda resume`, as
 before. `ITDA_TRANSPORT=auto`, or leaving it unset, is the behaviour above.
 
@@ -65,7 +68,7 @@ before. `ITDA_TRANSPORT=auto`, or leaving it unset, is the behaviour above.
 | Rule | Enforcement |
 |---|---|
 | Only a read may move to the browser on its own. A change goes once, over direct HTTP, after a single-use approval bound to its exact inputs, with no retry and no redirect. | `itda-net` read recovery; `itda-policy` classification and `Approvals`; `itda-runtime` write path |
-| Direct HTTP identifies itself as `itda/<version>`. An adaptive read carries the installed browser's user agent instead, so the direct request and the browser look the same to the site. A definition cannot set `sec-*` headers; the transport owns them. | `itda-net` default headers; `itda-policy` refuses `sec-*` headers in definitions |
+| In direct-HTTP mode every request identifies itself as `itda/<version>`. In adaptive mode every request carries the installed browser's user agent instead, so the direct requests and the browser look the same to the site. A definition cannot set `sec-*` headers; the transport owns them. | `itda-net` default headers; `itda-policy` refuses `sec-*` headers in definitions |
 | Credentials go only to the site and account they belong to. A redirect never carries them elsewhere, and a page in the browser cannot send them, or its address as referrer, to another origin. | `itda-policy` `validate_spec`; `itda-net` redirect checks; `itda-browser` request interception |
 | Private addresses need explicit permission, for a direct request and for everything the browser loads. | `itda-types::url`; `itda-net` resolve; `itda-browser` proxy |
 | itda processes on the same data directory share one limit for discovery and actions: one request at a time per site, about 1.2 seconds apart, whichever way the request goes. A definition may ask for more with `defaults.interval`. A read waits out a short `Retry-After` once; a longer one is reported with the time the site asked for. | `itda-net` `Gate` |
@@ -76,7 +79,7 @@ before. `ITDA_TRANSPORT=auto`, or leaving it unset, is the behaviour above.
 | itda records every call, approval and change in a hash-chained log on the user's device, and hands website text to agents as untrusted data. | `itda-runtime` `audit`; `itda-mcp` |
 | The knowledge base does not choose how a request is sent: no transport, header, retry or account choice reads it. | `itda-kb` `Recorder` (write only); `itda-runtime` |
 | The window itda opens for sign-in, recording or watching a page load is the person's own. itda opens the named page and watches, scrolling to the bottom once when watching a load by itself, but never clicking, typing or navigating. The window a read recovers in is hidden and never shown. | `itda-browser` `SignIn`, `Recorder`, `transport` |
-| Sign-in through a site's own form belongs to the person: they type the user name and password. itda sends the form once as `itda/<version>` to its own action on the same site, with the page's fields. itda reports a refused sign-in without retrying or pausing anything. itda never keeps the password; an agent cannot start this path. | `itda-setup` `login::form` |
+| Sign-in through a site's own form belongs to the person: they type the user name and password. itda sends the form once, with the same user agent as its other requests, to its own action on the same site, with the page's fields. itda reports a refused sign-in without retrying or pausing anything. itda never keeps the password; an agent cannot start this path. | `itda-setup` `login::form` |
 
 In `itda setup`, a read the site still refuses is dropped from the draft with a
 line saying so, and nothing more is sent to the site in that run. Recovery

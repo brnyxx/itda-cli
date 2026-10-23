@@ -23,7 +23,9 @@ fn request(url: String) -> BrowserRequest {
         credential_fingerprint: None,
         read_only: true,
         limit: 64 * 1024,
-        timeout: Duration::from_secs(15),
+        // The first call starts the browser, which a busy CI runner can take
+        // most of ten seconds to do.
+        timeout: Duration::from_secs(30),
         allow_local: true,
         mode: BrowserMode::Render,
         cooldowns: Vec::new(),

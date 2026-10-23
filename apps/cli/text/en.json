@@ -101,7 +101,7 @@
   "ask_refresh": "Write these changes to '{site}'? [y/N] ",
   "refresh_kept": "Kept '{site}' as it is. Run again with --yes to write the changes.",
   "refresh_written": "Updated '{site}'. Checking it...",
-  "ask_sign_in": "Sign in to {host} here, with your user name and password? itda fills in the site's own sign-in form, as itself, and keeps the session sealed under the data directory. [Y/n] ",
+  "ask_sign_in": "Sign in to {host} here, with your user name and password? itda fills in the site's own sign-in form for you and keeps the session sealed under the data directory. [Y/n] ",
   "ask_user": "User name for {site}: ",
   "ask_password": "Password for {user} on {site} (sent once to the site's own sign-in form, never saved): ",
   "no_user": "No user name was given",

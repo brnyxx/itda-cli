@@ -12,8 +12,11 @@ change the definition format or the CLI.
 - Reads that a site answers with a challenge page can recover through the
   browser installed on the computer. itda fetches the page inside a hidden
   browser window kept for that one site and account and, for a `GET`, lets
-  the page render; a read in this mode carries the browser's user agent so
-  the direct request and the browser look the same to the site. itda
+  the page render. Every request in this mode, a change or a sign-in form
+  included, carries the browser's user agent, and the hidden window keeps the
+  browser's own client hints, so the site sees one client whichever way a
+  request goes and a clearance the browser earned holds for the direct
+  requests too. itda
   remembers which way worked for an hour, per site, account and action, so
   the next call does not pay for the failed try again, and forgets a way that
   failed after a few minutes. The browser session stays warm in a worker
@@ -59,13 +62,21 @@ change the definition format or the CLI.
 
 ### Changed
 
-- The honest-client rule changes: itda no longer stops at a challenge. A read
-  may carry the installed browser's user agent and run inside that browser
-  after a challenge, and a challenged read no longer pauses the site. What
+- The honest-client rule changes: itda no longer stops at a challenge. Every
+  request carries the installed browser's user agent, a read may run inside
+  that browser after a challenge, and a challenged read no longer pauses the
+  site. What
   stays: a change is sent once, over direct HTTP, after a single-use approval;
   credentials go only to their own site and account; one request at a time
   per site, with `Retry-After` respected, whichever way the request goes;
   captchas are not solved.
+
+### Fixed
+
+- Opening `itda.db` could fail with `internal` ("Local file operation
+  failed") when another itda process, the browser worker or the MCP server,
+  closed its connection at that moment: SQLite removed `itda.db-wal` while
+  itda was making it private. A file that is gone is now left alone.
 
 ## [0.6.0] - 2026-10-23
 

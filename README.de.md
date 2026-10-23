@@ -49,8 +49,7 @@ Fertig. Bitten Sie Ihren Agenten um etwas auf 'news-ycombinator', zum Beispiel "
 
 Bitten Sie Ihren Agenten: *„nutze news-ycombinator, um aufzulisten, was Hacker
 News zeigt“*. Eine Site hinter einem Anmeldeformular fragt stattdessen nach
-Ihrem Benutzernamen und Passwort. itda füllt das Formular der Site unter
-eigenem Namen aus und behält die Sitzung auf Ihrem Rechner. Reicht das nicht
+Ihrem Benutzernamen und Passwort. itda füllt das Formular der Site für Sie aus und behält die Sitzung auf Ihrem Rechner. Reicht das nicht
 (Single Sign-on, ein Einmalcode), öffnet sich Ihr eigener Browser. Sie melden
 sich an und benutzen die Site wie immer, während itda zusieht.
 
@@ -284,8 +283,7 @@ itda check example                                     # passt die Seite noch?
 ```
 
 Für eine Site hinter einem Anmeldeformular geben Sie `itda setup` die Seite und
-Ihren Benutzernamen. Es sendet das Formular der Site einmal, unter eigenem
-Namen, mit dem Passwort, das Sie eintippen. Es behält die Sitzung im
+Ihren Benutzernamen. Es sendet das Formular der Site einmal, mit dem Passwort, das Sie eintippen. Es behält die Sitzung im
 Schlüsselbund des Systems und entwirft aus der Seite, wie Sie sie angemeldet
 sehen. Die Definition merkt sich das Formular, also meldet `itda login board`
 sich erneut an, wenn die Sitzung abläuft:

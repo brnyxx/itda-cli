@@ -68,6 +68,7 @@ fn nested_target_configuration_keeps_the_outer_reply() {
         credential_cookies: BTreeMap::new(),
         credential_digest: None,
         cooldowns: BTreeMap::new(),
+        agent: None,
     };
     let request = BrowserRequest {
         url: "http://example.test/".into(),

@@ -6,8 +6,9 @@
 //!   `itda/<version>`; a block or challenge pauses the site.
 //! - [`Network::adaptive`] tries a read the site answered with a challenge once
 //!   more in the installed browser, remembers per site, account and action
-//!   which way worked, and never pauses a site for a challenge. A signed-in
-//!   401 and a rate limit are handled the same either way.
+//!   which way worked, and never pauses a site for a challenge. Every request
+//!   it sends, over HTTP or in the browser, carries the browser's user agent.
+//!   A signed-in 401 and a rate limit are handled the same either way.
 //! - Pure URL checks moved to `itda_types::url`; pacing moved from the approval
 //!   store into [`Gate`].
 mod adaptive;
@@ -307,7 +308,11 @@ impl Network {
 
     async fn fetch_http(&self, input: Request, budget: &mut Option<usize>) -> AppResult<Response> {
         let initial = validate_url(&input.url)?;
-        let user_agent = if self.is_adaptive() && input.read_only {
+        // In adaptive mode every request, a change or a sign-in form too,
+        // carries the installed browser's user agent, so a session or a
+        // challenge clearance the browser earned is presented by the same
+        // client. Direct-HTTP mode stays `itda/<version>`.
+        let user_agent = if self.is_adaptive() {
             let cache = self.identity_cache.clone();
             tokio::task::spawn_blocking(move || match cache {
                 Some(path) => itda_browser::transport::user_agent_cached(&path),

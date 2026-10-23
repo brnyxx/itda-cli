@@ -101,7 +101,7 @@
   "ask_refresh": "Ghi những thay đổi này vào '{site}'? [y/N] ",
   "refresh_kept": "Giữ nguyên '{site}'. Chạy lại với --yes để ghi các thay đổi.",
   "refresh_written": "Đã cập nhật '{site}'. Đang kiểm tra...",
-  "ask_sign_in": "Đăng nhập vào {host} ngay tại đây bằng tên người dùng và mật khẩu của bạn? itda truy cập với danh tính riêng, điền vào biểu mẫu đăng nhập của chính trang web và lưu phiên đã mã hóa trong thư mục dữ liệu. [Y/n] ",
+  "ask_sign_in": "Đăng nhập vào {host} ngay tại đây bằng tên người dùng và mật khẩu của bạn? itda điền vào biểu mẫu đăng nhập của chính trang web thay bạn và lưu phiên đã mã hóa trong thư mục dữ liệu. [Y/n] ",
   "ask_user": "Tên người dùng cho {site}: ",
   "ask_password": "Mật khẩu của {user} trên {site} (gửi một lần đến biểu mẫu đăng nhập của trang, không bao giờ lưu): ",
   "no_user": "Chưa có tên người dùng",

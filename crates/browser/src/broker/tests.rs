@@ -33,6 +33,14 @@ fn request(account: &str) -> BrowserRequest {
     }
 }
 
+/// The worker gave its owner lock back. A process another test spawns at that
+/// moment holds a copy of the lock's descriptor until it execs, so the lock
+/// can stay taken for an instant after the worker let go; wait for it, briefly.
+fn owner_released(cfg: &BrokerConfig) {
+    let file = lifecycle::open_lock(&cfg.state_dir.join("owner.lock")).expect("owner lock");
+    drop(lifecycle::lock_file(file, Duration::from_secs(5)).expect("owner released"));
+}
+
 fn config() -> BrokerConfig {
     BrokerConfig {
         state_dir: std::env::temp_dir().join(format!("itda-broker-{}", uuid::Uuid::new_v4())),
@@ -506,7 +514,7 @@ fn independent_client_processes_share_one_session_and_shutdown_releases_owner() 
     BrowserClient::broker(cfg.clone())
         .shutdown()
         .expect("shutdown");
-    assert!(!lifecycle::owner_alive(&cfg).expect("owner released"));
+    owner_released(&cfg);
     worker.join().expect("join").expect("shutdown exit");
     assert!(!cfg.state_dir.join("endpoint.json").exists());
     assert!(cfg.state_dir.join("owner.lock").exists());
@@ -529,7 +537,7 @@ fn inactivity_closes_service_and_releases_owner() {
         },
     )
     .expect("idle exit");
-    assert!(!lifecycle::owner_alive(&cfg).expect("owner released"));
+    owner_released(&cfg);
     assert!(!cfg.state_dir.join("endpoint.json").exists());
     fs::remove_dir_all(&cfg.state_dir).expect("cleanup");
 }

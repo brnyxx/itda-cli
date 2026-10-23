@@ -94,7 +94,9 @@ async fn oopif_shared_and_service_workers_have_guarded_egress() {
             credential_fingerprint: Some("first".into()),
             read_only: true,
             limit: 256 * 1024,
-            timeout: Duration::from_secs(20),
+            // The first call starts the browser, which a busy CI runner can take
+            // most of ten seconds to do.
+            timeout: Duration::from_secs(30),
             allow_local: true,
             mode: BrowserMode::Render,
             cooldowns: Vec::new(),

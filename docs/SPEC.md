@@ -596,7 +596,7 @@ header only to `base_url`'s origin, or to `origin` when you set it.
 ### Sign in with a password
 
 For a site with its own sign-in form, name the form on the `browser` entry
-and itda fills it in for you, as itself:
+and itda fills it in for you:
 
 ```yaml
 auth:

@@ -101,7 +101,7 @@
   "ask_refresh": "Tulis perubahan ini ke '{site}'? [y/N] ",
   "refresh_kept": "'{site}' dibiarkan seperti sekarang. Jalankan lagi dengan --yes untuk menulis perubahannya.",
   "refresh_written": "'{site}' diperbarui. Memeriksanya...",
-  "ask_sign_in": "Masuk ke {host} di sini, dengan nama pengguna dan kata sandi Anda? itda mengisi formulir masuk milik situs itu sendiri, sebagai dirinya sendiri, dan menyimpan sesi tersegel di bawah direktori data. [Y/n] ",
+  "ask_sign_in": "Masuk ke {host} di sini, dengan nama pengguna dan kata sandi Anda? itda mengisi formulir masuk milik situs itu untuk Anda dan menyimpan sesi tersegel di bawah direktori data. [Y/n] ",
   "ask_user": "Nama pengguna untuk {site}: ",
   "ask_password": "Kata sandi untuk {user} di {site} (dikirim sekali ke formulir masuk milik situs, tidak pernah disimpan): ",
   "no_user": "Nama pengguna tidak diberikan",

@@ -168,6 +168,9 @@ struct Browser {
     credential_cookies: BTreeMap<String, String>,
     credential_digest: Option<String>,
     cooldowns: BTreeMap<String, i64>,
+    /// The browser's own user agent without the `Headless` mark, asked of the
+    /// browser once: what direct HTTP sends too.
+    agent: Option<String>,
 }
 
 struct Call<'a> {
@@ -240,6 +243,7 @@ impl Browser {
             credential_cookies: BTreeMap::new(),
             credential_digest: None,
             cooldowns: BTreeMap::new(),
+            agent: None,
         })
     }
 }
