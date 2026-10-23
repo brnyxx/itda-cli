@@ -138,7 +138,7 @@ for more room with `defaults.interval`.
 | `itda add <file\|url\|name\|-> [--force]` | Install a site definition (a file, an https URL, stdin, or a ready-made site such as `github`) after showing where it sends requests and which actions change the site |
 | `itda remove <site>` | Remove an installed site definition; its accounts stay until `itda logout` |
 | `itda ls [site] [--json]` | Installed sites and their actions |
-| `itda describe <site>[.<action>] [--json]` | Each action with its inputs and an example command to copy |
+| `itda describe <site>[.<action>] [--json]` | Each action with its inputs and an example command to copy; for a change, the read that confirms it after a lost answer |
 | `itda call <site>.<action> [--input value]… [--account id] [--approval id] [--json]` | Run one action |
 | `itda login <site> [--user name] [--account id]` | Sign in through the site's own form, named in the definition. itda takes the password from a prompt or stdin and keeps the session in the keyring. |
 | `itda login <site> --secret <name> [--account id]` | Read a secret, such as an API key, from stdin and store it under that name |

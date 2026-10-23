@@ -119,6 +119,12 @@ change the definition format or the CLI.
   GraphQL endpoint sent no document, a document itda cannot read) stops with
   `effect_unknown` (exit 2) and a remedy; nothing is sent. A declared write
   is unchanged, and so are the 101 reads in the bundled definitions.
+- `itda describe` shows the read a change names in `confirm`, one line under
+  the change in the person's language (`after a lost answer: checks
+  list-notices for the new title`); `--json` adds `confirm: {read, match}`.
+  The change's MCP tool description says the same in English, and
+  `itda_describe` in catalog mode now returns the same description as the
+  tool, the approval note included.
 
 ### Fixed
 

@@ -125,7 +125,11 @@ the result next to the error as `outcome_check`: `landed` means the change is
 in, so tell the user and do not ask for it again; `not_found` means the site
 shows no trace of it, so the user may ask for a new approval; `unknown` means
 that read failed too. Without `outcome_check`, check the site first; only a
-person decides whether to ask for the change again. A new approval request for
+person decides whether to ask for the change again. Which read a change names
+shows before you call it: `itda describe` prints it under the change (`after a
+lost answer: checks list-notices for the new title`), `--json` carries it as
+`confirm: {read, match}`, and the change's tool description (or
+`itda_describe` in catalog mode) says the same. A new approval request for
 a change that landed carries `previous_outcome: landed`, and its review tells
 the user so. A change that never left the
 machine (no turn at the gate, a name that did not resolve, a connection that was
