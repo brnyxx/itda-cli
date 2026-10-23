@@ -200,7 +200,9 @@ Redmine、Discourse、MediaWiki、WordPress 或 Gitea（也包括 Forgejo），�
 呼叫 `itda_setup`。itda 以同樣的方式查看網站、起草並試一試。網站的操作
 會作為工具出現在同一個對話裡。指令碼頁面會在你螢幕上的瀏覽器視窗裡短暫
 開啟。當某個讀取說需要登入時，`itda_login` 開啟你自己的瀏覽器；代理只
-看到帳號 id。
+看到帳號 id。當設定只留下一個或零個讀取時，代理可以用 `itda_prepare` 根據網站的
+文件自己起草：它只看到結構和證據，看不到網站裡的內容，itda 只保留證據指明、且確實
+有回應的部分。
 
 跳過終端機，把下面這段連同你使用的網站網址交給 Claude Code、Cursor 或
 Codex：

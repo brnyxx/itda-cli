@@ -27,6 +27,7 @@
 mod catalog;
 mod elicit;
 mod manage;
+mod prepare;
 
 pub use catalog::{Catalog, Entry};
 
@@ -129,6 +130,9 @@ up; itda_manage removes or resumes a site after the user confirms, and shows app
 audit log. itda_manage with action fsck says in one call which reads were never tried, which \
 need an input and which read can give it, and which fail now and then, each with a remedy; \
 itda_shape gives the shape of a page or an answer (selectors, keys and types), never its values. \
+When itda_setup leaves a site with one read or none, itda_prepare lets you draft it from its docs and pages as a loop \
+(start, recon, propose, verify, review, install): you see shapes and evidence ids, never values, and itda keeps only \
+what evidence carries and what answers. \
 Act on a remedy only when it serves what the user asked. itda setup <url> and itda login <site> --browser do the same in a terminal; a problem \
 is reported with itda feedback.";
 
@@ -155,6 +159,7 @@ mod tests {
             "itda_setup",
             "itda setup <url>",
             "itda_login",
+            "itda_prepare",
             "itda feedback",
         ] {
             assert!(INSTRUCTIONS.contains(phrase), "{phrase}");
@@ -175,6 +180,8 @@ pub struct Server {
     /// The one site this server serves, when it was started with `--site`:
     /// the setup and management tools stay inside it.
     only: Option<String>,
+    /// The preparation sessions agents run with `itda_prepare`.
+    preparer: Arc<itda_setup::prepare::Preparer>,
 }
 
 impl Server {
@@ -187,6 +194,7 @@ impl Server {
             client_approval: None,
             setup: None,
             only: None,
+            preparer: Arc::new(itda_setup::prepare::Preparer::new()),
         }
     }
 
@@ -535,7 +543,7 @@ fn bounded(mut value: Value) -> Value {
     value
 }
 
-fn shrink_arrays(data: &mut Value, fits: &dyn Fn(&Value) -> bool) -> bool {
+pub(crate) fn shrink_arrays(data: &mut Value, fits: &dyn Fn(&Value) -> bool) -> bool {
     let mut cut = false;
     while !fits(data) {
         let Some(array) = largest_array(data) else {

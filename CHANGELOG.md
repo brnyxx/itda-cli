@@ -9,6 +9,31 @@ change the definition format or the CLI.
 
 ### Added
 
+- `itda_prepare`, one MCP tool for an agent to prepare a site that
+  `itda_setup` drafted thinly, as a loop the agent runs: `start`, `recon`
+  (the entry page, the API description it links, its GraphQL schema, the
+  routes its docs name and a draft itda made, each with an evidence id),
+  `read`, `search`, `propose`, `verify`, `review` and `install`. itda calls
+  no model and the agent never sees a value the site holds: only titles,
+  paths, methods, field names, selectors, keys, types, pointers and counts.
+  Each proposed operation is kept only when the evidence carries it (a
+  documented or answering server, the route in the docs or a page at that
+  path, something to check in an HTML answer), a declared read whose request
+  asks for a change becomes a change, a route that needs a sign-in itda
+  cannot use is dropped, and a draft that only reads the home page is
+  refused. `verify` tries the kept reads through the same path every call
+  takes, fills inputs from earlier answers with `$result:<read>:<pointer>`
+  (scalars only), adds `required_pointers` from the field names at the top
+  of the answer, says in counts where a page read's selectors miss, and
+  never sends a change. Reads go only to the site's registrable domain and the
+  hosts it links as documentation. A session has 120 calls, 48 page
+  requests and 24 check requests (browser recovery counted), 6 reads per
+  `verify` and two coverage and two repair rounds. `install` takes the same
+  path as `itda_setup`. When `itda_setup` keeps one read or none, its result
+  carries a `remedy` that names `itda_prepare`. `recon` with `bundles: true`
+  also reads the scripts the entry page loads and keeps a route string only
+  when one GET answers with data. `skills/itda-prepare/SKILL.md` is the loop
+  for skill loaders.
 - Reads that a site answers with a challenge page can recover through the
   browser installed on the computer. itda fetches the page inside a hidden
   browser window kept for that one site and account and, for a `GET`, lets
@@ -16,9 +41,9 @@ change the definition format or the CLI.
   included, carries the browser's user agent, and the hidden window keeps the
   browser's own client hints, so the site sees one client whichever way a
   request goes and a clearance the browser earned holds for the direct
-  requests too. itda
-  remembers which way worked for an hour, per site, account and action, so
-  the next call does not pay for the failed try again, and forgets a way that
+  requests too. itda remembers which way worked for an hour, per site,
+  account and action, so the next call does not pay for the failed try
+  again, and forgets a way that
   failed after a few minutes. The browser session stays warm in a worker
   process across CLI calls and closes after five idle minutes; changing an
   input does not restart it. Everything the page loads passes the same
@@ -62,14 +87,17 @@ change the definition format or the CLI.
 
 ### Changed
 
+- The knowledge base records a preparation loop's tries under a stage of
+  their own, `prepare`, and its notes under the `prepare` scope; the pass
+  rate, the last success and the `itda fsck` rules leave both out.
+
 - The honest-client rule changes: itda no longer stops at a challenge. Every
   request carries the installed browser's user agent, a read may run inside
   that browser after a challenge, and a challenged read no longer pauses the
-  site. What
-  stays: a change is sent once, over direct HTTP, after a single-use approval;
-  credentials go only to their own site and account; one request at a time
-  per site, with `Retry-After` respected, whichever way the request goes;
-  captchas are not solved.
+  site. What stays: a change is sent once, over direct HTTP, after a
+  single-use approval; credentials go only to their own site and account; one
+  request at a time per site, with `Retry-After` respected, whichever way the
+  request goes; captchas are not solved.
 
 ### Fixed
 

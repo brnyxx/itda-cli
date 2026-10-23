@@ -249,7 +249,10 @@ die Site an, entwirft und probiert sie auf dieselbe Weise aus. Ihre Aktionen
 erscheinen als Werkzeuge in derselben Unterhaltung. Eine Skript-Seite öffnet
 sich kurz in einem Browserfenster auf Ihrem Bildschirm. Wenn ein Lesevorgang
 eine Anmeldung verlangt, öffnet `itda_login` Ihren eigenen Browser; der Agent
-sieht nur die Konto-ID.
+sieht nur die Konto-ID. Behält die Einrichtung einen Lesevorgang oder keinen,
+kann der Agent die Site mit `itda_prepare` selbst aus ihrer Dokumentation
+entwerfen: Er sieht Formen und Belege, nie, was die Site enthält, und itda
+behält nur, was die Belege nennen und was antwortet.
 
 Lassen Sie das Terminal weg und geben Sie das Claude Code, Cursor oder Codex,
 mit der Adresse einer Site, die Sie benutzen:

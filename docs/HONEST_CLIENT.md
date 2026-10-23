@@ -84,7 +84,10 @@ before. `ITDA_TRANSPORT=auto`, or leaving it unset, is the behaviour above.
 In `itda setup`, a read the site still refuses is dropped from the draft with a
 line saying so, and nothing more is sent to the site in that run. Recovery
 never changes an action's inputs, whether it counts as a read or a change, or
-what it needs approving.
+what it needs approving. An agent's preparation loop (`itda_prepare`) checks
+only reads, through the same path a call takes, and counts each request,
+recovery included; its advice never names a way around a refusal: a block
+means pause and tell the person.
 
 A definition may set a different `User-Agent` in `defaults.headers` when a site
 asks for one; that choice is visible in the spec and in review. It cannot set

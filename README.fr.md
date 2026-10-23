@@ -250,7 +250,11 @@ regarde le site, fait le brouillon et l'essaie de la même façon. Ses actions
 apparaissent comme des outils dans la même conversation. Une page scriptée
 s'ouvre brièvement dans une fenêtre de navigateur sur votre écran. Quand une
 lecture demande de se connecter, `itda_login` ouvre votre propre navigateur ;
-l'agent ne voit que l'identifiant du compte.
+l'agent ne voit que l'identifiant du compte. Quand la configuration ne garde
+qu'une lecture ou aucune, l'agent peut faire lui-même le brouillon du site à
+partir de sa documentation avec `itda_prepare` : il voit des formes et des
+preuves, jamais ce que le site contient, et itda ne garde que ce que les
+preuves nomment et ce qui répond.
 
 Passez-vous du terminal et donnez ceci à Claude Code, Cursor ou Codex, avec
 l'adresse d'un site que vous utilisez :

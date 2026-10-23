@@ -236,7 +236,10 @@ news.ycombinator.com para mim". Ele chama `itda_setup`. O itda olha o site,
 rascunha e experimenta do mesmo jeito. Suas ações aparecem como ferramentas na
 mesma conversa. Uma página com scripts abre brevemente numa janela do navegador
 na sua tela. Quando uma leitura pede login, `itda_login` abre seu próprio
-navegador; o agente só vê o id da conta.
+navegador; o agente só vê o id da conta. Quando a configuração mantém uma
+leitura ou nenhuma, o agente pode fazer sozinho o rascunho do site a partir da
+documentação dele com `itda_prepare`: ele vê formas e evidências, nunca o que o
+site guarda, e o itda só mantém o que as evidências citam e o que responde.
 
 Pule o terminal e entregue isto ao Claude Code, Cursor ou Codex, com o endereço
 de um site que você usa:

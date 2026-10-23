@@ -44,6 +44,21 @@ async fn two_calls_to_one_site_are_spaced() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn turns_since_counts_every_request_taken_and_nothing_else() {
+    let gate = paced(0);
+    let since = 1_700_000_000_000;
+    take_and_release(&gate, SITE, None).await;
+    // A turn of one account is not a request on its own: the site's turn
+    // (`|*`) is what every way of sending takes once.
+    take_and_release(&gate, "https://example.test|alice", None).await;
+    take_and_release(&gate, OTHER, None).await;
+    assert_eq!(gate.turns_since(since).await.unwrap(), 2);
+    assert_eq!(gate.turns_since(i64::MAX).await.unwrap(), 0);
+    // Counting takes no turn.
+    assert_eq!(gate.turns_since(since).await.unwrap(), 2);
+}
+
+#[tokio::test(start_paused = true)]
 async fn two_sites_do_not_wait_for_each_other() {
     let gate = paced(1200);
     take_and_release(&gate, SITE, None).await;

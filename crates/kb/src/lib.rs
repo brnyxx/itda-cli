@@ -127,6 +127,11 @@ pub enum Stage {
     Refresh,
     #[default]
     Call,
+    /// A read an agent's preparation loop (`itda_prepare`) tried on a draft
+    /// before anything was installed. Kept as a record, but not a try of the
+    /// site's definition: the pass rate, the last success and the rules
+    /// leave it out.
+    Prepare,
 }
 
 impl Stage {
@@ -136,9 +141,14 @@ impl Stage {
             Self::Check => "check",
             Self::Refresh => "refresh",
             Self::Call => "call",
+            Self::Prepare => "prepare",
         }
     }
 }
+
+/// The scope of the notes a preparation loop leaves: evidence and verdicts
+/// about a draft, which the rules do not hold against the definition.
+pub const PREPARE_SCOPE: &str = "prepare";
 
 /// One try of an action: what happened, never what was sent or received.
 #[derive(Clone, Debug, Default)]
@@ -463,9 +473,10 @@ struct Try {
 }
 
 /// The last [`RECENT`] tries of a node that went to the site, newest first.
+/// A preparation loop's tries of a draft are not tries of the definition.
 fn recent_tries(conn: &Connection, node: i64) -> AppResult<Vec<Try>> {
     let mut statement = conn.prepare(&format!(
-        "SELECT verdict, at FROM kb_attempt WHERE node=?1 AND {} ORDER BY id DESC LIMIT ?2",
+        "SELECT verdict, at FROM kb_attempt WHERE node=?1 AND {} AND stage<>'prepare' ORDER BY id DESC LIMIT ?2",
         sent()
     ))?;
     let found = statement.query_map(params![node, RECENT as i64], |r| {
@@ -701,8 +712,10 @@ fn compute_gaps(
         }
     }
 
+    // A preparation loop's notes are evidence about a draft, with no try of
+    // the definition behind them by design.
     let mut statement = conn.prepare(
-        "SELECT f.node, f.statement FROM kb_finding f WHERE f.node IN (SELECT id FROM kb_node WHERE site=?1) ORDER BY f.id",
+        "SELECT f.node, f.statement FROM kb_finding f WHERE f.node IN (SELECT id FROM kb_node WHERE site=?1) AND f.scope<>'prepare' ORDER BY f.id",
     )?;
     let findings: Vec<(i64, String)> = statement
         .query_map([site], |r| Ok((r.get(0)?, r.get(1)?)))?

@@ -246,7 +246,11 @@ el borrador y lo prueba de la misma manera. Sus acciones aparecen como
 herramientas en la misma conversación. Una página con scripts se abre
 brevemente en una ventana del navegador en tu pantalla. Cuando una lectura dice
 que hay que iniciar sesión, `itda_login` abre tu propio navegador; el agente
-solo ve el id de la cuenta.
+solo ve el id de la cuenta. Cuando la configuración deja una lectura o
+ninguna, el agente puede hacer él mismo el borrador del sitio a partir de su
+documentación con `itda_prepare`: ve formas y evidencias, nunca lo que el
+sitio guarda, e itda solo conserva lo que las evidencias nombran y lo que
+responde.
 
 Sáltate la terminal y dale esto a Claude Code, Cursor o Codex, con la dirección
 de un sitio que uses:

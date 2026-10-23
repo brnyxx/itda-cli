@@ -12,7 +12,7 @@ runs `cargo xtask check-layers` to check the direction.
 | Layer | Crate | Responsibility | I/O |
 |---|---|---|---|
 | 0 | `itda-types` | Error contract and exit codes, URL checks with the Public Suffix List, redaction, file helpers | files |
-| 1 | `itda-html` | Script-free HTML and embedded-JSON extraction; what a page shows about itself (`evidence`) for drafting; the shape of a page or an answer without its values (`shape`) | none |
+| 1 | `itda-html` | Script-free HTML and embedded-JSON extraction; what a page shows about itself (`evidence`) for drafting; the routes a page's docs and scripts name (`docs`); the shape of a page or an answer without its values (`shape`) | none |
 | 1 | `itda-store` | One SQLite connection on its own thread, with per-component migrations | SQLite |
 | 2 | `itda-kb` | The knowledge base per site: pages and actions, how they relate, every try with its verdict, notes, file hashes. Shapes only, never a value. The gap rules and the pass rates. Nothing that sends a request reads it | SQLite (through `itda-store`) |
 | 2 | `itda-spec` | Definition format, request building, response verification | none |
@@ -21,9 +21,9 @@ runs `cargo xtask check-layers` to check the direction.
 | 5 | `itda-net` | Bounded HTTP and adaptive reads, contract-aware strategies, shared pacing and cooldowns, private-address guard | network, SQLite |
 | 6 | `itda-vault` | Accounts and secrets: OS keyring, environment variables, or memory | keyring, SQLite |
 | 7 | `itda-runtime` | Runs an action end to end; approvals for changes; audit log | files |
-| 8 | `itda-prep` | Drafts definitions from OpenAPI documents, recordings and fetched pages. Does no I/O; the CLI fetches | none |
-| 9 | `itda-setup` | Steps for `itda setup`, `login` and `check`: probe, draft, try every read, keep what works; installed sites. Questions use a trait and progress uses a callback, so the CLI and MCP server share them | network, files, browser |
-| 10 | `itda-mcp` | MCP server over stdio; with a setup context, `itda_setup`, `itda_login`, `itda_check`, `itda_sites`, `itda_manage` and `itda_shape` | stdio |
+| 8 | `itda-prep` | Drafts definitions from OpenAPI documents, recordings and fetched pages, and holds an agent's draft to the evidence (`ground`). Does no I/O; the CLI fetches | none |
+| 9 | `itda-setup` | Steps for `itda setup`, `login` and `check`: probe, draft, try every read, keep what works; installed sites; the preparation loop an agent runs (`prepare`), which ends in the same install. Questions use a trait and progress uses a callback, so the CLI and MCP server share them | network, files, browser |
+| 10 | `itda-mcp` | MCP server over stdio; with a setup context, `itda_setup`, `itda_login`, `itda_check`, `itda_sites`, `itda_manage`, `itda_shape` and `itda_prepare` | stdio |
 | 11 | `apps/cli` | The `itda` command; the only place that picks paths and settings | all |
 
 `itda-spec` never does I/O. Response checks take a `ResponseLike` trait, so

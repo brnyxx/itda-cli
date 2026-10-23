@@ -224,7 +224,9 @@ news.ycombinator.com for me". It calls `itda_setup`. itda looks at the site,
 drafts and tries it the same way. Its actions appear as tools in the same
 conversation. A scripted page opens briefly in a browser window on your screen.
 When a read says to sign in, `itda_login` opens your own browser; the agent only
-sees the account id.
+sees the account id. When setup keeps one read or none, the agent can draft the
+site itself from its docs with `itda_prepare`: it sees shapes and evidence, never
+what the site holds, and itda keeps only what the evidence names and what answers.
 
 Skip the terminal and hand this to Claude Code, Cursor or Codex, with the
 address of a site you use:

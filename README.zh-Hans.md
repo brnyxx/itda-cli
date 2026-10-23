@@ -200,7 +200,9 @@ Redmine、Discourse、MediaWiki、WordPress 或 Gitea（也包括 Forgejo），�
 调用 `itda_setup`。itda 以同样的方式查看站点、起草并试一试。站点的操作
 会作为工具出现在同一个对话里。脚本页面会在你屏幕上的浏览器窗口里短暂
 打开。当某个读取说需要登录时，`itda_login` 打开你自己的浏览器；代理只
-看到账户 id。
+看到账户 id。当设置只留下一个或零个读取时，代理可以用 `itda_prepare` 根据站点的
+文档自己起草：它只看到结构和证据，看不到站点里的内容，itda 只保留证据指明、且确实
+有应答的部分。
 
 跳过终端，把下面这段连同你使用的站点地址交给 Claude Code、Cursor 或
 Codex：

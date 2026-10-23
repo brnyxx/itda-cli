@@ -1743,8 +1743,9 @@ pub(crate) fn unique(names: &mut BTreeSet<String>, name: &str) -> String {
     candidate
 }
 
+/// The site id a draft takes from a host when nobody names it:
 /// `intranet.example.co.kr` becomes `intranet-example`.
-pub(crate) fn site_name(host: &str) -> String {
+pub fn site_name(host: &str) -> String {
     let labels: Vec<&str> = host
         .split('.')
         .filter(|l| !matches!(*l, "www" | "api" | "co" | "or" | "go" | "ac" | "ne"))

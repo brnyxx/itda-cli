@@ -192,6 +192,35 @@ since nothing was retried. itda installs reads that already answered.
 challenged read in the browser as well; only in direct-HTTP mode
 (`ITDA_TRANSPORT=http`) does a block pause the site until you resume it.
 
+## Start from an agent's reading of the docs
+
+When the pages say little but the site documents its API in prose, an agent
+connected over MCP can draft the definition itself with `itda_prepare`
+([agents.md](agents.md) has the loop). itda reads the pages and documents and
+gives the agent their shapes and an id for each piece of evidence, never a
+value. The agent proposes a definition in this format; itda checks it with
+the same rules `itda spec validate` applies and keeps an operation only when
+the evidence carries it:
+
+| The operation | Kept when |
+|---|---|
+| `base_url` | a server the site documented (OpenAPI `servers`, an absolute address in its docs) or answered from |
+| `method` and `path` | a route in the docs, the description or a script that answered, matched across `/api` and version prefixes; or, for a `GET`, a path itda read or saw a page link to |
+| an HTML read | an `html` extraction, records (`items` with `fields`) or page fields (`page`); with `required_html_fields` alone the read has nothing to return and fails (`response_mismatch`) |
+| a file read | `response.format: file` with `media_types` |
+| a signed-in operation | a path read with the account's session |
+| a declared read | its request, rendered as it would be sent, asks for no change; one that does is kept as a change |
+
+A route the description says needs a sign-in itda cannot use is dropped, and
+a draft that only reads the home page and checks nothing is refused. itda then
+tries the kept reads through the same path as any call, at most 24 requests
+in a session: a JSON read without `required_pointers` gets them from the
+field names at the top of its answer (none for a list, or for an object keyed
+by data such as languages or dates), and one that answers with nothing or
+only an error does not count. A change is never sent. Installing takes the same steps
+as `itda setup`: save, try every read once, keep what works. The header says
+the definition came from `itda_prepare`; review it like any draft.
+
 ## Start from a browser recording
 
 Most internal and older sites publish no API description, but their pages

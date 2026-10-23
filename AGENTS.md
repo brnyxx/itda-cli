@@ -14,8 +14,8 @@ loaders is [skills/itda/SKILL.md](skills/itda/SKILL.md).
   `<site>.<action>`, with a JSON Schema for its inputs. With more, three
   tools stay fixed: `itda_search` (find by keywords), `itda_describe` (one
   action's inputs and effect) and `itda_call` (run one).
-- Over MCP, six tools (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`,
-  `itda_manage`, `itda_shape`) do what the commands below do without a
+- Over MCP, seven tools (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`,
+  `itda_manage`, `itda_shape`, `itda_prepare`) do what the commands below do without a
   terminal. `itda_sites` adds the last verdict and the reads that fail now and
   then. After a setup or remove the server sends
   `notifications/tools/list_changed`; the next `tools/list` has the new tools.
@@ -90,16 +90,16 @@ do:
 
 ## Set up a new site
 
-Over MCP, call `itda_setup` with the address of a page on the site. itda reads
-the page on its own and names the actions in plain words. It tries every
-read once and keeps the ones that work. The site's actions appear as tools in
-the same conversation. A page drawn by scripts opens briefly in a browser
-window on the user's screen. itda watches what it loads by itself, without
-clicking or typing. You cannot set up a page that needs a sign-in or still
-shows nothing this way. The result tells the user what to run in a terminal
-instead. If a read then says to sign in (`auth_required`), call `itda_login`
-with the site. The user signs in in their own browser; you only ever see the
-account id.
+Over MCP, call `itda_setup` with the address of a page on the site. itda names
+the actions in plain words, tries every read once, keeps what works and adds
+them as tools in the same conversation. A page drawn by scripts opens briefly in
+a browser window on the user's screen; nothing in it is clicked or typed. A page
+that needs a sign-in or still shows nothing gets what the user should run in a
+terminal. If a read then says to sign in (`auth_required`), call `itda_login`
+with the site; you only ever see the account id. When the result's `remedy`
+names `itda_prepare` (one read or none kept), draft the site from its docs in
+that loop ([skills/itda-prepare/SKILL.md](skills/itda-prepare/SKILL.md)): you
+see shapes and evidence ids, never values, and itda keeps what evidence carries.
 
 In a terminal, run `itda setup <url>`, or tell the user to type `itda` and
 paste the address. itda looks at the page, or watches it in the user's browser
