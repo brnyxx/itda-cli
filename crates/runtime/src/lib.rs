@@ -84,7 +84,9 @@ pub struct Call {
     pub next: Option<String>,
     /// A read `itda setup` tries once while the person watches: a block or
     /// challenge is reported without pausing the site (see
-    /// `itda_net::Request::pause_on_block`).
+    /// `itda_net::Request::pause_on_block`), and a file read only looks at
+    /// the answer's headers and first bytes, then drops it: nothing is saved
+    /// and `data` is `{media_type}`.
     pub discovery: bool,
     /// Where a file read saves its answer, instead of the runtime's files
     /// folder.
@@ -358,8 +360,11 @@ impl Runtime {
         {
             headers.push(("content-type".into(), declared.content_type().into()));
         }
-        // A file read needs a folder to save into.
-        let download = if op.saves_file() {
+        // A file read needs a folder to save into, unless it only looks.
+        let peek = call.discovery && op.saves_file();
+        let download = if peek {
+            Some(files::download(op, PathBuf::new(), true))
+        } else if op.saves_file() {
             let dir = match (&call.out, &self.files) {
                 (Some(out), _) => out.clone(),
                 (None, Some(files)) => files.join(&spec.site.name),
@@ -370,7 +375,7 @@ impl Runtime {
                     ));
                 }
             };
-            Some(files::download(op, dir))
+            Some(files::download(op, dir, false))
         } else {
             None
         };
@@ -769,7 +774,7 @@ impl Runtime {
                 error
             });
         }
-        if read && response.file.is_none() && !op.matches_response(&response) {
+        if read && !peek && response.file.is_none() && !op.matches_response(&response) {
             return Err(AppError::api("response_mismatch", 502));
         }
         // The change has happened, so a reply that does not match the
@@ -780,6 +785,9 @@ impl Runtime {
             })
         } else if let Some(saved) = &response.file {
             serde_json::to_value(Manifest::of(saved))?
+        } else if peek {
+            let media = response.header("content-type").split(';').next();
+            serde_json::json!({"media_type": media.unwrap_or_default().trim().to_ascii_lowercase()})
         } else {
             match shape(spec, op, &response) {
                 Ok(data) => data,

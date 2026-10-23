@@ -71,6 +71,11 @@ enum Command {
     },
     /// Remove an installed site definition
     Remove { site: String },
+    /// Work with a site definition file without installing it
+    Spec {
+        #[command(subcommand)]
+        command: SpecCommand,
+    },
     /// Call an action: itda call <site>.<action> [--input value]... [--account id] [--json]
     Call {
         /// <site>.<action>
@@ -325,6 +330,19 @@ enum DraftSource {
 }
 
 #[derive(Subcommand)]
+enum SpecCommand {
+    /// Check a definition the way itda add would, without installing it:
+    /// every problem it has, or none
+    Validate {
+        /// The definition, YAML or JSON
+        file: PathBuf,
+        /// Print JSON for scripts and agents
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum McpCommand {
     /// Add itda to an MCP client: claude-desktop, claude-code, cursor, vscode or codex
     Install {
@@ -366,12 +384,21 @@ fn main() -> ExitCode {
         || matches!(&command, Command::Accounts { json: true, .. })
         || matches!(&command, Command::Audit { json: true, .. })
         || matches!(&command, Command::Check { json: true, .. })
+        || matches!(
+            &command,
+            Command::Spec {
+                command: SpecCommand::Validate { json: true, .. }
+            }
+        )
         || matches!(&command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match command {
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
         Command::Describe { target, json } => describe(&home, &target, json),
         Command::Add { source, force } => block_on(add(&home, &source, force)),
         Command::Remove { site } => remove(&home, &site),
+        Command::Spec {
+            command: SpecCommand::Validate { file, json },
+        } => spec_validate(&file, json),
         Command::Call { target, rest } => block_on(call(&home, &target, rest)),
         Command::Login {
             site,
@@ -817,6 +844,61 @@ fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// Check a definition file the way `itda add` does, without installing it:
+/// every problem, printed the way a draft prints its own, and the exit code
+/// of a definition problem when there is one.
+fn spec_validate(file: &Path, as_json: bool) -> AppResult<ExitCode> {
+    let bytes = itda_types::util::read_bounded(file, sites::SPEC_LIMIT)?;
+    let spec = itda_spec::parse(&bytes)?;
+    let problems = itda_policy::spec_problems(&spec);
+    let shown = file.display().to_string();
+    let status = if problems.is_empty() {
+        "ok"
+    } else {
+        "data_invalid"
+    };
+    if as_json {
+        println!(
+            "{}",
+            json!({
+                "status": status,
+                "file": shown,
+                "site": spec.site.name,
+                "actions": spec.operations.len(),
+                "issues": problems.iter().map(|p| json!({
+                    "code": p.code,
+                    "field": p.field,
+                    "detail": p.detail,
+                })).collect::<Vec<_>>(),
+            })
+        );
+    } else if problems.is_empty() {
+        println!(
+            "{}",
+            text::tf(
+                "spec_valid",
+                &[
+                    ("file", &shown),
+                    ("site", &spec.site.name),
+                    ("n", &spec.operations.len().to_string()),
+                ],
+            )
+        );
+    } else {
+        for problem in &problems {
+            eprintln!("problem: {}: {}", problem.field, problem.detail);
+        }
+        eprintln!(
+            "{}",
+            text::tf(
+                "spec_invalid",
+                &[("file", &shown), ("n", &problems.len().to_string())],
+            )
+        );
+    }
+    Ok(ExitCode::from(output::exit_code(status)))
+}
+
 /// Every action of a site, or one of them, with its inputs and a command
 /// to copy. The example names the inputs the action cannot run without.
 fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
@@ -892,6 +974,16 @@ fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
         }
         if effect != itda_policy::Effect::Read {
             println!("         {}", text::t("approve_note"));
+            if let Some(confirm) = &op.confirm {
+                let input = confirm
+                    .matching
+                    .input()
+                    .map_or(confirm.matching.from.as_str(), |(_, name)| name);
+                println!(
+                    "         {}",
+                    text::tf("confirms", &[("read", &confirm.read), ("input", input)])
+                );
+            }
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -916,6 +1008,9 @@ fn describe_json(spec: &Spec, op: &Operation) -> Value {
             "file": {"path": "string", "bytes": "integer", "media_type": "string", "sha256": "string"},
             "media_types": response.media_types,
         });
+    }
+    if let Some(confirm) = &op.confirm {
+        row["confirm"] = json!(confirm);
     }
     row
 }
@@ -1562,6 +1657,7 @@ async fn draft_page(
         let page = itda_prep::Page {
             url: response.url.clone(),
             html: String::from_utf8_lossy(&response.bytes).into_owned(),
+            link: response.headers_joined("link"),
         };
         // A shell whose content is in frames on its own origin is read
         // through them, each frame page under its own address.

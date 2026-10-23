@@ -2,6 +2,7 @@
 //! built from what the page or the call showed rather than from its path.
 //! The action id stays machine-shaped (`list-notices`); this is the `desc`
 //! an agent and the person both see.
+use itda_types::lang::LANGUAGES;
 
 /// What an action does, with the subject it does it to.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,129 +34,451 @@ pub enum Label<'a> {
     Graphql { name: &'a str, mutation: bool },
 }
 
-/// `ko` or `en`: the language the person set, or the page's own.
+/// The language to describe actions in: the one the person set, else the
+/// page's own, else English. Any of [`LANGUAGES`].
 pub fn language(options: &str, page_lang: &str) -> String {
-    for candidate in [options, page_lang] {
-        let lower = candidate.trim().to_ascii_lowercase();
-        if lower.starts_with("ko") {
-            return "ko".into();
-        }
-        if lower.starts_with("en") {
-            return "en".into();
-        }
-    }
-    "en".into()
+    [options, page_lang]
+        .into_iter()
+        .find_map(itda_types::lang::supported)
+        .unwrap_or("en")
+        .into()
 }
 
-/// One line, 80 characters at most.
+/// One line, 80 characters at most, in `lang` (one of [`LANGUAGES`];
+/// English for anything else). The site's own words (titles, names) are
+/// kept as the site wrote them.
 pub fn describe(label: &Label<'_>, lang: &str) -> String {
-    let text = if lang == "ko" {
-        korean(label)
-    } else {
-        english(label)
+    let column = LANGUAGES.iter().position(|tag| *tag == lang).unwrap_or(0);
+    let template = |key: &str| {
+        TEMPLATES
+            .iter()
+            .find(|(name, _)| *name == key)
+            .map_or("", |(_, row)| row[column])
     };
+    let subject = |title: &str| {
+        if title.is_empty() {
+            template("the_page").to_owned()
+        } else {
+            title.to_owned()
+        }
+    };
+    let what = |what: &'_ str| {
+        if lang == "ko" {
+            korean_what(what).to_owned()
+        } else {
+            what.to_owned()
+        }
+    };
+    let (key, fields): (&str, Vec<(&str, String)>) = match label {
+        Label::Page { title } => ("page", vec![("title", subject(title))]),
+        Label::List { title } => ("list", vec![("title", subject(title))]),
+        Label::Embedded { title } => ("embedded", vec![("title", subject(title))]),
+        Label::Records { what: kind, title } => (
+            "records",
+            vec![("what", what(kind)), ("title", subject(title))],
+        ),
+        Label::One { what: kind, title } => {
+            ("one", vec![("what", what(kind)), ("title", subject(title))])
+        }
+        Label::Search { title } => ("search", vec![("title", subject(title))]),
+        Label::Submit { title } => ("submit", vec![("title", subject(title))]),
+        Label::Upload { title } => ("upload", vec![("title", subject(title))]),
+        Label::Attachment { title } => ("attachment", vec![("title", subject(title))]),
+        Label::Feed { title: "" } => ("site_feed", Vec::new()),
+        Label::Feed { title } => ("feed", vec![("title", (*title).to_owned())]),
+        Label::Api { verb, resource } => (
+            match *verb {
+                "list" => "api_list",
+                "get" => "api_get",
+                "create" => "api_create",
+                "update" => "api_update",
+                "delete" => "api_delete",
+                "search" => "api_search",
+                _ => "api_send",
+            },
+            vec![("resource", resource.replace(['-', '_'], " "))],
+        ),
+        Label::Graphql { name, mutation } => (
+            if *mutation {
+                "graphql_mutation"
+            } else {
+                "graphql_query"
+            },
+            vec![("name", words(name))],
+        ),
+    };
+    let mut text = template(key).to_owned();
+    for (name, value) in fields {
+        text = text.replace(&format!("{{{name}}}"), &value);
+    }
     text.chars().take(80).collect()
 }
 
-fn korean(label: &Label<'_>) -> String {
-    let subject = |s: &str| {
-        if s.is_empty() {
-            "페이지".to_owned()
-        } else {
-            s.to_owned()
-        }
-    };
-    match label {
-        Label::Page { title } => format!("{} 읽기", subject(title)),
-        Label::List { title } => format!("{} 목록 읽기", subject(title)),
-        Label::Embedded { title } => format!("{} 데이터 읽기", subject(title)),
-        Label::Records { what, title } => {
-            format!("{}의 {} 목록 읽기", subject(title), korean_what(what))
-        }
-        Label::One { what, title } => {
-            format!("{}의 {} 하나 읽기", subject(title), korean_what(what))
-        }
-        Label::Search { title } => format!("{}에서 검색", subject(title)),
-        Label::Submit { title } => format!("{}의 폼 보내기", subject(title)),
-        Label::Upload { title } => format!("{}에 파일 올리기", subject(title)),
-        Label::Attachment { title } => format!("{}의 첨부 파일 내려받기", subject(title)),
-        Label::Feed { title } => {
-            if title.is_empty() {
-                "최신 글 피드 읽기".into()
-            } else {
-                format!("{title} 피드 읽기")
-            }
-        }
-        Label::Api { verb, resource } => {
-            let what = resource.replace(['-', '_'], " ");
-            match *verb {
-                "list" => format!("{what} 목록 가져오기"),
-                "get" => format!("{what} 하나 가져오기"),
-                "create" => format!("{what} 만들기"),
-                "update" => format!("{what} 고치기"),
-                "delete" => format!("{what} 지우기"),
-                "search" => format!("{what} 검색"),
-                _ => format!("{what} 보내기"),
-            }
-        }
-        Label::Graphql { name, mutation } => {
-            let what = words(name);
-            if *mutation {
-                format!("{what} 실행 (변경)")
-            } else {
-                format!("{what} 조회")
-            }
-        }
-    }
-}
-
-fn english(label: &Label<'_>) -> String {
-    let subject = |s: &str| {
-        if s.is_empty() {
-            "the page".to_owned()
-        } else {
-            s.to_owned()
-        }
-    };
-    match label {
-        Label::Page { title } => format!("Read {}", subject(title)),
-        Label::List { title } => format!("List what {} shows", subject(title)),
-        Label::Embedded { title } => format!("Read the data behind {}", subject(title)),
-        Label::Records { what, title } => format!("List the {what} on {}", subject(title)),
-        Label::One { what, title } => format!("Read one of the {what} on {}", subject(title)),
-        Label::Search { title } => format!("Search on {}", subject(title)),
-        Label::Submit { title } => format!("Submit the form on {}", subject(title)),
-        Label::Upload { title } => format!("Upload a file to {}", subject(title)),
-        Label::Attachment { title } => format!("Download an attachment from {}", subject(title)),
-        Label::Feed { title } => {
-            if title.is_empty() {
-                "Read the site's feed".into()
-            } else {
-                format!("Read the {title} feed")
-            }
-        }
-        Label::Api { verb, resource } => {
-            let what = resource.replace(['-', '_'], " ");
-            match *verb {
-                "list" => format!("List {what}"),
-                "get" => format!("Get one of {what}"),
-                "create" => format!("Create {what}"),
-                "update" => format!("Update {what}"),
-                "delete" => format!("Delete {what}"),
-                "search" => format!("Search {what}"),
-                _ => format!("Send to {what}"),
-            }
-        }
-        Label::Graphql { name, mutation } => {
-            let what = words(name);
-            if *mutation {
-                format!("Run {what} (changes the site)")
-            } else {
-                format!("Query {what}")
-            }
-        }
-    }
-}
+/// The phrases a description is built from, one row per phrase and one
+/// column per language in the order of [`LANGUAGES`]. `{title}`, `{what}`,
+/// `{resource}` and `{name}` are filled in with the site's own words;
+/// `the_page` stands in for a page without a title. Every language keeps the
+/// fields English has (a test checks that), in whatever order its grammar
+/// wants.
+const TEMPLATES: &[(&str, [&str; 12])] = &[
+    (
+        "the_page",
+        [
+            "the page",
+            "페이지",
+            "ページ",
+            "页面",
+            "頁面",
+            "la página",
+            "la page",
+            "die Seite",
+            "a página",
+            "trang",
+            "halaman",
+            "страница",
+        ],
+    ),
+    (
+        "page",
+        [
+            "Read {title}",
+            "{title} 읽기",
+            "{title} を読む",
+            "读取 {title}",
+            "讀取 {title}",
+            "Leer {title}",
+            "Lire {title}",
+            "{title} lesen",
+            "Ler {title}",
+            "Đọc {title}",
+            "Baca {title}",
+            "Прочитать {title}",
+        ],
+    ),
+    (
+        "list",
+        [
+            "List what {title} shows",
+            "{title} 목록 읽기",
+            "{title} の一覧を読む",
+            "列出 {title} 显示的内容",
+            "列出 {title} 顯示的內容",
+            "Listar lo que muestra {title}",
+            "Lister ce que montre {title}",
+            "Auflisten, was {title} zeigt",
+            "Listar o que {title} mostra",
+            "Liệt kê những gì {title} hiển thị",
+            "Daftar yang ditampilkan {title}",
+            "Список того, что показывает {title}",
+        ],
+    ),
+    (
+        "embedded",
+        [
+            "Read the data behind {title}",
+            "{title} 데이터 읽기",
+            "{title} のデータを読む",
+            "读取 {title} 背后的数据",
+            "讀取 {title} 背後的資料",
+            "Leer los datos detrás de {title}",
+            "Lire les données derrière {title}",
+            "Die Daten hinter {title} lesen",
+            "Ler os dados por trás de {title}",
+            "Đọc dữ liệu phía sau {title}",
+            "Baca data di balik {title}",
+            "Прочитать данные, стоящие за {title}",
+        ],
+    ),
+    (
+        "records",
+        [
+            "List the {what} on {title}",
+            "{title}의 {what} 목록 읽기",
+            "{title} の {what} の一覧を読む",
+            "列出 {title} 上的 {what}",
+            "列出 {title} 上的 {what}",
+            "Listar {what} en {title}",
+            "Lister les {what} sur {title}",
+            "Die {what} auf {title} auflisten",
+            "Listar {what} em {title}",
+            "Liệt kê {what} trên {title}",
+            "Daftar {what} di {title}",
+            "Список {what} на {title}",
+        ],
+    ),
+    (
+        "one",
+        [
+            "Read one of the {what} on {title}",
+            "{title}의 {what} 하나 읽기",
+            "{title} の {what} を1件読む",
+            "读取 {title} 上的一条 {what}",
+            "讀取 {title} 上的一筆 {what}",
+            "Leer uno de {what} en {title}",
+            "Lire l'un des {what} sur {title}",
+            "Einen Eintrag der {what} auf {title} lesen",
+            "Ler um de {what} em {title}",
+            "Đọc một mục {what} trên {title}",
+            "Baca satu {what} di {title}",
+            "Прочитать одну запись {what} на {title}",
+        ],
+    ),
+    (
+        "search",
+        [
+            "Search on {title}",
+            "{title}에서 검색",
+            "{title} で検索",
+            "在 {title} 上搜索",
+            "在 {title} 上搜尋",
+            "Buscar en {title}",
+            "Rechercher sur {title}",
+            "Auf {title} suchen",
+            "Pesquisar em {title}",
+            "Tìm kiếm trên {title}",
+            "Cari di {title}",
+            "Поиск на {title}",
+        ],
+    ),
+    (
+        "submit",
+        [
+            "Submit the form on {title}",
+            "{title}의 폼 보내기",
+            "{title} のフォームを送信",
+            "提交 {title} 上的表单",
+            "送出 {title} 上的表單",
+            "Enviar el formulario de {title}",
+            "Envoyer le formulaire de {title}",
+            "Das Formular auf {title} absenden",
+            "Enviar o formulário de {title}",
+            "Gửi biểu mẫu trên {title}",
+            "Kirim formulir di {title}",
+            "Отправить форму на {title}",
+        ],
+    ),
+    (
+        "upload",
+        [
+            "Upload a file to {title}",
+            "{title}에 파일 올리기",
+            "{title} にファイルをアップロード",
+            "上传文件到 {title}",
+            "上傳檔案到 {title}",
+            "Subir un archivo a {title}",
+            "Envoyer un fichier à {title}",
+            "Eine Datei auf {title} hochladen",
+            "Enviar um arquivo para {title}",
+            "Tải một tệp lên {title}",
+            "Unggah file ke {title}",
+            "Загрузить файл на {title}",
+        ],
+    ),
+    (
+        "attachment",
+        [
+            "Download an attachment from {title}",
+            "{title}의 첨부 파일 내려받기",
+            "{title} から添付ファイルをダウンロード",
+            "从 {title} 下载附件",
+            "從 {title} 下載附件",
+            "Descargar un adjunto de {title}",
+            "Télécharger une pièce jointe de {title}",
+            "Einen Anhang von {title} herunterladen",
+            "Baixar um anexo de {title}",
+            "Tải tệp đính kèm từ {title}",
+            "Unduh lampiran dari {title}",
+            "Скачать вложение с {title}",
+        ],
+    ),
+    (
+        "feed",
+        [
+            "Read the {title} feed",
+            "{title} 피드 읽기",
+            "{title} のフィードを読む",
+            "读取 {title} 订阅源",
+            "讀取 {title} 訂閱源",
+            "Leer el feed de {title}",
+            "Lire le flux {title}",
+            "Den Feed {title} lesen",
+            "Ler o feed {title}",
+            "Đọc nguồn cấp {title}",
+            "Baca feed {title}",
+            "Прочитать ленту {title}",
+        ],
+    ),
+    (
+        "site_feed",
+        [
+            "Read the site's feed",
+            "최신 글 피드 읽기",
+            "サイトのフィードを読む",
+            "读取站点的订阅源",
+            "讀取網站的訂閱源",
+            "Leer el feed del sitio",
+            "Lire le flux du site",
+            "Den Feed der Site lesen",
+            "Ler o feed do site",
+            "Đọc nguồn cấp của trang web",
+            "Baca feed situs",
+            "Прочитать ленту сайта",
+        ],
+    ),
+    (
+        "api_list",
+        [
+            "List {resource}",
+            "{resource} 목록 가져오기",
+            "{resource} の一覧を取得",
+            "列出 {resource}",
+            "列出 {resource}",
+            "Listar {resource}",
+            "Lister {resource}",
+            "{resource} auflisten",
+            "Listar {resource}",
+            "Liệt kê {resource}",
+            "Daftar {resource}",
+            "Список {resource}",
+        ],
+    ),
+    (
+        "api_get",
+        [
+            "Get one of {resource}",
+            "{resource} 하나 가져오기",
+            "{resource} を1件取得",
+            "获取一条 {resource}",
+            "取得一筆 {resource}",
+            "Obtener uno de {resource}",
+            "Obtenir un élément de {resource}",
+            "Einen Eintrag von {resource} abrufen",
+            "Obter um de {resource}",
+            "Lấy một mục {resource}",
+            "Ambil satu {resource}",
+            "Получить одну запись {resource}",
+        ],
+    ),
+    (
+        "api_create",
+        [
+            "Create {resource}",
+            "{resource} 만들기",
+            "{resource} を作成",
+            "创建 {resource}",
+            "建立 {resource}",
+            "Crear {resource}",
+            "Créer {resource}",
+            "{resource} anlegen",
+            "Criar {resource}",
+            "Tạo {resource}",
+            "Buat {resource}",
+            "Создать {resource}",
+        ],
+    ),
+    (
+        "api_update",
+        [
+            "Update {resource}",
+            "{resource} 고치기",
+            "{resource} を更新",
+            "更新 {resource}",
+            "更新 {resource}",
+            "Actualizar {resource}",
+            "Modifier {resource}",
+            "{resource} aktualisieren",
+            "Atualizar {resource}",
+            "Cập nhật {resource}",
+            "Perbarui {resource}",
+            "Обновить {resource}",
+        ],
+    ),
+    (
+        "api_delete",
+        [
+            "Delete {resource}",
+            "{resource} 지우기",
+            "{resource} を削除",
+            "删除 {resource}",
+            "刪除 {resource}",
+            "Eliminar {resource}",
+            "Supprimer {resource}",
+            "{resource} löschen",
+            "Excluir {resource}",
+            "Xóa {resource}",
+            "Hapus {resource}",
+            "Удалить {resource}",
+        ],
+    ),
+    (
+        "api_search",
+        [
+            "Search {resource}",
+            "{resource} 검색",
+            "{resource} を検索",
+            "搜索 {resource}",
+            "搜尋 {resource}",
+            "Buscar {resource}",
+            "Rechercher {resource}",
+            "{resource} durchsuchen",
+            "Pesquisar {resource}",
+            "Tìm kiếm {resource}",
+            "Cari {resource}",
+            "Поиск {resource}",
+        ],
+    ),
+    (
+        "api_send",
+        [
+            "Send to {resource}",
+            "{resource} 보내기",
+            "{resource} に送信",
+            "发送到 {resource}",
+            "傳送到 {resource}",
+            "Enviar a {resource}",
+            "Envoyer à {resource}",
+            "An {resource} senden",
+            "Enviar para {resource}",
+            "Gửi tới {resource}",
+            "Kirim ke {resource}",
+            "Отправить в {resource}",
+        ],
+    ),
+    (
+        "graphql_query",
+        [
+            "Query {name}",
+            "{name} 조회",
+            "{name} を照会",
+            "查询 {name}",
+            "查詢 {name}",
+            "Consultar {name}",
+            "Interroger {name}",
+            "{name} abfragen",
+            "Consultar {name}",
+            "Truy vấn {name}",
+            "Kueri {name}",
+            "Запрос {name}",
+        ],
+    ),
+    (
+        "graphql_mutation",
+        [
+            "Run {name} (changes the site)",
+            "{name} 실행 (변경)",
+            "{name} を実行 (サイトを変更)",
+            "运行 {name}（更改站点）",
+            "執行 {name}（變更網站）",
+            "Ejecutar {name} (cambia el sitio)",
+            "Exécuter {name} (modifie le site)",
+            "{name} ausführen (ändert die Site)",
+            "Executar {name} (altera o site)",
+            "Chạy {name} (thay đổi trang web)",
+            "Jalankan {name} (mengubah situs)",
+            "Выполнить {name} (изменяет сайт)",
+        ],
+    ),
+];
 
 /// The Korean word for a kind of record, when there is a common one; the
 /// English words otherwise.
@@ -310,6 +633,32 @@ mod tests {
         assert_eq!(language("", "ko-KR"), "ko");
         assert_eq!(language("en", "ko"), "en");
         assert_eq!(language("", ""), "en");
+        assert_eq!(language("ja_JP.UTF-8", "en"), "ja");
+        assert_eq!(language("C", "zh-TW"), "zh-Hant");
+        assert_eq!(language("sv_SE", ""), "en");
+        assert_eq!(
+            describe(
+                &Label::List {
+                    title: "Hacker News"
+                },
+                "ja"
+            ),
+            "Hacker News の一覧を読む"
+        );
+        assert_eq!(
+            describe(
+                &Label::Api {
+                    verb: "delete",
+                    resource: "notice_board"
+                },
+                "de"
+            ),
+            "notice board löschen"
+        );
+        assert_eq!(
+            describe(&Label::Feed { title: "" }, "ru"),
+            "Прочитать ленту сайта"
+        );
         assert_eq!(
             describe(
                 &Label::Page {
@@ -321,5 +670,65 @@ mod tests {
             .count(),
             80
         );
+    }
+
+    fn fields(text: &str) -> std::collections::BTreeSet<&str> {
+        text.match_indices('{')
+            .filter_map(|(i, _)| text[i + 1..].split('}').next())
+            .collect()
+    }
+
+    #[test]
+    fn every_phrase_exists_in_every_language_with_the_same_fields() {
+        let mut names = std::collections::BTreeSet::new();
+        for (name, row) in TEMPLATES {
+            assert!(names.insert(*name), "{name} is in the table twice");
+            let wanted = fields(row[0]);
+            for (tag, text) in LANGUAGES.iter().zip(row) {
+                assert!(!text.trim().is_empty(), "{name}: {tag} is empty");
+                assert_eq!(fields(text), wanted, "{name}: {tag} fills in other fields");
+            }
+        }
+    }
+
+    #[test]
+    fn every_label_reads_in_every_language() {
+        let labels = [
+            Label::Page { title: "Board" },
+            Label::List { title: "Board" },
+            Label::Embedded { title: "Board" },
+            Label::Records {
+                what: "posts",
+                title: "Board",
+            },
+            Label::One {
+                what: "posts",
+                title: "Board",
+            },
+            Label::Search { title: "" },
+            Label::Submit { title: "Board" },
+            Label::Upload { title: "Board" },
+            Label::Attachment { title: "Board" },
+            Label::Feed { title: "Board" },
+            Label::Feed { title: "" },
+            Label::Api {
+                verb: "patch",
+                resource: "notice",
+            },
+            Label::Graphql {
+                name: "createIssue",
+                mutation: true,
+            },
+        ];
+        for tag in LANGUAGES {
+            for label in &labels {
+                let text = describe(label, tag);
+                assert!(!text.is_empty() && !text.contains('{'), "{tag}: {text}");
+            }
+            // The site's own words stay as the site wrote them.
+            assert!(describe(&labels[1], tag).contains("Board"), "{tag}");
+            assert!(describe(&labels[12], tag).contains("create issue"), "{tag}");
+        }
+        assert_eq!(describe(&labels[0], "tlh"), "Read Board");
     }
 }

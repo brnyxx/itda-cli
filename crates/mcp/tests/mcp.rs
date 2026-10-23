@@ -222,6 +222,64 @@ async fn refusals_come_back_as_tool_errors_with_a_fix() {
 }
 
 #[tokio::test]
+async fn a_change_names_the_read_that_confirms_it_in_both_modes() {
+    let value = json!({
+        "spec_version": 1,
+        "site": {"name": "lossy", "base_url": "http://127.0.0.1:9"},
+        "operations": [
+            {"name": "list-items", "desc": "List items", "method": "GET", "path": "/items", "effect": "read", "evidence": "doc",
+             "response": {"format": "json", "required_pointers": ["/items"]}},
+            {"name": "create-item", "desc": "Add an item", "method": "POST", "path": "/items", "effect": "write", "evidence": "doc",
+             "body": {"json": {"title": {"type": "string", "required": true}}},
+             "confirm": {"read": "list-items", "match": {"pointer": "/items/*/title", "from": "body.title"}}}
+        ]
+    });
+    let spec = itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let wanted = "After a lost answer (action_outcome_unknown), itda checks list-items once for the new title";
+    for mode in [Mode::Direct, Mode::Catalog] {
+        let store = Store::in_memory().unwrap();
+        let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+        let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+        let runtime = Arc::new(Runtime::new(Arc::new(Network::new(gate, true)), vault));
+        let server = Server::new(runtime, Catalog::new(vec![spec.clone()]), Some(mode));
+        let mut client = Client::start(server).await;
+        let description = if mode == Mode::Direct {
+            let tools = client.request("tools/list", json!({})).await;
+            let tools = tools["tools"].as_array().unwrap();
+            let read = tools
+                .iter()
+                .find(|t| t["name"] == "lossy.list-items")
+                .unwrap();
+            assert!(
+                !read["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("lost answer"),
+                "{read}"
+            );
+            let change = tools
+                .iter()
+                .find(|t| t["name"] == "lossy.create-item")
+                .unwrap();
+            change["description"].as_str().unwrap().to_owned()
+        } else {
+            let described = client
+                .call("itda_describe", json!({"action": "lossy.create-item"}))
+                .await;
+            described["structuredContent"]["description"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        assert!(description.contains(wanted), "{mode:?}: {description}");
+        assert!(
+            description.contains("approval id"),
+            "{mode:?}: {description}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn catalog_mode_keeps_three_stable_tools() {
     let base = site().await;
     let mut client = Client::start(server(&base, Some(Mode::Catalog))).await;

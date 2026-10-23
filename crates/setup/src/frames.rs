@@ -113,6 +113,7 @@ pub async fn follow(net: &Network, page: &Page, session: Option<&Session>) -> Ap
                 None => frame.url,
             },
             html: frame.html,
+            link: frame.link,
         };
         if seen.iter().filter(|s| **s == frame.url).count() > 1 || frame.url == page.url {
             // The frame answered with a page already read (a redirect).
@@ -181,8 +182,9 @@ async fn fetch(net: &Network, url: &str, session: Option<&Session>) -> Option<Fe
         return None;
     }
     Some(Fetched::Page(Page {
-        url: response.url,
+        link: response.headers_joined("link"),
         html: String::from_utf8_lossy(&response.bytes).into_owned(),
+        url: response.url,
     }))
 }
 
@@ -196,11 +198,13 @@ mod tests {
         let shell = Page {
             url: "https://portal.example/".into(),
             html: "<title>Portal</title><iframe src='/frame/board'></iframe>".into(),
+            link: String::new(),
         };
         assert!(is_shell(&shell));
         let elsewhere = Page {
             url: "https://portal.example/".into(),
             html: "<title>Portal</title><iframe src='https://cdn.example/w'></iframe>".into(),
+            link: String::new(),
         };
         assert!(!is_shell(&elsewhere));
         let board = Page {
@@ -211,6 +215,7 @@ mod tests {
                 <tr><td>2</td><td><a href='/n/2'>B</a></td></tr>
                 <tr><td>3</td><td><a href='/n/3'>C</a></td></tr></table>"
                 .into(),
+            link: String::new(),
         };
         assert!(!is_shell(&board), "a page with records is read as itself");
     }

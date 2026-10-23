@@ -125,5 +125,8 @@
   "lost_unchecked": "pas de lecture de confirmation ; vérifiez le site",
   "returns_file": "renvoie un fichier : {types}, enregistré sous {dir}",
   "sends_file": "envoie le fichier indiqué dans {input} ; vous l'approuvez par son nom, sa taille et son hachage",
+  "confirms": "si la réponse se perd : cherche la nouvelle valeur de {input} dans {read}",
+  "spec_valid": "{file} : une définition valide de {site} ({n} actions). itda add {file} l'installe.",
+  "spec_invalid": "{file} : {n} problèmes ; itda ne l'installerait pas.",
   "saved_file": "Enregistré {path} ({bytes} octets, sha256 {sha256})"
 }

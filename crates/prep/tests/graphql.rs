@@ -16,6 +16,7 @@ fn board() -> Page {
         url: "https://app.example/board".into(),
         html: "<title>Board</title><h1>Notices</h1><script>fetch('/graphql', {method: 'POST'})</script>"
             .into(),
+        link: String::new(),
     }
 }
 

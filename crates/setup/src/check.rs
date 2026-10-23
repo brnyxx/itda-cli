@@ -76,8 +76,10 @@ async fn reads(
                 out.push(outcome("skipped", "changes the site".into(), None));
                 continue;
             }
-            // A check reads; it does not fill a folder with files.
-            if op.saves_file() {
+            // A check reads; it does not fill a folder with files. Setup
+            // tries a file read once by its headers and first bytes and
+            // saves nothing (`Call::discovery`).
+            if op.saves_file() && !discovery {
                 out.push(outcome("skipped", "saves a file".into(), None));
                 continue;
             }
@@ -150,6 +152,18 @@ async fn reads(
         }
     }
     out
+}
+
+/// Whether trying a fresh site left nothing worth keeping: every action
+/// failed, or the site has only reads and none of them answered.
+pub fn nothing_worked(spec: &Spec, outcomes: &[Outcome]) -> bool {
+    let removed = outcomes.iter().filter(|o| o.failed()).count();
+    let worked = outcomes.iter().any(|o| o.status == "ok");
+    let all_reads = spec
+        .operations
+        .iter()
+        .all(|op| operation_effect(op, &BTreeMap::new()) == Effect::Read);
+    spec.operations.len() == removed || (!worked && all_reads)
 }
 
 /// The length of the list an answer is, or holds as `items`.

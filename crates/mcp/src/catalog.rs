@@ -18,6 +18,8 @@ pub struct Entry {
     pub paginated: bool,
     /// The read saves its answer as a file and returns a manifest.
     pub saves_file: bool,
+    /// For a change: the read run once after a lost answer.
+    pub confirm: Option<itda_spec::Confirm>,
     pub input_schema: Map<String, Value>,
 }
 
@@ -40,6 +42,7 @@ impl Catalog {
                     paginated: op.pagination.is_some()
                         && operation_effect(op, &BTreeMap::new()) == Effect::Read,
                     saves_file: op.saves_file(),
+                    confirm: op.confirm.clone(),
                     input_schema: input_schema(op, operation_effect(op, &BTreeMap::new())),
                 });
             }

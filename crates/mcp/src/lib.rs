@@ -292,7 +292,7 @@ impl Server {
                         "status": "ok",
                         "action": e.name,
                         "effect": e.effect.as_str(),
-                        "description": if e.paginated { format!("{}{PAGES_NOTE}", e.description) } else if e.saves_file { format!("{}{FILE_NOTE}", e.description) } else { e.description.clone() },
+                        "description": described(e),
                         "input_schema": e.input_schema,
                     })),
                     None => unknown(action, catalog.entries().iter().map(|e| e.name.as_str())),
@@ -434,18 +434,35 @@ fn file_link(manifest: &Value) -> Option<ContentBlock> {
     Some(ContentBlock::resource_link(resource))
 }
 
-fn action_tool(entry: &Entry) -> Tool {
-    let read = entry.effect == Effect::Read;
+/// What an agent reads about an action, as a tool or from `itda_describe`:
+/// its description and what it does beyond answering.
+fn described(entry: &Entry) -> String {
     let mut description = entry.description.clone();
-    if !read {
+    if entry.effect != Effect::Read {
         description.push_str(
             ". Changes something on the site: the first call returns an approval id for the user.",
         );
+        if let Some(confirm) = &entry.confirm {
+            let input = confirm
+                .matching
+                .input()
+                .map_or(confirm.matching.from.as_str(), |(_, name)| name);
+            description.push_str(&format!(
+                " After a lost answer (action_outcome_unknown), itda checks {} once for the new {input} and reports outcome_check; it never resends the change.",
+                confirm.read
+            ));
+        }
     } else if entry.paginated {
         description.push_str(PAGES_NOTE);
     } else if entry.saves_file {
         description.push_str(FILE_NOTE);
     }
+    description
+}
+
+fn action_tool(entry: &Entry) -> Tool {
+    let read = entry.effect == Effect::Read;
+    let description = described(entry);
     let annotations = ToolAnnotations::new()
         .read_only(read)
         .destructive(!read && entry.method == "DELETE")

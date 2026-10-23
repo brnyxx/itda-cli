@@ -16,8 +16,8 @@ change the definition format or the CLI.
   `LANG` (`ja_JP.UTF-8`, `zh-TW`, `pt` all resolve). The landing page picks the
   browser's language, has a picker in the header and remembers the choice;
   the README has one translation per language, linked from a language line at
-  the top of each. What agents read (tool descriptions, error codes and
-  remedies, site definitions) stays English. The strings live in
+  the top of each. What agents act on (tool descriptions, error codes and
+  remedies) stays English. The strings live in
   `apps/cli/text/<tag>.json`, `site/i18n/<tag>.js` and `README.<tag>.md`;
   `docs/i18n.md` has the glossary and the rules.
 - Outcome check after a lost answer: a change may name the read that shows
@@ -94,6 +94,23 @@ change the definition format or the CLI.
   storage, never another site's, never a profile on disk, and never writes
   anything into a page; see `docs/THREAT_MODEL.md`. The definition format is
   unchanged: `spec_version` stays 1.
+- The API description a page points at is also found in the first page's
+  HTTP `Link` header (RFC 8288) and under two more relations: `api-catalog`
+  (RFC 9727) and `describedby`, in the header or on `<link>`/`<a>`.
+  Learning where costs no request. `service-desc` wins, then `api-catalog`,
+  then `describedby`. An API catalog is a linkset (RFC 9264): itda follows
+  its `service-desc` links, up to three, and takes the first OpenAPI
+  document. A `describedby` document counts only when it is one; otherwise
+  `/openapi.json` is still tried. `rel` is matched as a list of relation
+  types, case-insensitively, so `rel="not-service-desc"` no longer counts.
+  Pagination's `header:link` reads the header with the same parser, so a
+  target with a comma in it or `rel="Next"` is read right.
+- `itda spec validate <file> [--json]` checks a definition the way `itda
+  add` would (`Spec::validate` and the policy checks), without installing
+  it. A valid file exits 0; otherwise every problem is printed as `problem:
+  <field>: <detail>`, the way a draft prints its own, and it exits 2, the
+  definition-problem code. `--json` gives `{status, file, site, actions,
+  issues}`.
 
 ### Changed
 
@@ -106,7 +123,8 @@ change the definition format or the CLI.
   `prefers-reduced-motion` it rests at the prompt. `assets/logo.svg` is the
   one master; `assets/src/mark.py` stamps it into the wordmarks and the hero,
   `assets/src/flow.py` reads it, and `assets/social.html` renders the link
-  preview from it.
+  preview from it. The README banners (`assets/hero.png`,
+  `assets/hero.ko.png`) are rendered again and carry it in the wordmark.
 - The gate reads the request it is about to send, not only the declared
   inputs. After the template is rendered, every query key and body field,
   the value of an intent field such as `action` or `mode`, and any GraphQL
@@ -119,9 +137,32 @@ change the definition format or the CLI.
   GraphQL endpoint sent no document, a document itda cannot read) stops with
   `effect_unknown` (exit 2) and a remedy; nothing is sent. A declared write
   is unchanged, and so are the 101 reads in the bundled definitions.
+- `itda describe` shows the read a change names in `confirm`, one line under
+  the change in the person's language (`after a lost answer: checks
+  list-notices for the new title`); `--json` adds `confirm: {read, match}`.
+  The change's MCP tool description says the same in English, and
+  `itda_describe` in catalog mode now returns the same description as the
+  tool, the approval note included.
+- Action descriptions are drafted in the person's language, any of the
+  twelve, not only in Korean or English: a Japanese setup now writes
+  `Hacker News の一覧を読む`, not `List what Hacker News shows`. The
+  language is `ITDA_LANG` or `LANG`, else the page's `<html lang>`, else
+  English. The phrases are one table in `crates/prep/src/label.rs` with the
+  same placeholders in every language (a test checks it); the site's own
+  words (titles, field and operation names) stay as the site wrote them, and
+  outside Korean so does the kind of record (`news articles`). Agents read
+  all twelve; tool names, error codes and remedies stay English.
 
 ### Fixed
 
+- A site whose only reads save files ended `itda setup` as if nothing
+  worked: setup skipped every file read ("saves a file"), so no read had
+  answered and the definition was thrown away. Setup now tries a file read
+  once, through the gate, by the answer's headers and first bytes: the
+  status, media type and size the definition allows count it as working, the
+  rest of the answer is dropped and nothing is saved. A read answered with a
+  page instead of the file is left out (`wrong_media_type`). `itda check`
+  still skips file reads.
 - A same-origin redirect or a next-page address of the form
   `/graphql?query=mutation{...}` passed the read check, because only the
   path and the query keys were read. The check now parses a GraphQL document

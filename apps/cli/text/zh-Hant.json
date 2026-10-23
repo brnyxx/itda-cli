@@ -125,5 +125,8 @@
   "lost_unchecked": "沒有用於確認的讀取；請檢查網站",
   "returns_file": "回傳一個檔案：{types}，儲存在 {dir} 下",
   "sends_file": "傳送 {input} 中指定的檔案；你按名稱、大小和雜湊核准它",
+  "confirms": "回應遺失時：在 {read} 中查找新的 {input} 值",
+  "spec_valid": "{file}：{site} 的有效定義（{n} 個操作）。用 itda add {file} 安裝。",
+  "spec_invalid": "{file}：有 {n} 個問題；itda 不會安裝它。",
   "saved_file": "已儲存 {path}（{bytes} 位元組，sha256 {sha256}）"
 }

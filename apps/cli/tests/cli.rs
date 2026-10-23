@@ -467,6 +467,119 @@ operations:
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn describe_names_the_read_that_confirms_a_change() {
+    let home = home();
+    install_confirming(&home, "http://127.0.0.1:9");
+    let text = String::from_utf8_lossy(
+        &itda(&home, &["describe", "lossy"], &[("ITDA_LANG", "en")])
+            .await
+            .stdout,
+    )
+    .into_owned();
+    assert!(
+        text.contains("after a lost answer: checks list-items for the new title"),
+        "{text}"
+    );
+    assert_eq!(text.matches("after a lost answer").count(), 1, "{text}");
+    let korean = String::from_utf8_lossy(
+        &itda(&home, &["describe", "lossy"], &[("ITDA_LANG", "ko")])
+            .await
+            .stdout,
+    )
+    .into_owned();
+    assert!(korean.contains("list-items에서 새 title 값을"), "{korean}");
+
+    let rows = stdout_json(&itda(&home, &["describe", "lossy", "--json"], &[]).await);
+    assert!(rows[0].get("confirm").is_none(), "{rows}");
+    assert_eq!(
+        rows[1]["confirm"],
+        serde_json::json!({"read": "list-items", "match": {"pointer": "/items/*/title", "from": "body.title"}})
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn spec_validate_checks_a_file_without_installing_it() {
+    let home = home();
+    install_confirming(&home, "http://127.0.0.1:9");
+    let good = home.join("specs/lossy/spec.yaml");
+    let english = [("ITDA_LANG", "en")];
+    let valid = itda(
+        &home,
+        &["spec", "validate", good.to_str().unwrap()],
+        &english,
+    )
+    .await;
+    assert_eq!(valid.status.code(), Some(0));
+    let said = String::from_utf8_lossy(&valid.stdout);
+    assert!(
+        said.contains("a valid definition of lossy (2 actions)"),
+        "{said}"
+    );
+    let report = stdout_json(
+        &itda(
+            &home,
+            &["spec", "validate", good.to_str().unwrap(), "--json"],
+            &[],
+        )
+        .await,
+    );
+    assert_eq!(report["status"], "ok");
+    assert_eq!(report["issues"], serde_json::json!([]));
+
+    let bad = home.join("bad.yaml");
+    std::fs::write(
+        &bad,
+        std::fs::read_to_string(&good)
+            .unwrap()
+            .replace("read: list-items", "read: list-things")
+            .replace("http://127.0.0.1:9", "ftp://127.0.0.1:9"),
+    )
+    .unwrap();
+    let invalid = itda(
+        &home,
+        &["spec", "validate", bad.to_str().unwrap()],
+        &english,
+    )
+    .await;
+    assert_eq!(invalid.status.code(), Some(2));
+    let said = String::from_utf8_lossy(&invalid.stderr);
+    assert!(said.contains("problem: site.base_url"), "{said}");
+    assert!(said.contains("list-things"), "{said}");
+    assert!(said.contains("itda would not install it"), "{said}");
+    let report = stdout_json(
+        &itda(
+            &home,
+            &["spec", "validate", bad.to_str().unwrap(), "--json"],
+            &[],
+        )
+        .await,
+    );
+    assert_eq!(report["status"], "data_invalid");
+    let fields: Vec<&str> = report["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|issue| issue["field"].as_str().unwrap())
+        .collect();
+    assert!(fields.contains(&"site.base_url"), "{report}");
+    assert!(fields.iter().any(|f| f.contains("confirm")), "{report}");
+
+    std::fs::write(&bad, "operations: [").unwrap();
+    let unreadable = itda(
+        &home,
+        &["spec", "validate", bad.to_str().unwrap(), "--json"],
+        &[],
+    )
+    .await;
+    assert_eq!(unreadable.status.code(), Some(2));
+    assert_eq!(stdout_json(&unreadable)["status"], "data_invalid");
+    // Nothing was installed.
+    assert!(!home.join("specs/bad").exists());
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_lost_change_is_checked_against_the_read_it_names() {
     let home = home();
     let base = serve_lossy().await;
@@ -1801,6 +1914,87 @@ async fn a_well_known_path_answers_with_the_api_description() {
         others.load(Ordering::SeqCst),
         0,
         "only /openapi.json is probed"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_pages_link_header_names_the_api_description() {
+    let home = home();
+    let others = Arc::new(AtomicUsize::new(0));
+    let router = Router::new()
+        .route(
+            "/board",
+            get(|| async {
+                (
+                    [("link", r#"</spec/items.json>; rel="service-desc""#)],
+                    docs_page(false),
+                )
+            }),
+        )
+        .route(
+            "/spec/items.json",
+            get(|| async { axum::Json(description(None)) }),
+        )
+        .route(
+            "/items",
+            get(|| async { axum::Json(json!({"items": [{"title": "linked"}]})) }),
+        )
+        .fallback({
+            let others = others.clone();
+            move || async move {
+                others.fetch_add(1, Ordering::SeqCst);
+                axum::http::StatusCode::NOT_FOUND
+            }
+        });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let english = [("ITDA_LANG", "en")];
+    let drafted = itda(
+        &home,
+        &["draft", "page", &format!("{base}/board")],
+        &english,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&drafted.stderr);
+    assert!(drafted.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "Read its API description at {base}/spec/items.json"
+        )),
+        "{said}"
+    );
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/board"),
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &english,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "Read its API description at {base}/spec/items.json"
+        )),
+        "{said}"
+    );
+    let called = itda(&home, &["call", "board.list-items", "--json"], &[]).await;
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "linked");
+    assert_eq!(
+        others.load(Ordering::SeqCst),
+        0,
+        "/openapi.json is not probed when the header names the description"
     );
     std::fs::remove_dir_all(home).ok();
 }

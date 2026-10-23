@@ -77,7 +77,9 @@ bytes, sha256 …)` once. Over MCP the result carries the manifest and a
 download says why in one word, and keeps nothing: `wrong_media_type` (the site
 answered with a page or another kind of content), `partial_answer` (a 206 or a
 short body), `empty_answer`, `too_large`. `itda check` skips file reads
-("saves a file").
+("saves a file"). `itda setup` tries each one once by its headers and first
+bytes (the media type and size the definition allows) and keeps nothing, so a
+site whose only reads are files is set up like any other.
 
 A change whose body carries a file takes the path of a file on the user's
 computer in the input its definition names. The user approves that exact file:
@@ -125,7 +127,11 @@ the result next to the error as `outcome_check`: `landed` means the change is
 in, so tell the user and do not ask for it again; `not_found` means the site
 shows no trace of it, so the user may ask for a new approval; `unknown` means
 that read failed too. Without `outcome_check`, check the site first; only a
-person decides whether to ask for the change again. A new approval request for
+person decides whether to ask for the change again. Which read a change names
+shows before you call it: `itda describe` prints it under the change (`after a
+lost answer: checks list-notices for the new title`), `--json` carries it as
+`confirm: {read, match}`, and the change's tool description (or
+`itda_describe` in catalog mode) says the same. A new approval request for
 a change that landed carries `previous_outcome: landed`, and its review tells
 the user so. A change that never left the
 machine (no turn at the gate, a name that did not resolve, a connection that was

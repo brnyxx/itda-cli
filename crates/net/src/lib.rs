@@ -101,6 +101,17 @@ pub struct Response {
     pub file: Option<SavedFile>,
 }
 impl Response {
+    /// Every line of a header that may come more than once, such as
+    /// `Link`, joined with commas; empty when there is none.
+    pub fn headers_joined(&self, key: &str) -> String {
+        self.headers
+            .iter()
+            .filter(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     pub fn header(&self, key: &str) -> &str {
         self.headers
             .iter()
@@ -345,10 +356,26 @@ impl Network {
                 ));
             }
             let mut file = None;
+            let mut peeked = false;
             let mut too_large = false;
             let mut bytes = Vec::new();
             let mut failed = None;
             match (&input.download, refused) {
+                // Only a look: the first bytes, then the answer is dropped.
+                (Some(download), Some(None)) if download.peek => {
+                    peeked = true;
+                    let mut stream = response.bytes_stream();
+                    match stream.next().await {
+                        Some(Ok(chunk)) => {
+                            bytes.extend_from_slice(&chunk[..chunk.len().min(files::SNIFF)]);
+                        }
+                        Some(Err(_)) => failed = Some(AppError::api("partial_answer", 502)),
+                        None if !download.allow_empty => {
+                            failed = Some(AppError::api("empty_answer", 502));
+                        }
+                        None => {}
+                    }
+                }
                 (Some(download), Some(None)) => {
                     let (content_type, disposition) = (
                         header("content-type").to_owned(),
@@ -486,7 +513,7 @@ impl Network {
                     AppError::api("request_failed", 502).with("reason", "upload_incomplete")
                 );
             }
-            if file.is_some() {
+            if file.is_some() || peeked {
                 bytes = Vec::new();
             }
             return Ok(Response {
