@@ -106,7 +106,8 @@ change the definition format or the CLI.
   `prefers-reduced-motion` it rests at the prompt. `assets/logo.svg` is the
   one master; `assets/src/mark.py` stamps it into the wordmarks and the hero,
   `assets/src/flow.py` reads it, and `assets/social.html` renders the link
-  preview from it.
+  preview from it. The README banners (`assets/hero.png`,
+  `assets/hero.ko.png`) are rendered again and carry it in the wordmark.
 - The gate reads the request it is about to send, not only the declared
   inputs. After the template is rendered, every query key and body field,
   the value of an intent field such as `action` or `mode`, and any GraphQL
