@@ -329,6 +329,14 @@ operations:
 `itda ls` lists what it found, and a broken definition shows up there and in
 `itda doctor` with the problem and how to fix it.
 
+To check a file before installing it, run `itda spec validate spec.yaml`. It
+runs the checks `itda add` runs (the structure, the addresses, `confirm` and
+the rest) and installs nothing. A valid file exits 0; otherwise it prints one
+`problem: <field>: <detail>` line per problem and exits 2, the code of every
+definition problem. `--json` prints `{status, file, site, actions, issues}`,
+each issue `{code, field, detail}`; a file that does not parse prints the
+usual error envelope.
+
 ## `site`
 
 | Field | Required | Meaning |
@@ -975,6 +983,7 @@ exit code says whether the new definition matches. Over MCP, `itda_manage` with
 
 ## Checklist before sharing a definition
 
+- `itda spec validate` finds no problem.
 - Every read declares a `response`, and `itda check` passes.
 - Every change whose records a read lists names that read in `confirm`.
 - Every `desc` says what the action does, in one line.

@@ -136,6 +136,7 @@ for more room with `defaults.interval`.
 | `itda record <url> [--name id] [--install] [--save file.har]` | Use a site in your own browser while itda records what its pages ask for. Draft a definition from the recording |
 | `itda draft openapi <file> [--install]` · `itda draft har <file> [--install]` | Draft one from an API description or a saved browser recording |
 | `itda add <file\|url\|name\|-> [--force]` | Install a site definition (a file, an https URL, stdin, or a ready-made site such as `github`) after showing where it sends requests and which actions change the site |
+| `itda spec validate <file> [--json]` | Check a definition the way `itda add` would, without installing it. Exit 0 when it is valid; otherwise every problem and exit 2. `--json` lists the issues |
 | `itda remove <site>` | Remove an installed site definition; its accounts stay until `itda logout` |
 | `itda ls [site] [--json]` | Installed sites and their actions |
 | `itda describe <site>[.<action>] [--json]` | Each action with its inputs and an example command to copy; for a change, the read that confirms it after a lost answer |

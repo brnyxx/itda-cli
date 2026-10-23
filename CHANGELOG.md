@@ -94,6 +94,12 @@ change the definition format or the CLI.
   storage, never another site's, never a profile on disk, and never writes
   anything into a page; see `docs/THREAT_MODEL.md`. The definition format is
   unchanged: `spec_version` stays 1.
+- `itda spec validate <file> [--json]` checks a definition the way `itda
+  add` would (`Spec::validate` and the policy checks), without installing
+  it. A valid file exits 0; otherwise every problem is printed as `problem:
+  <field>: <detail>`, the way a draft prints its own, and it exits 2, the
+  definition-problem code. `--json` gives `{status, file, site, actions,
+  issues}`.
 
 ### Changed
 
