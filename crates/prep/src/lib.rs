@@ -7,14 +7,15 @@
 //! time, so problems show up before anyone runs it.
 mod confirm;
 pub mod graphql;
+pub mod ground;
 pub mod guide;
 mod har;
 pub mod label;
 mod openapi;
 mod page;
 
-pub use har::{from_har, query_session_key, redacted_recording};
-pub use openapi::{from_openapi, is_openapi};
+pub use har::{from_har, query_session_key, redacted_recording, site_name};
+pub use openapi::{ApiRoute, ApiSummary, api_summary, from_openapi, is_openapi};
 pub use page::{
     DESCRIPTION_PATH, Description, Page, embeds_lists, from_pages, from_pages_and_description,
 };

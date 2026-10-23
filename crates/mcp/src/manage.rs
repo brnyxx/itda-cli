@@ -12,13 +12,14 @@ use serde_json::{Map, Value, json};
 use std::{collections::BTreeMap, sync::Arc, sync::mpsc};
 
 /// The tools this module serves, in the order they are listed.
-pub(crate) const NAMES: [&str; 6] = [
+pub(crate) const NAMES: [&str; 7] = [
     "itda_setup",
     "itda_login",
     "itda_check",
     "itda_sites",
     "itda_manage",
     "itda_shape",
+    "itda_prepare",
 ];
 
 /// At most this many audit entries come back from one call.
@@ -94,13 +95,14 @@ pub(crate) fn tools() -> Vec<Tool> {
             }, "required": ["site"], "additionalProperties": false})),
         )
         .with_annotations(ToolAnnotations::new().read_only(true).idempotent(true).open_world(true)),
+        crate::prepare::tool(),
     ]
 }
 
 /// The answers an agent's tool call gives: never record, never keep a
 /// credential, replace only when asked to.
-struct Fixed {
-    replace: bool,
+pub(crate) struct Fixed {
+    pub(crate) replace: bool,
 }
 
 impl Answers for Fixed {
@@ -162,6 +164,7 @@ impl Server {
             },
             "itda_manage" => self.manage_action(ctx, arguments, caller).await,
             "itda_shape" => shape(ctx, arguments).await,
+            "itda_prepare" => self.prepare(ctx, arguments, caller).await,
             _ => return None,
         })
     }
@@ -252,30 +255,52 @@ impl Server {
                 ));
             }
             Ok(Finished::Stopped(Stopped::NothingWorks)) => {
-                return failure(&coded(
+                let mut error = coded(
                     "nothing_works",
                     422,
                     "No read worked, so itda kept nothing",
                     format!(
-                        "Ask the user to run `itda record {url} --install` in a terminal and use the site while it watches."
+                        "Prepare the site from its docs and pages with itda_prepare (op start, url {url}), or ask the user to run `itda record {url} --install` in a terminal and use the site while it watches."
                     ),
-                ));
+                );
+                error.extra.insert(
+                    "next".into(),
+                    json!({"tool": "itda_prepare", "arguments": {"op": "start", "url": url}}),
+                );
+                return failure(&error);
             }
         };
-        let spec = done.spec;
         if let Err(error) = self.reload(ctx) {
             return failure(&error);
         }
         self.tools_changed(caller).await;
+        let mut result = self.done_json(&done, notes);
+        // Little that answers: the agent can prepare the site from its docs
+        // and pages instead, as a loop it runs.
+        let answered = done.outcomes.iter().filter(|o| o.status == "ok").count();
+        if answered <= 1 {
+            result["remedy"] = json!({
+                "reason": format!("only {answered} read answered; an agent can draft the site from its docs and pages with itda_prepare"),
+                "tool": "itda_prepare",
+                "arguments": {"op": "start", "url": url},
+            });
+        }
+        structured(result)
+    }
+
+    /// A site just set up, as a tool result: its actions, what was removed
+    /// and why, the notes, the problems and the top gaps.
+    pub(crate) fn done_json(&self, done: &itda_setup::Done, mut notes: Vec<String>) -> Value {
+        let spec = &done.spec;
         let removed: Vec<Value> = done
             .outcomes
             .iter()
             .filter(|o| done.removed.contains(&o.action))
             .map(|o| json!({"action": o.action, "status": o.status, "why": o.detail}))
             .collect();
-        notes.extend(done.notes);
+        notes.extend(done.notes.iter().cloned());
         notes.extend(done.unrecorded.as_deref().map(knowledge::not_written));
-        structured(json!({
+        json!({
             "status": "ok",
             "site": spec.site.name,
             "title": spec.site.title,
@@ -287,12 +312,12 @@ impl Server {
                 "version": found.version,
                 "confirmed": found.confirmed,
             })),
-            "actions": actions(&spec),
+            "actions": actions(spec),
             "removed": removed,
             "notes": notes,
             "problems": done.problems,
             "untrusted": true,
-        }))
+        })
     }
 
     async fn manage_action(
@@ -651,10 +676,10 @@ async fn login(
 fn outside(tool: &str, only: &str, arguments: &Map<String, Value>) -> Option<AppError> {
     let named = text(arguments, "site");
     let other = named.is_some_and(|site| site != only);
-    if tool == "itda_setup" || (tool == "itda_manage" && other) || (tool != "itda_manage" && other)
-    {
+    let sets_up = matches!(tool, "itda_setup" | "itda_prepare");
+    if sets_up || (tool == "itda_manage" && other) || (tool != "itda_manage" && other) {
         let what = match tool {
-            "itda_setup" => "sets other sites up".to_owned(),
+            "itda_setup" | "itda_prepare" => "sets other sites up".to_owned(),
             _ => format!("reaches {}", named.unwrap_or_default()),
         };
         return Some(usage(
@@ -1117,7 +1142,12 @@ fn refusal_words(refused: &itda_setup::Refused) -> String {
 }
 
 /// An error with a stable code, its own message and its own fix.
-fn coded(code: &str, status: u16, msg: impl Into<String>, remedy: impl Into<String>) -> AppError {
+pub(crate) fn coded(
+    code: &str,
+    status: u16,
+    msg: impl Into<String>,
+    remedy: impl Into<String>,
+) -> AppError {
     let mut error = AppError::api(code, status);
     error.msg = msg.into();
     error.remedy = remedy.into();

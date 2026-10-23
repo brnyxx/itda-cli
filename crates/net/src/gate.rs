@@ -369,6 +369,23 @@ impl Gate {
             .await
     }
 
+    /// How many turns sites took since `since` (Unix milliseconds), across
+    /// every origin: one per request sent, direct or in the browser,
+    /// redirects included. Reads the record the pacing keeps; changes
+    /// nothing. The record holds the last hour.
+    pub async fn turns_since(&self, since: i64) -> AppResult<usize> {
+        self.store
+            .call(move |conn| {
+                let count: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM request_event WHERE scope LIKE '%|*' AND at>=?1",
+                    [since],
+                    |r| r.get(0),
+                )?;
+                Ok(count as usize)
+            })
+            .await
+    }
+
     /// The user reconnected or checked the site: clear pauses and cooldowns.
     pub async fn resume(&self, scope: &str) -> AppResult<()> {
         let scope = scope.to_owned();

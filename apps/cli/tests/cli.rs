@@ -912,6 +912,35 @@ fn the_agent_guide_and_skill_are_short_and_cover_the_rules() {
 }
 
 #[test]
+fn the_prepare_skill_is_short_and_keeps_values_away() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let skill = std::fs::read_to_string(root.join("skills/itda-prepare/SKILL.md"))
+        .unwrap()
+        .replace("\r\n", "\n");
+    assert!(
+        skill.starts_with("---\nname: itda-prepare\ndescription: "),
+        "{skill}"
+    );
+    assert!(skill.lines().count() <= 120, "{}", skill.lines().count());
+    for phrase in [
+        "Values are not shown; speak by evidence id",
+        "Exhaust the space",
+        "Attack the premise",
+        "Complete the contract",
+        "$result:",
+        "120 tool calls",
+        "24\nrequests for checks",
+        "no_actions",
+        "pause and tell the user",
+    ] {
+        assert!(skill.contains(phrase), "{phrase}");
+    }
+    for slip in ["try the browser", "another account and", "try again later"] {
+        assert!(!skill.contains(slip), "{slip}");
+    }
+}
+
+#[test]
 fn the_sandbox_definition_is_valid() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sandbox/spec.yaml");
     let spec = itda_spec::parse(&std::fs::read(path).unwrap()).unwrap();
@@ -1004,6 +1033,7 @@ async fn mcp_serves_installed_actions_over_stdio() {
             "itda_sites",
             "itda_manage",
             "itda_shape",
+            "itda_prepare",
         ]
     );
     assert_eq!(

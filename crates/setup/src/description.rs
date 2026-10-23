@@ -22,6 +22,16 @@ const CATALOG_TRIES: usize = 3;
 /// even when it does not parse, so the draft can say so; anything else must
 /// parse.
 pub async fn find(net: &Network, pages: &[Page]) -> Option<Description> {
+    find_within(net, pages, &|_| true).await
+}
+
+/// The same, fetching only addresses `allowed` accepts: a link elsewhere
+/// is not followed.
+pub async fn find_within(
+    net: &Network,
+    pages: &[Page],
+    allowed: &(dyn Fn(&str) -> bool + Sync),
+) -> Option<Description> {
     let first = pages.first()?;
     let mut linked = header_links(first);
     linked.extend(
@@ -31,10 +41,10 @@ pub async fn find(net: &Network, pages: &[Page]) -> Option<Description> {
     );
     if let Some((kind, link)) = linked.into_iter().min_by_key(|(kind, _)| *kind) {
         match kind {
-            DescriptionRel::ServiceDesc => return fetch(net, &link).await,
-            DescriptionRel::ApiCatalog => return catalog(net, &link).await,
+            DescriptionRel::ServiceDesc => return fetch(net, &link, allowed).await,
+            DescriptionRel::ApiCatalog => return catalog(net, &link, allowed).await,
             DescriptionRel::DescribedBy => {
-                if let Some(found) = described(net, &link).await {
+                if let Some(found) = described(net, &link, allowed).await {
                     return Some(found);
                 }
             }
@@ -44,7 +54,7 @@ pub async fn find(net: &Network, pages: &[Page]) -> Option<Description> {
     probe.set_query(None);
     probe.set_fragment(None);
     probe.set_path(DESCRIPTION_PATH);
-    described(net, probe.as_str()).await
+    described(net, probe.as_str(), allowed).await
 }
 
 /// The description links of the page's `Link` header, resolved against the
@@ -66,8 +76,12 @@ fn header_links(page: &Page) -> Vec<(DescriptionRel, String)> {
 /// [{"href": ...}]}]}`. Its `service-desc` links are tried in order, up to
 /// [`CATALOG_TRIES`], and the first that parses is the description. A
 /// catalog that links to further catalogs is not followed.
-async fn catalog(net: &Network, url: &str) -> Option<Description> {
-    let listed = fetch(net, url).await?;
+async fn catalog(
+    net: &Network,
+    url: &str,
+    allowed: &(dyn Fn(&str) -> bool + Sync),
+) -> Option<Description> {
+    let listed = fetch(net, url, allowed).await?;
     let base = url::Url::parse(&listed.url).ok()?;
     let linkset: Value = serde_json::from_slice(&listed.bytes).ok()?;
     let links: Vec<String> = linkset["linkset"]
@@ -81,7 +95,7 @@ async fn catalog(net: &Network, url: &str) -> Option<Description> {
         .take(CATALOG_TRIES)
         .collect();
     for link in links {
-        if let Some(found) = described(net, &link).await {
+        if let Some(found) = described(net, &link, allowed).await {
             return Some(found);
         }
     }
@@ -89,13 +103,24 @@ async fn catalog(net: &Network, url: &str) -> Option<Description> {
 }
 
 /// The document at `url` when it is an OpenAPI or Swagger description.
-async fn described(net: &Network, url: &str) -> Option<Description> {
-    fetch(net, url)
+async fn described(
+    net: &Network,
+    url: &str,
+    allowed: &(dyn Fn(&str) -> bool + Sync),
+) -> Option<Description> {
+    fetch(net, url, allowed)
         .await
         .filter(|found| itda_prep::is_openapi(&found.bytes))
 }
 
-async fn fetch(net: &Network, url: &str) -> Option<Description> {
+async fn fetch(
+    net: &Network,
+    url: &str,
+    allowed: &(dyn Fn(&str) -> bool + Sync),
+) -> Option<Description> {
+    if !allowed(url) {
+        return None;
+    }
     let request = Request {
         limit: LIMIT,
         ..Request::read(url)

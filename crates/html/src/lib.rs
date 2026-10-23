@@ -7,6 +7,7 @@
 //! will live with the preparation layer. A site-specific rule for one
 //! marketplace's Remix payload was removed. `resolve_pointer` moved to
 //! `itda_types::json`.
+pub mod docs;
 pub mod evidence;
 pub mod shape;
 
@@ -145,6 +146,77 @@ impl Extraction {
         }
         Some(Value::Object(output))
     }
+    /// Why the extraction does not fit a page, in counts only: how many
+    /// records the item selector finds, and for each field in how many of
+    /// them it finds nothing, more than one element, or no such attribute.
+    pub fn diagnose(&self, html: &str) -> Value {
+        let document = Html::parse_document(html);
+        let root = document.root_element();
+        let records: Vec<_> = if self.items.is_empty() {
+            vec![root]
+        } else {
+            Selector::parse(&self.items)
+                .map(|selector| {
+                    document
+                        .select(&selector)
+                        .take(if self.limit == 0 { 100 } else { self.limit })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        serde_json::json!({
+            "items_matched": (!self.items.is_empty()).then_some(records.len()),
+            "fields": misses(&records, &self.fields),
+            "page": misses(&[root], &self.page),
+        })
+    }
+}
+fn misses(
+    roots: &[scraper::ElementRef<'_>],
+    fields: &std::collections::BTreeMap<String, OutputField>,
+) -> serde_json::Map<String, Value> {
+    let mut output = serde_json::Map::new();
+    for (name, field) in fields {
+        let selector = if field.selector.is_empty() {
+            None
+        } else {
+            match Selector::parse(&field.selector) {
+                Ok(selector) => Some(selector),
+                Err(_) => {
+                    output.insert(name.clone(), serde_json::json!({"selector": "invalid"}));
+                    continue;
+                }
+            }
+        };
+        let (mut none, mut several, mut no_attribute) = (0, 0, 0);
+        for root in roots {
+            let found: Vec<_> = match &selector {
+                Some(selector) => root.select(selector).take(2).collect(),
+                None => vec![*root],
+            };
+            match found.as_slice() {
+                [] => none += 1,
+                [element] => {
+                    if !field.attribute.is_empty()
+                        && element.value().attr(&field.attribute).is_none()
+                    {
+                        no_attribute += 1;
+                    }
+                }
+                _ => several += 1,
+            }
+        }
+        output.insert(
+            name.clone(),
+            serde_json::json!({
+                "required": field.required,
+                "found_none": none,
+                "found_several": several,
+                "no_attribute": no_attribute,
+            }),
+        );
+    }
+    output
 }
 fn extract_fields(
     root: scraper::ElementRef<'_>,
@@ -509,6 +581,22 @@ mod tests {
         assert!(value["items"][0]["url"].is_null());
         let value = extraction.extract("<article><h2>A\n title<script>private-value</script><span hidden>hidden-value</span><style>private-style</style></h2></article>", "https://example.test/list").unwrap();
         assert_eq!(value["items"][0]["title"], "A title");
+    }
+
+    #[test]
+    fn a_diagnosis_counts_where_fields_miss_and_shows_no_value() {
+        let extraction: Extraction = serde_json::from_value(json!({"items":"li","fields":{"title":{"selector":"a","required":true},"link":{"selector":"a","attribute":"href"}},"page":{"heading":{"selector":"h1"}}})).unwrap();
+        let page = "<h1>SECRET-HEADING</h1><ul><li><a href='/a'>SECRET-ONE</a></li><li><a>two</a><a>three</a></li><li>none</li><li><a>four</a></li></ul>";
+        assert!(extraction.extract(page, "https://example.test/").is_none());
+        let diagnosis = extraction.diagnose(page);
+        assert_eq!(diagnosis["items_matched"], 4);
+        assert_eq!(
+            diagnosis["fields"]["title"],
+            json!({"required": true, "found_none": 1, "found_several": 1, "no_attribute": 0})
+        );
+        assert_eq!(diagnosis["fields"]["link"]["no_attribute"], 1);
+        assert_eq!(diagnosis["page"]["heading"]["found_none"], 0);
+        assert!(!diagnosis.to_string().contains("SECRET"));
     }
 
     #[test]

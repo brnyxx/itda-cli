@@ -17,6 +17,7 @@ pub mod frames;
 pub mod introspect;
 pub mod knowledge;
 pub mod login;
+pub mod prepare;
 pub mod record;
 pub mod refresh;
 pub mod sites;
@@ -647,7 +648,6 @@ pub async fn run(
         recording = Some(rec);
     }
     let draft = draft.ok_or_else(|| AppError::api("internal", 500))?;
-    let site = draft.site.clone();
 
     // 2. Show what was found.
     let spec = itda_spec::parse(draft.yaml.as_bytes())?;
@@ -664,6 +664,55 @@ pub async fn run(
         sources.template = Some(found.software.to_owned());
         sources.base_url = Some(found.base.clone());
     }
+    let installing = Installing {
+        spec,
+        // A ready-made definition comes from itda itself, not from the
+        // site's pages, so there is nothing to draft again from.
+        sources: bundled.is_none().then_some(sources),
+        recording,
+        signed,
+        recognised,
+        shapes,
+    };
+    install(ctx, draft, installing, answers, report).await
+}
+
+/// What a draft is installed with, beside the draft itself.
+pub(crate) struct Installing {
+    /// The draft, parsed.
+    pub spec: Spec,
+    /// Where it came from, for `itda refresh`; `None` when there is nothing
+    /// to draft again from, and sources left from a site of the same name
+    /// set up before are removed.
+    pub sources: Option<refresh::Sources>,
+    /// The recording the draft came from, whose credentials are offered.
+    pub recording: Option<record::Recording>,
+    /// The session the person signed in with, kept once the site is saved.
+    pub signed: Option<login::Signed>,
+    pub recognised: Option<software::Recognised>,
+    /// The pages fetched as itda, as shapes for the knowledge base.
+    pub shapes: Vec<knowledge::PageShape>,
+}
+
+/// Save a draft, replacing a site of the same name only with a yes, keep
+/// the credentials it came with, try every read once and keep what works.
+/// `itda setup` and an agent's preparation loop end here alike.
+pub(crate) async fn install(
+    ctx: &Context,
+    draft: Draft,
+    installing: Installing,
+    answers: &mut (dyn Answers + Send),
+    report: &mut (dyn FnMut(Progress<'_>) + Send),
+) -> AppResult<Finished> {
+    let Installing {
+        spec,
+        sources,
+        recording,
+        signed,
+        recognised,
+        shapes,
+    } = installing;
+    let site = draft.site.clone();
 
     // 3. Save, replacing only with a yes.
     let path = sites::specs_dir(&ctx.home).join(&site).join("spec.yaml");
@@ -724,10 +773,9 @@ pub async fn run(
         let yaml = without(&draft.yaml, &removed)?;
         itda_types::util::atomic_file(&path, yaml.as_bytes())?;
     }
-    // A ready-made definition comes from itda itself, not from the site's
-    // pages, so there is nothing to draft again from, nor sources left from
-    // a site of the same name set up from its pages before.
-    if bundled.is_none() {
+    // Nothing to draft again from leaves no sources from a site of the same
+    // name set up from its pages before.
+    if let Some(sources) = sources {
         refresh::remember(&ctx.home, &site, sources)?;
     } else {
         let left = path.with_file_name(refresh::SOURCES_FILE);

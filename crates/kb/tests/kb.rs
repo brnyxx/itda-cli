@@ -506,6 +506,75 @@ async fn calls_refused_before_sending_are_not_tries() {
 }
 
 #[tokio::test]
+async fn a_preparation_loops_tries_and_notes_are_not_held_against_the_definition() {
+    let kb_ = kb();
+    kb_.node(
+        "s",
+        "action",
+        "list",
+        Declared {
+            method: "GET",
+            path: "/items",
+            effect: "read",
+            ..Declared::default()
+        }
+        .props(),
+    )
+    .await
+    .unwrap();
+    for verdict in ["response_mismatch", "response_mismatch", "ok"] {
+        kb_.attempt(Attempt {
+            site: "s".into(),
+            action: "list".into(),
+            stage: Stage::Prepare,
+            verdict: verdict.into(),
+            http_status: Some(200),
+            ..Attempt::default()
+        })
+        .await
+        .unwrap();
+    }
+    // A draft's read the loop tried and dropped: a bare node, no gap.
+    kb_.attempt(Attempt {
+        site: "s".into(),
+        action: "dropped-read".into(),
+        stage: Stage::Prepare,
+        verdict: "request_failed".into(),
+        http_status: Some(404),
+        ..Attempt::default()
+    })
+    .await
+    .unwrap();
+    kb_.finding(
+        "s",
+        Ref {
+            kind: "endpoint",
+            key: "GET /api/items",
+        },
+        "prepare: route in the docs (e3)",
+        itda_kb::PREPARE_SCOPE,
+        1.0,
+    )
+    .await
+    .unwrap();
+    let stats = kb_.stats("s").await.unwrap();
+    let list = stats.iter().find(|s| s.action == "list").unwrap();
+    assert_eq!((list.attempts, list.verified), (0, false));
+    let gaps = kb_.gaps("s", Vec::new()).await.unwrap();
+    let rules: Vec<(&str, &str)> = gaps
+        .iter()
+        .map(|g| (g.rule.as_str(), g.subject.as_str()))
+        .collect();
+    assert_eq!(rules, [("endpoint_untried", "list")]);
+    // Still on record, and found by a search.
+    assert_eq!(kb_.counts("s").await.unwrap().attempts, 4);
+    assert_eq!(kb_.search(Some("s"), "docs").await.unwrap().len(), 1);
+    // A try from a check counts as before.
+    tried(&kb_, "list", &["ok"]).await;
+    assert!(kb_.gaps("s", Vec::new()).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn a_removed_action_leaves_the_stats_and_the_rules() {
     let kb_ = kb();
     tried(&kb_, "gone", &["ok", "timeout", "ok", "timeout"]).await;

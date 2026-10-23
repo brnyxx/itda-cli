@@ -155,6 +155,112 @@ pub(crate) fn openapi_parts(
     })
 }
 
+/// What an API description says, without drafting: the servers it names
+/// and every route with whether it can be called with an auth itda has.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ApiSummary {
+    pub title: String,
+    /// The absolute server addresses: `servers` (with the defaults of their
+    /// variables, path-level ones too) or Swagger's `host` and `basePath`,
+    /// resolved against where the document was found.
+    pub servers: Vec<String>,
+    pub routes: Vec<ApiRoute>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiRoute {
+    pub method: String,
+    pub path: String,
+    /// The route needs a security scheme itda cannot use (OAuth, a cookie
+    /// key, a key in the query): it can never be called as written.
+    pub unsupported_auth: bool,
+}
+
+/// The servers and routes of an OpenAPI 3 or Swagger 2.0 document, at most
+/// [`MAX_OPERATIONS`] routes; `None` when it is not one.
+pub fn api_summary(text: &[u8], located_at: Option<&str>) -> Option<ApiSummary> {
+    let (doc, swagger2) = parse(text).ok()?;
+    let mut notes = Vec::new();
+    let (_, schemes) = auth_entries(&doc, swagger2, "site", &mut notes);
+    let usable = |requirements: &Value| -> bool {
+        let Some(list) = requirements.as_array() else {
+            return true;
+        };
+        list.is_empty()
+            || list
+                .iter()
+                .any(|r| r.as_object().is_some_and(|m| m.is_empty()))
+            || first_security(requirements, &schemes).is_some()
+    };
+    let global_ok = usable(&doc["security"]);
+    let mut servers: Vec<String> = Vec::new();
+    let mut add_server = |url: Option<String>| {
+        if let Some(url) = url {
+            let url = url.trim_end_matches('/').to_owned();
+            if !servers.contains(&url) {
+                servers.push(url);
+            }
+        }
+    };
+    add_server(server_url(&doc, swagger2, located_at));
+    let location = located_at.and_then(|at| url::Url::parse(at).ok());
+    let resolve_server = |server: &Value| -> Option<String> {
+        let mut url = server["url"].as_str()?.to_owned();
+        if let Some(variables) = server["variables"].as_object() {
+            for (name, variable) in variables {
+                if let Some(default) = variable["default"].as_str() {
+                    url = url.replace(&format!("{{{name}}}"), default);
+                }
+            }
+        }
+        if url.starts_with("https://") || url.starts_with("http://") {
+            return Some(url);
+        }
+        Some(location.as_ref()?.join(&url).ok()?.to_string())
+    };
+    if !swagger2 {
+        for server in doc["servers"].as_array().into_iter().flatten() {
+            add_server(resolve_server(server));
+        }
+    }
+    let mut routes = Vec::new();
+    let empty = serde_json::Map::new();
+    'paths: for (path, item) in doc["paths"].as_object().unwrap_or(&empty) {
+        if !swagger2 {
+            for server in item["servers"].as_array().into_iter().flatten() {
+                add_server(resolve_server(server));
+            }
+        }
+        for method in METHODS {
+            let Some(op) = item.get(*method) else {
+                continue;
+            };
+            if routes.len() == MAX_OPERATIONS {
+                break 'paths;
+            }
+            let ok = if op.get("security").is_some() {
+                usable(&op["security"])
+            } else {
+                global_ok
+            };
+            routes.push(ApiRoute {
+                method: method.to_uppercase(),
+                path: path.clone(),
+                unsupported_auth: !ok,
+            });
+        }
+    }
+    Some(ApiSummary {
+        title: doc["info"]["title"]
+            .as_str()
+            .unwrap_or("")
+            .trim()
+            .to_owned(),
+        servers,
+        routes,
+    })
+}
+
 fn not_openapi() -> itda_types::error::AppError {
     usage(
         "This is not an OpenAPI 3 or Swagger 2.0 document",
