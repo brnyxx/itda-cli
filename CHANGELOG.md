@@ -63,6 +63,16 @@ change the definition format or the CLI.
 
 ### Changed
 
+- The mark is a cursor striking a site; the hero shows it. The tile is a
+  white cursor at the bottom left, a browser window at the top right and a
+  blue bolt inside the window where the cursor's tip touches it. The favicon
+  is a heavier cut of the same tile that reads at 16 px. The landing's hero
+  adds the cursor from the mark: it flies in, strikes the terminal's prompt,
+  the transcript appears, it strikes the About window, and it holds; with
+  `prefers-reduced-motion` it rests at the prompt. `assets/logo.svg` is the
+  one master; `assets/src/mark.py` stamps it into the wordmarks and the hero,
+  `assets/src/flow.py` reads it, and `assets/social.html` renders the link
+  preview from it.
 - The gate reads the request it is about to send, not only the declared
   inputs. After the template is rendered, every query key and body field,
   the value of an intent field such as `action` or `mode`, and any GraphQL
