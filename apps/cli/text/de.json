@@ -126,5 +126,7 @@
   "returns_file": "liefert eine Datei: {types}, gespeichert unter {dir}",
   "sends_file": "sendet die in {input} angegebene Datei; Sie geben sie nach Name, Größe und Hash frei",
   "confirms": "wenn die Antwort verloren geht: sucht in {read} nach dem neuen Wert von {input}",
+  "spec_valid": "{file}: eine gültige Definition von {site} ({n} Aktionen). itda add {file} installiert sie.",
+  "spec_invalid": "{file}: {n} Probleme; itda würde sie nicht installieren.",
   "saved_file": "Gespeichert: {path} ({bytes} Bytes, sha256 {sha256})"
 }

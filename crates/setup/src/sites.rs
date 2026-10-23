@@ -7,7 +7,8 @@ use itda_types::{
 };
 use std::path::{Path, PathBuf};
 
-const SPEC_LIMIT: usize = 4 * 1024 * 1024;
+/// The largest definition itda reads or installs.
+pub const SPEC_LIMIT: usize = 4 * 1024 * 1024;
 const FILE_NAMES: [&str; 3] = ["spec.yaml", "spec.yml", "spec.json"];
 
 /// The ready-made definitions in `sites/`, built into the binary so

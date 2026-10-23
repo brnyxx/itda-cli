@@ -126,5 +126,7 @@
   "returns_file": "devuelve un archivo: {types}, guardado en {dir}",
   "sends_file": "envía el archivo indicado en {input}; lo apruebas por nombre, tamaño y hash",
   "confirms": "si se pierde la respuesta: busca el nuevo valor de {input} en {read}",
+  "spec_valid": "{file}: una definición válida de {site} ({n} acciones). itda add {file} la instala.",
+  "spec_invalid": "{file}: {n} problemas; itda no la instalaría.",
   "saved_file": "Guardado {path} ({bytes} bytes, sha256 {sha256})"
 }

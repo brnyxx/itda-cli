@@ -499,6 +499,87 @@ async fn describe_names_the_read_that_confirms_a_change() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn spec_validate_checks_a_file_without_installing_it() {
+    let home = home();
+    install_confirming(&home, "http://127.0.0.1:9");
+    let good = home.join("specs/lossy/spec.yaml");
+    let english = [("ITDA_LANG", "en")];
+    let valid = itda(
+        &home,
+        &["spec", "validate", good.to_str().unwrap()],
+        &english,
+    )
+    .await;
+    assert_eq!(valid.status.code(), Some(0));
+    let said = String::from_utf8_lossy(&valid.stdout);
+    assert!(
+        said.contains("a valid definition of lossy (2 actions)"),
+        "{said}"
+    );
+    let report = stdout_json(
+        &itda(
+            &home,
+            &["spec", "validate", good.to_str().unwrap(), "--json"],
+            &[],
+        )
+        .await,
+    );
+    assert_eq!(report["status"], "ok");
+    assert_eq!(report["issues"], serde_json::json!([]));
+
+    let bad = home.join("bad.yaml");
+    std::fs::write(
+        &bad,
+        std::fs::read_to_string(&good)
+            .unwrap()
+            .replace("read: list-items", "read: list-things")
+            .replace("http://127.0.0.1:9", "ftp://127.0.0.1:9"),
+    )
+    .unwrap();
+    let invalid = itda(
+        &home,
+        &["spec", "validate", bad.to_str().unwrap()],
+        &english,
+    )
+    .await;
+    assert_eq!(invalid.status.code(), Some(2));
+    let said = String::from_utf8_lossy(&invalid.stderr);
+    assert!(said.contains("problem: site.base_url"), "{said}");
+    assert!(said.contains("list-things"), "{said}");
+    assert!(said.contains("itda would not install it"), "{said}");
+    let report = stdout_json(
+        &itda(
+            &home,
+            &["spec", "validate", bad.to_str().unwrap(), "--json"],
+            &[],
+        )
+        .await,
+    );
+    assert_eq!(report["status"], "data_invalid");
+    let fields: Vec<&str> = report["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|issue| issue["field"].as_str().unwrap())
+        .collect();
+    assert!(fields.contains(&"site.base_url"), "{report}");
+    assert!(fields.iter().any(|f| f.contains("confirm")), "{report}");
+
+    std::fs::write(&bad, "operations: [").unwrap();
+    let unreadable = itda(
+        &home,
+        &["spec", "validate", bad.to_str().unwrap(), "--json"],
+        &[],
+    )
+    .await;
+    assert_eq!(unreadable.status.code(), Some(2));
+    assert_eq!(stdout_json(&unreadable)["status"], "data_invalid");
+    // Nothing was installed.
+    assert!(!home.join("specs/bad").exists());
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_lost_change_is_checked_against_the_read_it_names() {
     let home = home();
     let base = serve_lossy().await;

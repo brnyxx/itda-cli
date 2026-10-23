@@ -126,5 +126,7 @@
   "returns_file": "ファイルを返します: {types}、{dir} の下に保存",
   "sends_file": "{input} に指定したファイルを送ります。名前、サイズ、ハッシュを見て承認します",
   "confirms": "応答が失われたとき: {read} で新しい {input} の値を確認します",
+  "spec_valid": "{file}: {site} の正しい定義です (アクション {n} 個)。itda add {file} でインストールします。",
+  "spec_invalid": "{file}: 問題が {n} 件あります。itda はこの定義をインストールしません。",
   "saved_file": "{path} に保存しました（{bytes} バイト、sha256 {sha256}）"
 }

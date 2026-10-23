@@ -126,5 +126,7 @@
   "returns_file": "trả về một tệp: {types}, lưu trong {dir}",
   "sends_file": "gửi tệp ghi ở {input}; bạn phê duyệt nó theo tên, kích thước và hash",
   "confirms": "khi mất câu trả lời: tìm giá trị {input} mới trong {read}",
+  "spec_valid": "{file}: một định nghĩa hợp lệ của {site} ({n} hành động). itda add {file} sẽ cài đặt nó.",
+  "spec_invalid": "{file}: {n} vấn đề; itda sẽ không cài đặt nó.",
   "saved_file": "Đã lưu {path} ({bytes} byte, sha256 {sha256})"
 }

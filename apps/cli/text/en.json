@@ -126,5 +126,7 @@
   "returns_file": "returns a file: {types}, saved under {dir}",
   "sends_file": "sends the file at {input}; you approve it by name, size and hash",
   "confirms": "after a lost answer: checks {read} for the new {input}",
+  "spec_valid": "{file}: a valid definition of {site} ({n} actions). itda add {file} installs it.",
+  "spec_invalid": "{file}: {n} problems; itda would not install it.",
   "saved_file": "Saved {path} ({bytes} bytes, sha256 {sha256})"
 }

@@ -126,5 +126,7 @@
   "returns_file": "파일을 돌려줍니다: {types}, {dir} 아래에 저장",
   "sends_file": "{input}에 적은 파일을 보냅니다. 이름, 크기, 해시를 보고 허락합니다",
   "confirms": "응답이 끊기면 {read}에서 새 {input} 값을 찾아 확인합니다",
+  "spec_valid": "{file}: {site}의 올바른 정의입니다 (액션 {n}개). itda add {file}로 설치합니다.",
+  "spec_invalid": "{file}: 문제 {n}개. itda는 이 정의를 설치하지 않습니다.",
   "saved_file": "{path}에 저장했습니다 ({bytes}바이트, sha256 {sha256})"
 }

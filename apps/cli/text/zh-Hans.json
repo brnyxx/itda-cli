@@ -126,5 +126,7 @@
   "returns_file": "返回一个文件：{types}，保存在 {dir} 下",
   "sends_file": "发送 {input} 中指定的文件；你按名称、大小和哈希批准它",
   "confirms": "回应丢失时：在 {read} 中查找新的 {input} 值",
+  "spec_valid": "{file}：{site} 的有效定义（{n} 个操作）。用 itda add {file} 安装。",
+  "spec_invalid": "{file}：有 {n} 个问题；itda 不会安装它。",
   "saved_file": "已保存 {path}（{bytes} 字节，sha256 {sha256}）"
 }
