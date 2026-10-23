@@ -118,9 +118,10 @@ behind, which Keychain Access shows under that name.
 
 ## What itda does on each, measured
 
-Run on this machine against the lab above, with the itda binary built from this
-branch (frame following and query sessions, `b35a612`, are in it). These three
-are the uglier ones, alongside the five earlier services.
+Run on this machine against the lab above, with the itda binary built from
+`main` at 0.5.0 (frame following, query sessions, the outcome check after a lost
+answer, and file reads and uploads are all in it). These four are the uglier
+cases, alongside the five earlier services.
 
 - **framed (8086).** `itda setup http://127.0.0.1:8086/ --user lab` now reaches
   the board from the shell. The shell shows only its `<h1>` ("사내 인트라넷"),
