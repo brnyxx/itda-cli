@@ -141,18 +141,35 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let browser = dir.join("browser");
         let count = dir.join("probes");
-        let script = |version| {
-            format!(
-                "#!/bin/sh\nprintf x >> '{}'\nprintf 'Chromium {version}\\n'\n",
-                count.display()
+        // cp puts the script in place, so this process never holds it open for
+        // writing: on Linux a process another test is spawning at that instant
+        // inherits such a file for a moment, and running it then fails with
+        // "text file busy".
+        let install = |version| {
+            let source = dir.join(format!("browser-{version}"));
+            std::fs::write(
+                &source,
+                format!(
+                    "#!/bin/sh\nprintf x >> '{}'\nprintf 'Chromium {version}\\n'\n",
+                    count.display()
+                ),
             )
+            .unwrap();
+            assert!(
+                Command::new("cp")
+                    .arg(&source)
+                    .arg(&browser)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
         };
-        std::fs::write(&browser, script("199.0.0.0")).unwrap();
+        install("199.0.0.0");
         std::fs::set_permissions(&browser, std::fs::Permissions::from_mode(0o700)).unwrap();
         let first = super::cached_for(&browser, &dir).unwrap();
         assert_eq!(super::cached_for(&browser, &dir), Some(first.clone()));
         assert_eq!(std::fs::read(&count).unwrap(), b"x");
-        std::fs::write(&browser, script("200.0.12345.0")).unwrap();
+        install("200.0.12345.0");
         let second = super::cached_for(&browser, &dir).unwrap();
         assert_ne!(first, second);
         assert_eq!(std::fs::read(&count).unwrap(), b"xx");
