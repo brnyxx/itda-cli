@@ -101,7 +101,7 @@ first watches the page load in your browser (below).
 
 A fetched page is a shell when its main content is one or more same-origin
 `<iframe src>` (or an older `<frameset>`'s `<frame src>`) and it has no records,
-data, form or feed of its own. itda then fetches each frame's page as itself, on
+data, form or feed of its own. itda then fetches each frame's page as a read, on
 the same pacing and with the same session, and drafts from the frame pages as
 pages of the site. Each frame read keeps the frame's own address as its
 operation path, since that is what a request to the server looks like. A form
@@ -252,8 +252,7 @@ by hand.
 
 A GraphQL endpoint can also say what else it offers. When a draft finds an
 endpoint in a recorded call or a page naming a same-origin `/graphql` path, itda
-sends the standard introspection query once, as itself, as a read with a size
-cap. It drafts one read per root `Query` field with scalar, enum or id
+sends the standard introspection query once, as a read with a size cap. It drafts one read per root `Query` field with scalar, enum or id
 arguments: the field name is the action (`countries`), arguments are typed
 inputs (required if the schema says so), and the selection contains up to 24
 scalar fields, two levels deep. itda omits and lists optional object or list
@@ -465,7 +464,9 @@ site to use another method or address (`X-HTTP-Method-Override`,
 `X-Method-Override`, `X-HTTP-Method`, `_method`, `X-Original-URL`,
 `X-Rewrite-URL`). It sends the reviewed method to the reviewed address. itda
 refuses `transport` other than `http` and `auth` kinds other than `none`,
-`header` and `browser`; it sends plain HTTP requests as itself.
+`header` and `browser`. How a read travels (direct HTTP, or the installed
+browser after a challenge) is itda's choice, not the definition's; see
+[HONEST_CLIENT.md](HONEST_CLIENT.md). A change always goes over direct HTTP.
 
 Those checks look at what the definition declares. Just before sending, itda
 reads the request it built once more: every query key and body field, the
@@ -614,7 +615,7 @@ $ itda login intranet --user me
 Signed in. itda sealed the session for intranet/default (2 cookies) under the data directory with a key in the system keyring; agents only see the account id.
 ```
 
-itda reads the page at `path` as itself and selects the same-site `POST` form
+itda reads the page at `path`, like any other read, and selects the same-site `POST` form
 with those two fields. It fills them in and sends the form once, as your browser
 would, with the page's hidden fields (a token such as `_csrf`, a return address)
 and cookies. A redirect means sign-in succeeded. itda stores the site's reply

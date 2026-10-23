@@ -156,7 +156,9 @@ Each change that users will notice gets a line in `CHANGELOG.md` under
 3. winget: `manifests/b/brnyxx/itda/<version>/` holds the three manifest files
    for the latest version. For a new version copy the folder, change
    `PackageVersion`, the `InstallerUrl` and the `InstallerSha256` (the
-   `.sha256` file next to the Windows zip in the release has it), run
+   `.sha256` file next to the Windows zip in the release has it), check that
+   `ShortDescription` and `Description` in the locale file still say what this
+   version does (the copied text describes the previous one), run
    `winget validate --manifest <folder>` on a Windows machine and open a pull
    request to microsoft/winget-pkgs with only that folder.
 

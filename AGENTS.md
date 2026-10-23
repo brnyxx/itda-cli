@@ -88,8 +88,8 @@ do:
 
 ## Set up a new site
 
-Over MCP, call `itda_setup` with the address of a page on the site. itda looks
-at the page as itself and names the actions in plain words. It tries every
+Over MCP, call `itda_setup` with the address of a page on the site. itda reads
+the page on its own and names the actions in plain words. It tries every
 read once and keeps the ones that work. The site's actions appear as tools in
 the same conversation. A page drawn by scripts opens briefly in a browser
 window on the user's screen. itda watches what it loads by itself, without
