@@ -4,7 +4,7 @@
 //! answered by the tool's arguments or by a form the client shows the person.
 use crate::{Caller, Server, elicit, elicit::Confirmed, failure, structured};
 use itda_policy::{Effect, operation_effect};
-use itda_setup::{Answers, Context, Fallback, Finished, Stopped, check, sites};
+use itda_setup::{Answers, Context, Fallback, Finished, Stopped, check, knowledge, sites};
 use itda_spec::Spec;
 use itda_types::error::{AppError, usage};
 use rmcp::model::{CallToolResult, Tool, ToolAnnotations};
@@ -12,12 +12,13 @@ use serde_json::{Map, Value, json};
 use std::{collections::BTreeMap, sync::Arc, sync::mpsc};
 
 /// The tools this module serves, in the order they are listed.
-pub(crate) const NAMES: [&str; 5] = [
+pub(crate) const NAMES: [&str; 6] = [
     "itda_setup",
     "itda_login",
     "itda_check",
     "itda_sites",
     "itda_manage",
+    "itda_shape",
 ];
 
 /// At most this many audit entries come back from one call.
@@ -65,21 +66,34 @@ pub(crate) fn tools() -> Vec<Tool> {
         .with_annotations(ToolAnnotations::new().read_only(true).open_world(true)),
         Tool::new(
             "itda_sites",
-            "List the sites set up on this computer: name, title, how many reads and changes, and the verdict of the last check with when it ran.",
-            schema(json!({"type": "object", "properties": {}, "additionalProperties": false})),
+            "List the sites set up on this computer: name, title, how many reads and changes, the verdict of the last check with when it ran, how many actions answered on their last try (verified), the recent pass rate and the reads that fail now and then (unstable). With site, one site in detail: every action with its verified flag and pass rate, a user_guide (what can be read, what can be changed, which list read supplies which detail read's input), natural_prompts a person might ask, and the top gaps with their remedy (the next tool call).",
+            schema(json!({"type": "object", "properties": {
+                "site": {"type": "string", "description": "One site, in detail; every site in brief when left out."}
+            }, "additionalProperties": false})),
         )
         .with_annotations(read_only.clone()),
         Tool::new(
             "itda_manage",
-            "Manage itda without a terminal. refresh: when itda_check says site_changed, draft the site again from the sources it was set up from, show the user what would change (actions added, removed, changed; the ones they edited by hand are kept, as are the sign-in and the site's name) in a form they confirm, write it and check the site. remove: forget a site (the user confirms in a form; its accounts stay). resume: lift the pause after a site blocked itda (the user confirms, after checking the site in a browser). approvals: the changes waiting for the user's decision. audit: the last entries of the audit log, for one site or all, plus unknown_outcome: changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (landed, not_found or unknown) when the change named one.",
+            "Manage itda without a terminal. refresh: when itda_check says site_changed, draft the site again from the sources it was set up from, show the user what would change (actions added, removed, changed; the ones they edited by hand are kept, as are the sign-in and the site's name) in a form they confirm, write it and check the site. remove: forget a site (the user confirms in a form; its accounts stay). resume: lift the pause after a site blocked itda (the user confirms, after checking the site in a browser). approvals: the changes waiting for the user's decision. audit: the last entries of the audit log, for one site or all, plus unknown_outcome: changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (landed, not_found or unknown) when the change named one. fsck: what the local knowledge base's rules find worth a look, for one site or all, without sending anything: endpoint_untried (an action nobody ran), read_needs_input (a read that needs an input, and which list read's pointer can supply it), read_failing (failed every recent try), flapping_read (fails now and then), artifact_changed or artifact_missing (the definition or the last check changed under itda), finding_without_evidence, dangling_edge. Each gap carries a remedy: the command, and the tool and arguments to call next. Ask it to learn in one call what has not been tried, what needs an input and what fails often.",
             schema(json!({"type": "object", "properties": {
-                "action": {"type": "string", "enum": ["refresh", "remove", "resume", "approvals", "audit"]},
+                "action": {"type": "string", "enum": ["refresh", "remove", "resume", "approvals", "audit", "fsck"]},
                 "site": {"type": "string", "description": "Needed by refresh, remove and resume; narrows audit."},
                 "account": {"type": "string", "description": "resume: only this account's pause."},
                 "last": {"type": "integer", "description": "audit: how many entries, 20 unless given, 200 at most."}
             }, "required": ["action"], "additionalProperties": false})),
         )
         .with_annotations(ToolAnnotations::new().read_only(false).open_world(false)),
+        Tool::new(
+            "itda_shape",
+            "The shape of what a site shows and answers, without any values: for a page, its selectors with match counts and attribute names (structure), its named fields without values (fields) and the keys and types of the data it embeds (ssr_payloads); for an action, the keys and types of its last answer (shape) and what its definition declares. By default from the local knowledge base, written when the site was set up, checked or called. With fresh set to true, itda reads the page now (the site's address, or a page on the same site) the way setup reads a page, and records the shape. Never values, records, inputs, cookies or headers.",
+            schema(json!({"type": "object", "properties": {
+                "site": {"type": "string"},
+                "action": {"type": "string", "description": "One action's shape."},
+                "page": {"type": "string", "description": "One page's shape, by address; the site's own address when neither action nor page is given."},
+                "fresh": {"type": "boolean", "description": "Fetch the page now, once, instead of reading what is known. Off unless asked."}
+            }, "required": ["site"], "additionalProperties": false})),
+        )
+        .with_annotations(ToolAnnotations::new().read_only(true).idempotent(true).open_world(true)),
     ]
 }
 
@@ -142,8 +156,12 @@ impl Server {
             "itda_setup" => self.setup_site(ctx, arguments, caller).await,
             "itda_login" => login(ctx, arguments, caller).await,
             "itda_check" => check_sites(ctx, self.site(), arguments).await,
-            "itda_sites" => list_sites(ctx, self.site()).await,
+            "itda_sites" => match text(arguments, "site") {
+                Some(site) => self.site_detail(ctx, site).await,
+                None => list_sites(ctx, self.site()).await,
+            },
             "itda_manage" => self.manage_action(ctx, arguments, caller).await,
+            "itda_shape" => shape(ctx, arguments).await,
             _ => return None,
         })
     }
@@ -256,10 +274,12 @@ impl Server {
             .map(|o| json!({"action": o.action, "status": o.status, "why": o.detail}))
             .collect();
         notes.extend(done.notes);
+        notes.extend(done.unrecorded.as_deref().map(knowledge::not_written));
         structured(json!({
             "status": "ok",
             "site": spec.site.name,
             "title": spec.site.title,
+            "gaps": self.gaps_json(&done.gaps),
             "template": done.recognised.as_ref().map(|found| json!({
                 "software": found.software,
                 "title": found.title,
@@ -326,8 +346,10 @@ impl Server {
                         return failure(&needs_terminal(format!("itda refresh {site}")));
                     }
                 }
-                if let Err(error) = itda_setup::refresh::apply(&ctx.home, &plan) {
-                    return failure(&error);
+                let mut notes = plan.notes.clone();
+                match itda_setup::refresh::apply(ctx, &plan).await {
+                    Ok(whys) => notes.extend(whys.iter().map(|why| knowledge::not_written(why))),
+                    Err(error) => return failure(&error),
                 }
                 if let Err(error) = ctx.approvals.invalidate(Some(site), None).await {
                     return failure(&error);
@@ -339,8 +361,16 @@ impl Server {
                 let outcomes =
                     check::run(&ctx.runtime, std::slice::from_ref(&plan.spec), None).await;
                 let verdicts = check::verdicts(&outcomes);
-                if let Err(error) = check::remember(&ctx.home, &verdicts) {
-                    return failure(&error);
+                match check::remember(
+                    &ctx.home,
+                    &ctx.kb,
+                    std::slice::from_ref(&plan.spec),
+                    &verdicts,
+                )
+                .await
+                {
+                    Ok(whys) => notes.extend(whys.iter().map(|why| knowledge::not_written(why))),
+                    Err(error) => return failure(&error),
                 }
                 structured(json!({
                     "status": "ok",
@@ -352,7 +382,7 @@ impl Server {
                     "hint": verdicts.first().map(|v| v.hint.clone()),
                     "actions": actions(&plan.spec),
                     "results": outcomes,
-                    "notes": plan.notes,
+                    "notes": notes,
                     "problems": plan.problems,
                     "untrusted": true,
                 }))
@@ -382,6 +412,11 @@ impl Server {
                     Err(error) => return failure(&error),
                 };
                 if let Err(error) = itda_setup::reset_browser_sessions(ctx, &spec).await {
+                    return failure(&error);
+                }
+                // What was known about the site goes first, so a failure
+                // leaves the site there to remove again.
+                if let Err(error) = ctx.kb.forget(site).await {
                     return failure(&error);
                 }
                 if let Err(error) = sites::remove(&ctx.home, site) {
@@ -503,9 +538,39 @@ impl Server {
                     Err(_) => failure(&AppError::api("internal", 500)),
                 }
             }
+            "fsck" => {
+                let specs: Vec<Spec> = match text(arguments, "site") {
+                    Some(site) => match sites::load(&ctx.home, site) {
+                        Ok(spec) => vec![spec],
+                        Err(error) => return failure(&error),
+                    },
+                    None => sites::list(&ctx.home)
+                        .into_iter()
+                        .filter(|s| self.site().is_none_or(|only| only == s.name))
+                        .filter_map(|s| s.spec.ok())
+                        .collect(),
+                };
+                let mut list = Vec::new();
+                let mut problems = false;
+                for spec in &specs {
+                    match knowledge::audit(&ctx.kb, &ctx.home, spec).await {
+                        Ok(gaps) => {
+                            problems |= gaps.iter().any(|g| g.priority == 1);
+                            list.push(
+                                json!({"site": spec.site.name, "gaps": self.gaps_json(&gaps)}),
+                            );
+                        }
+                        Err(error) => return failure(&error),
+                    }
+                }
+                structured(json!({
+                    "status": if problems { "problems" } else { "ok" },
+                    "sites": list,
+                }))
+            }
             other => failure(&usage(
                 format!("Unknown action: {other}"),
-                "Use refresh, remove, resume, approvals or audit.",
+                "Use refresh, remove, resume, approvals, audit or fsck.",
             )),
         }
     }
@@ -619,17 +684,247 @@ async fn check_sites(
     };
     let outcomes = check::run(&ctx.runtime, &specs, text(arguments, "account")).await;
     let verdicts = check::verdicts(&outcomes);
-    if let Err(error) = check::remember(&ctx.home, &verdicts) {
-        return failure(&error);
-    }
+    let notes: Vec<String> = match check::remember(&ctx.home, &ctx.kb, &specs, &verdicts).await {
+        Ok(whys) => whys.iter().map(|why| knowledge::not_written(why)).collect(),
+        Err(error) => return failure(&error),
+    };
     let status = check::exit_status(&outcomes).to_owned();
     structured(json!({
         "status": status,
         "verdict": check::Verdict::of(&outcomes),
         "sites": verdicts,
         "results": outcomes,
+        "notes": notes,
         "untrusted": true,
     }))
+}
+
+/// How a site's actions have fared, from the knowledge base: nothing when
+/// it cannot be read.
+async fn stats_of(ctx: &Context, spec: &Spec) -> Vec<itda_kb::ActionStats> {
+    knowledge::stats(&ctx.kb, spec).await.unwrap_or_default()
+}
+
+impl Server {
+    /// Gaps as a tool result carries them. A remedy that calls an action
+    /// names the action's own tool; when this server lists the catalog
+    /// instead, the same call goes through `itda_call`.
+    fn gaps_json(&self, gaps: &[itda_kb::Gap]) -> Vec<Value> {
+        let catalog = self.mode() == crate::Mode::Catalog;
+        knowledge::gaps_json(gaps)
+            .into_iter()
+            .map(|mut gap| {
+                let tool = gap["remedy"]["tool"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned();
+                if catalog && tool.contains('.') {
+                    gap["remedy"]["tool"] = "itda_call".into();
+                    gap["remedy"]["arguments"] = json!({"action": tool, "args": {}});
+                }
+                gap
+            })
+            .collect()
+    }
+
+    /// One site in detail: its actions with how they fared, the guide, the
+    /// prompts and the top gaps. English, like every tool result.
+    async fn site_detail(&self, ctx: &Context, site: &str) -> CallToolResult {
+        let spec = match sites::load(&ctx.home, site) {
+            Ok(spec) => spec,
+            Err(error) => return failure(&error),
+        };
+        let stats = stats_of(ctx, &spec).await;
+        let stat = |name: &str| stats.iter().find(|s| s.action == name);
+        let summary = itda_kb::summary(&stats);
+        let flows = knowledge::flows(&ctx.kb, site).await.unwrap_or_default();
+        let (guide, prompts) = knowledge::guide_for(&spec, &flows, "en");
+        let mut gaps = knowledge::audit(&ctx.kb, &ctx.home, &spec)
+            .await
+            .unwrap_or_default();
+        gaps.truncate(3);
+        let mut list = actions(&spec);
+        for action in &mut list {
+            let name = action["action"].as_str().unwrap_or_default().to_owned();
+            action["verified"] = stat(&name).is_some_and(|s| s.verified).into();
+            action["pass_rate"] = json!(stat(&name).map(|s| s.pass_rate));
+            action["last_verdict"] = json!(stat(&name).and_then(|s| s.last_verdict.clone()));
+        }
+        structured(json!({
+            "status": "ok",
+            "site": spec.site.name,
+            "title": spec.site.title,
+            "base_url": spec.site.base_url,
+            "last_check": check::last(&ctx.home, site)
+                .map(|last| json!({"at": last.at, "verdict": last.verdict, "hint": last.hint})),
+            "verified": summary.verified,
+            "pass_rate": summary.pass_rate,
+            "unstable": summary.unstable,
+            "actions": list,
+            "user_guide": guide,
+            "natural_prompts": prompts,
+            "gaps": self.gaps_json(&gaps),
+            "untrusted": true,
+        }))
+    }
+}
+
+/// An action's shape result within 24 KB: the nested `shape` goes first
+/// (`pointers` say the same), then pointers from the end.
+fn within(mut result: Value) -> Value {
+    const MAX: usize = 24 * 1024;
+    let size = |v: &Value| v.to_string().len();
+    if size(&result) <= MAX {
+        return result;
+    }
+    result["truncated"] = true.into();
+    if let Some(map) = result.as_object_mut() {
+        map.remove("shape");
+    }
+    while size(&result) > MAX {
+        match result.get_mut("pointers").and_then(Value::as_array_mut) {
+            Some(list) if !list.is_empty() => {
+                list.pop();
+            }
+            _ => break,
+        }
+    }
+    result
+}
+
+/// `itda_shape`: what is known about a page's or an action's shape, or,
+/// with `fresh`, the page as it is now, read the way setup reads a page.
+async fn shape(ctx: &Context, arguments: &Map<String, Value>) -> CallToolResult {
+    let Some(site) = text(arguments, "site") else {
+        return failure(&usage("site is required", "Name the site."));
+    };
+    let spec = match sites::load(&ctx.home, site) {
+        Ok(spec) => spec,
+        Err(error) => return failure(&error),
+    };
+    let fresh = arguments
+        .get("fresh")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if let Some(action) = text(arguments, "action") {
+        if fresh {
+            return failure(&usage(
+                "fresh fetches a page, not an action",
+                "Call the action itself to get a fresh answer; its shape is recorded then.",
+            ));
+        }
+        let op = match spec.op(action) {
+            Ok(op) => op,
+            Err(error) => return failure(&error),
+        };
+        let node = ctx
+            .kb
+            .nodes(site, Some("action"), Some(&op.name))
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .next();
+        let shape = node.as_ref().and_then(|n| n.props.get("shape").cloned());
+        return structured(within(json!({
+            "status": "ok",
+            "site": site,
+            "action": op.name,
+            "kind": "action",
+            "declared": node.as_ref().map(|n| {
+                let mut props = n.props.clone();
+                if let Some(map) = props.as_object_mut() {
+                    map.remove("shape");
+                }
+                props
+            }),
+            "pointers": shape.as_ref().map(itda_html::shape::pointers),
+            "shape": shape,
+            "untrusted": true,
+        })));
+    }
+    let page = text(arguments, "page")
+        .map(str::to_owned)
+        .unwrap_or_else(|| spec.site.base_url.clone());
+    let same_site = match (url::Url::parse(&page), url::Url::parse(&spec.site.base_url)) {
+        (Ok(a), Ok(b)) => a.origin() == b.origin(),
+        _ => false,
+    };
+    if !same_site {
+        return failure(&usage(
+            format!("{page} is not a page on {site}"),
+            format!("Pass a page under {}.", spec.site.base_url),
+        ));
+    }
+    if fresh {
+        // Read the way setup reads a page, through the same gate and
+        // under the same rules.
+        let probed = match itda_setup::probe(ctx, &page, None).await {
+            Ok(probed) => probed,
+            Err(error) => return failure(&error),
+        };
+        let Some(html) = probed.page.as_ref().map(|p| p.html.as_str()) else {
+            let why = match probed.outcome {
+                Err((_, Some(refused))) => refusal_words(&refused),
+                Err((Fallback::SignIn, None)) => "the page needs a sign-in".to_owned(),
+                Err((Fallback::Scripted, None)) => "the page is drawn by scripts".to_owned(),
+                _ => "the site refused".to_owned(),
+            };
+            return failure(&coded(
+                "page_unavailable",
+                422,
+                format!("itda could not read {page} ({why})"),
+                "Ask the user to check the page in a browser.",
+            ));
+        };
+        let shaped = itda_html::shape::page(html);
+        let mut props = shaped.clone();
+        props["fetched"] = true.into();
+        if props.get("truncated").is_none() {
+            props["truncated"] = Value::Null;
+        }
+        let key = knowledge::page_key(&page);
+        if let Err(error) = ctx.kb.node(site, "page", &key, props).await {
+            return failure(&error);
+        }
+        return structured(json!({
+            "status": "ok",
+            "site": site,
+            "page": key,
+            "kind": "page",
+            "fresh": true,
+            "shape": shaped,
+            "untrusted": true,
+        }));
+    }
+    let nodes = ctx
+        .kb
+        .nodes(site, Some("page"), None)
+        .await
+        .unwrap_or_default();
+    let key = knowledge::page_key(&page);
+    let known = nodes.iter().find(|n| n.key == key).or_else(|| {
+        // The site's own address stands for any page known on it.
+        (text(arguments, "page").is_none())
+            .then(|| nodes.first())
+            .flatten()
+    });
+    match known {
+        Some(node) => structured(json!({
+            "status": "ok",
+            "site": site,
+            "page": node.key,
+            "kind": "page",
+            "fresh": false,
+            "shape": node.props,
+            "untrusted": true,
+        })),
+        None => failure(&coded(
+            "shape_unknown",
+            404,
+            format!("itda has not seen {key} yet"),
+            "Call again with fresh set to true to fetch it once, or name a page itda set the site up from.",
+        )),
+    }
 }
 
 async fn list_sites(ctx: &Context, only: Option<&str>) -> CallToolResult {
@@ -647,6 +942,7 @@ async fn list_sites(ctx: &Context, only: Option<&str>) -> CallToolResult {
                     .iter()
                     .filter(|op| operation_effect(op, &BTreeMap::new()) != Effect::Read)
                     .count();
+                let summary = itda_kb::summary(&stats_of(ctx, &spec).await);
                 let mut entry = json!({
                     "site": site.name,
                     "title": spec.site.title,
@@ -654,6 +950,9 @@ async fn list_sites(ctx: &Context, only: Option<&str>) -> CallToolResult {
                     "reads": spec.operations.len() - changes,
                     "changes": changes,
                     "last_check": last,
+                    "verified": summary.verified,
+                    "pass_rate": summary.pass_rate,
+                    "unstable": summary.unstable,
                 });
                 // When the signed-in session is a JWT the site keeps in
                 // browser storage, say when it stops being accepted, so the

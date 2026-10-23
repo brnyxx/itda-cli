@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 itda-types.workspace = true
 itda-html.workspace = true
+itda-kb.workspace = true
 itda-spec.workspace = true
 itda-policy.workspace = true
 itda-net.workspace = true

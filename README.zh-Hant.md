@@ -133,6 +133,7 @@ token。頁面叫它點哪裡它就點哪裡，版面一變就悄悄壞掉。itd
 結論收尾：`ok`、`signed_out`、`site_changed`、`blocked` 或 `unreachable`。
 結束碼隨之而定（`site_changed` 為 11），所以排程工作可以在代理撞上之前
 提醒你。在 MCP 上，`itda_check` 回傳同樣的內容。
+`itda fsck <site>` 讀取 itda 記下的本機嘗試紀錄（只有結構和判定，沒有值），列出從未嘗試的、需要輸入的以及時而失敗的操作，並附上要執行的指令。
 
 當結論是 `site_changed` 時，`itda refresh <site>` 從當初設定時的來源重新
 起草網站：它的頁面、API 說明、GraphQL 端點，或者保留下來的錄製形狀，每個

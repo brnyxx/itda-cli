@@ -130,5 +130,20 @@
   "confirms": "khi mất câu trả lời: tìm giá trị {input} mới trong {read}",
   "spec_valid": "{file}: một định nghĩa hợp lệ của {site} ({n} hành động). itda add {file} sẽ cài đặt nó.",
   "spec_invalid": "{file}: {n} vấn đề; itda sẽ không cài đặt nó.",
-  "saved_file": "Đã lưu {path} ({bytes} byte, sha256 {sha256})"
+  "saved_file": "Đã lưu {path} ({bytes} byte, sha256 {sha256})",
+  "fsck_ok": "{site}: không có gì cần xem.",
+  "fsck_heading": "{site}: {n} mục cần xem",
+  "remedy": "cách xử lý: {command}",
+  "suggest_heading": "Đáng xem qua:",
+  "prompts_heading": "Hãy hỏi tác tử của bạn, ví dụ:",
+  "gap_endpoint_untried": "{action} chưa bao giờ được thử",
+  "gap_read_needs_input": "{action} cần {inputs}",
+  "gap_read_needs_input_fed": "{action} cần {input}; {from} cung cấp nó tại {pointer}",
+  "gap_finding_without_evidence": "một ghi chú về {subject} không có lần thử nào đằng sau",
+  "gap_artifact_missing": "{path} đã biến mất",
+  "gap_artifact_changed": "{path} đã thay đổi kể từ lần itda thấy gần nhất",
+  "gap_read_failing": "{action} thất bại ở cả {m} lần thử gần nhất",
+  "gap_flapping_read": "{action} thất bại {n} trong {m} lần thử gần nhất",
+  "gap_dangling_edge": "một liên kết trỏ đến thứ itda không còn nữa ({subject})",
+  "kb_not_written": "không cập nhật được cơ sở tri thức ({why}); phần còn lại vẫn tiếp tục"
 }

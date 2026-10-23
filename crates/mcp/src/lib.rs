@@ -19,7 +19,8 @@
 //!
 //! With [`Server::with_setup`], the agent can also set a site up, sign the
 //! person in, check sites and manage them from inside the conversation
-//! (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`, `itda_manage`).
+//! (`itda_setup`, `itda_login`, `itda_check`, `itda_sites`, `itda_manage`),
+//! and read what the knowledge base knows about a site (`itda_shape`).
 //! When the sites change, the server says so with
 //! `notifications/tools/list_changed` and serves the new tools on the next
 //! `tools/list`.
@@ -125,7 +126,10 @@ become tools in this session (a page drawn by scripts opens briefly in a browser
 user's screen; nothing in it is clicked or typed). If a read says to sign in, call itda_login with the site: the user \
 signs in in their own browser and you only ever see the account id. itda_sites lists what is set \
 up; itda_manage removes or resumes a site after the user confirms, and shows approvals and the \
-audit log. itda setup <url> and itda login <site> --browser do the same in a terminal; a problem \
+audit log. itda_manage with action fsck says in one call which reads were never tried, which \
+need an input and which read can give it, and which fail now and then, each with a remedy; \
+itda_shape gives the shape of a page or an answer (selectors, keys and types), never its values. \
+Act on a remedy only when it serves what the user asked. itda setup <url> and itda login <site> --browser do the same in a terminal; a problem \
 is reported with itda feedback.";
 
 #[cfg(test)]
@@ -187,8 +191,8 @@ impl Server {
     }
 
     /// Serve this one site only. The catalog must already hold only its
-    /// actions; `itda_setup` is refused, and `itda_login`, `itda_check` and
-    /// `itda_manage` refuse any other site.
+    /// actions; `itda_setup` is refused, and `itda_login`, `itda_check`,
+    /// `itda_sites`, `itda_manage` and `itda_shape` refuse any other site.
     pub fn with_site(mut self, site: &str) -> Self {
         self.only = Some(site.to_owned());
         self
@@ -199,8 +203,9 @@ impl Server {
         self.only.as_deref()
     }
 
-    /// Serve `itda_setup`, `itda_login`, `itda_check`, `itda_sites` and
-    /// `itda_manage` as well, on the data directory `context` opens.
+    /// Serve `itda_setup`, `itda_login`, `itda_check`, `itda_sites`,
+    /// `itda_manage` and `itda_shape` as well, on the data directory
+    /// `context` opens.
     pub fn with_setup(mut self, context: Arc<itda_setup::Context>) -> Self {
         self.setup = Some(context);
         self
@@ -365,8 +370,7 @@ impl Server {
             account,
             approval,
             next,
-            discovery: false,
-            out: None,
+            ..Call::default()
         };
         // The person answered the form of the previous round in the client.
         if let (None, Some(caller), Some(client)) = (&call.approval, caller, &self.client_approval)

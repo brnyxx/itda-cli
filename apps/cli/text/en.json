@@ -130,5 +130,20 @@
   "confirms": "after a lost answer: checks {read} for the new {input}",
   "spec_valid": "{file}: a valid definition of {site} ({n} actions). itda add {file} installs it.",
   "spec_invalid": "{file}: {n} problems; itda would not install it.",
-  "saved_file": "Saved {path} ({bytes} bytes, sha256 {sha256})"
+  "saved_file": "Saved {path} ({bytes} bytes, sha256 {sha256})",
+  "fsck_ok": "{site}: nothing to look at.",
+  "fsck_heading": "{site}: {n} to look at",
+  "remedy": "fix: {command}",
+  "suggest_heading": "Worth a look:",
+  "prompts_heading": "Ask your agent, for example:",
+  "gap_endpoint_untried": "{action} has never been tried",
+  "gap_read_needs_input": "{action} needs {inputs}",
+  "gap_read_needs_input_fed": "{action} needs {input}; {from} gives it at {pointer}",
+  "gap_finding_without_evidence": "a note about {subject} has no try behind it",
+  "gap_artifact_missing": "{path} is gone",
+  "gap_artifact_changed": "{path} changed since itda last saw it",
+  "gap_read_failing": "{action} failed its last {m} tries",
+  "gap_flapping_read": "{action} failed {n} of the last {m} tries",
+  "gap_dangling_edge": "a link points at something itda no longer has ({subject})",
+  "kb_not_written": "knowledge base not updated ({why}); the rest went on without it"
 }

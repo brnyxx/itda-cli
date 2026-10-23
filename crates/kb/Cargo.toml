@@ -1,0 +1,21 @@
+[package]
+name = "itda-kb"
+description = "A local knowledge base per site: the shape of what itda found and tried, never the values."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+itda-types = { workspace = true, features = ["sqlite"] }
+itda-store.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

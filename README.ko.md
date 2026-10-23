@@ -147,7 +147,9 @@ itda가 지켜볼 뿐입니다.
 않습니다. 판정 하나로 끝납니다: `ok`, `signed_out`, `site_changed`, `blocked`,
 `unreachable`. 종료 코드는 판정을 따릅니다(`site_changed`면 11). 예약 작업으로
 돌리면 에이전트가 부딪히기 전에 알 수 있습니다. MCP에서는 `itda_check`가 같은
-결과를 돌려줍니다.
+결과를 돌려줍니다. `itda fsck <site>`는 itda가 시도한 것을 적어 둔 로컬 기록(모양과
+판정만, 값은 없음)을 읽고, 아직 시도하지 않은 것, 입력이 필요한 것, 가끔 실패하는
+것을 실행할 명령과 함께 보여 줍니다.
 
 판정이 `site_changed`면 `itda refresh <site>`가 세팅할 때 쓴 출처로 사이트
 초안을 다시 잡습니다: 페이지, API 설명, GraphQL 엔드포인트, 또는 값을 전부

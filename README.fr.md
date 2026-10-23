@@ -165,6 +165,10 @@ n'envoie jamais de modification. Il finit sur un seul verdict : `ok`,
 `signed_out`, `site_changed`, `blocked` ou `unreachable`. Le code de sortie le
 suit (11 pour `site_changed`), donc une tâche planifiée peut vous prévenir avant
 qu'un agent ne tombe dessus. Via MCP, `itda_check` renvoie la même chose.
+`itda fsck <site>` lit le registre local qu'itda tient de ce qu'il a essayé (des
+formes et des verdicts, jamais de valeurs) et liste ce qui n'a jamais été
+essayé, ce qui demande une entrée et ce qui échoue de temps en temps, chacun
+avec la commande à lancer.
 
 Quand le verdict est `site_changed`, `itda refresh <site>` refait le brouillon
 du site à partir de ce qui a servi à le configurer : ses pages, la description

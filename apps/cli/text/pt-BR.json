@@ -130,5 +130,20 @@
   "confirms": "se a resposta se perder: procura o novo valor de {input} em {read}",
   "spec_valid": "{file}: uma definição válida de {site} ({n} ações). itda add {file} a instala.",
   "spec_invalid": "{file}: {n} problemas; o itda não a instalaria.",
-  "saved_file": "Salvo {path} ({bytes} bytes, sha256 {sha256})"
+  "saved_file": "Salvo {path} ({bytes} bytes, sha256 {sha256})",
+  "fsck_ok": "{site}: nada a examinar.",
+  "fsck_heading": "{site}: {n} a examinar",
+  "remedy": "solução: {command}",
+  "suggest_heading": "Vale a pena olhar:",
+  "prompts_heading": "Peça ao seu agente, por exemplo:",
+  "gap_endpoint_untried": "{action} nunca foi tentado",
+  "gap_read_needs_input": "{action} precisa de {inputs}",
+  "gap_read_needs_input_fed": "{action} precisa de {input}; {from} o fornece em {pointer}",
+  "gap_finding_without_evidence": "uma nota sobre {subject} não tem nenhuma tentativa por trás",
+  "gap_artifact_missing": "{path} sumiu",
+  "gap_artifact_changed": "{path} mudou desde a última vez que o itda o viu",
+  "gap_read_failing": "{action} falhou nas últimas {m} tentativas",
+  "gap_flapping_read": "{action} falhou em {n} das últimas {m} tentativas",
+  "gap_dangling_edge": "um vínculo aponta para algo que o itda não tem mais ({subject})",
+  "kb_not_written": "base de conhecimento não atualizada ({why}); o resto seguiu sem ela"
 }

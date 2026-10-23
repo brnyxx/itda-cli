@@ -1,6 +1,7 @@
 //! `itda check`: run every read that needs no input and report whether it
 //! still answers the way its definition says, so a site that changed shows up
 //! before an agent runs into it.
+use itda_kb::Stage;
 use itda_policy::{Effect, operation_effect};
 use itda_runtime::{Call, Runtime};
 use itda_spec::{Operation, Spec};
@@ -41,7 +42,13 @@ pub const NOT_TRIED: &str = "not tried: the site refused an earlier read; itda c
 
 /// Check every action of `specs`, one at a time. Changes are never sent.
 pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Vec<Outcome> {
-    reads(runtime, specs, account, false).await
+    reads(runtime, specs, account, Stage::Check).await
+}
+
+/// Try the reads a refresh drafted again before they join the definition,
+/// the way `run` does; the knowledge base records them as the refresh's.
+pub async fn try_refreshed(runtime: &Runtime, spec: &Spec) -> Vec<Outcome> {
+    reads(runtime, std::slice::from_ref(spec), None, Stage::Refresh).await
 }
 
 /// Try every read of a site being set up, once, while the person watches. A
@@ -49,15 +56,16 @@ pub async fn run(runtime: &Runtime, specs: &[Spec], account: Option<&str>) -> Ve
 /// and nothing more goes to the site in this run: the reads after it are
 /// `skipped`, so the next `itda check` tries them.
 pub async fn try_once(runtime: &Runtime, spec: &Spec) -> Vec<Outcome> {
-    reads(runtime, std::slice::from_ref(spec), None, true).await
+    reads(runtime, std::slice::from_ref(spec), None, Stage::Setup).await
 }
 
 async fn reads(
     runtime: &Runtime,
     specs: &[Spec],
     account: Option<&str>,
-    discovery: bool,
+    stage: Stage,
 ) -> Vec<Outcome> {
+    let discovery = stage == Stage::Setup;
     let mut out = Vec::new();
     for spec in specs {
         let mut refused = false;
@@ -100,6 +108,7 @@ async fn reads(
                 action: op.name.clone(),
                 account: account.map(str::to_owned),
                 discovery,
+                stage,
                 ..Call::default()
             };
             out.push(match runtime.call(spec, call).await {
@@ -295,9 +304,20 @@ pub struct LastCheck {
     pub hint: String,
 }
 
-/// Keep each site's verdict next to its definition. A site whose definition
-/// is gone is skipped.
-pub fn remember(home: &Path, verdicts: &[SiteVerdict]) -> AppResult<()> {
+/// Keep each site's verdict next to its definition, and in the knowledge
+/// base what the check was made of: the actions as the definition declares
+/// them, the hashes of the definition and of this verdict, and the gaps
+/// the rules find now (the tries themselves were written as each read
+/// ran). A site whose definition is gone is skipped. A knowledge base that
+/// cannot be written does not fail the check: what went wrong comes back,
+/// one message per site, for the caller to show.
+pub async fn remember(
+    home: &Path,
+    kb: &itda_kb::Kb,
+    specs: &[Spec],
+    verdicts: &[SiteVerdict],
+) -> AppResult<Vec<String>> {
+    let mut warnings = Vec::new();
     for site in verdicts {
         let dir = crate::sites::specs_dir(home).join(&site.site);
         if !dir.is_dir() {
@@ -309,8 +329,19 @@ pub fn remember(home: &Path, verdicts: &[SiteVerdict]) -> AppResult<()> {
             hint: site.hint.clone(),
         };
         itda_types::util::atomic_file(&dir.join(CHECK_FILE), &serde_json::to_vec(&last)?)?;
+        let Some(spec) = specs.iter().find(|spec| spec.site.name == site.site) else {
+            continue;
+        };
+        if let Err(error) = crate::knowledge::remember_check(kb, home, spec).await {
+            warnings.push(error.msg);
+        }
     }
-    Ok(())
+    Ok(warnings)
+}
+
+/// The file the last verdict is kept in, under the site's directory.
+pub fn check_file(home: &Path, site: &str) -> std::path::PathBuf {
+    crate::sites::specs_dir(home).join(site).join(CHECK_FILE)
 }
 
 /// When the site was last checked and what the verdict was; `None` before

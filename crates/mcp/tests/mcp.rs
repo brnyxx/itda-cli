@@ -466,6 +466,7 @@ async fn site_with_board() -> String {
 struct Managed {
     server: Server,
     home: std::path::PathBuf,
+    kb: Arc<itda_kb::Kb>,
 }
 
 /// A server that can set sites up, on a data directory of its own that
@@ -483,12 +484,14 @@ fn managed(base: &str) -> Managed {
     let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
     let net = Arc::new(Network::new(gate, true));
     let vault = Arc::new(Vault::open(store.clone(), Arc::new(MemoryStore::default())).unwrap());
-    let approvals = Arc::new(itda_policy::Approvals::open(store).unwrap());
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let kb = Arc::new(itda_kb::Kb::open(store).unwrap());
     let audit = Arc::new(itda_runtime::audit::AuditLog::new(home.join("audit.jsonl")));
     let runtime = Arc::new(
         Runtime::new(net.clone(), vault.clone())
             .with_approvals(approvals.clone())
-            .with_audit(audit.clone()),
+            .with_audit(audit.clone())
+            .with_kb(kb.recorder()),
     );
     let context = Arc::new(itda_setup::Context {
         home: home.clone(),
@@ -497,11 +500,12 @@ fn managed(base: &str) -> Managed {
         approvals,
         audit,
         runtime: runtime.clone(),
+        kb: kb.clone(),
         lang: "en".into(),
     });
     let server = Server::new(runtime, Catalog::new(vec![spec(base)]), Some(Mode::Direct))
         .with_setup(context);
-    Managed { server, home }
+    Managed { server, home, kb }
 }
 
 /// Everything the server sent while one tool call ran.
@@ -557,7 +561,7 @@ impl Client {
 #[tokio::test]
 async fn setup_adds_the_sites_tools_and_says_the_list_changed() {
     let base = site_with_board().await;
-    let Managed { server, home } = managed(&base);
+    let Managed { server, home, .. } = managed(&base);
     let mut client = Client::start(server).await;
     let before = client.tool_names().await;
     assert!(before.contains(&"itda_setup".to_owned()), "{before:?}");
@@ -616,7 +620,7 @@ async fn setup_adds_the_sites_tools_and_says_the_list_changed() {
 #[tokio::test]
 async fn check_sites_and_management_run_without_a_terminal() {
     let base = site_with_board().await;
-    let Managed { server, home } = managed(&base);
+    let Managed { server, home, .. } = managed(&base);
     let mut client = Client::start(server).await;
 
     let checked = client.call("itda_check", json!({"site": "fixture"})).await;
@@ -670,7 +674,7 @@ async fn check_sites_and_management_run_without_a_terminal() {
 #[tokio::test]
 async fn removing_a_site_asks_the_person_and_drops_its_tools() {
     let base = site_with_board().await;
-    let Managed { server, home } = managed(&base);
+    let Managed { server, home, kb } = managed(&base);
     let mut client = Client::start_with(server, json!({"elicitation": {}})).await;
 
     let declined = client
@@ -702,6 +706,7 @@ async fn removing_a_site_asks_the_person_and_drops_its_tools() {
 
     let waiting = client.call("fixture.delete-item", json!({"id": 3})).await;
     assert_eq!(waiting["structuredContent"]["status"], "approval_required");
+    assert_eq!(kb.counts("fixture").await.unwrap().attempts, 1);
     let removed = client
         .exchange(
             "itda_manage",
@@ -714,6 +719,11 @@ async fn removing_a_site_asks_the_person_and_drops_its_tools() {
         .call("itda_manage", json!({"action": "approvals"}))
         .await;
     assert_eq!(approvals["structuredContent"]["approvals"], json!([]));
+    // What was known about the site went with it.
+    assert_eq!(
+        kb.counts("fixture").await.unwrap(),
+        itda_kb::Counts::default()
+    );
     assert!(
         removed
             .notifications
@@ -761,7 +771,7 @@ async fn site_with_changing_board() -> (String, Arc<std::sync::atomic::AtomicBoo
 #[tokio::test]
 async fn refreshing_a_changed_site_asks_the_person_and_drafts_it_again() {
     let (base, redesigned) = site_with_changing_board().await;
-    let Managed { server, home } = managed(&base);
+    let Managed { server, home, .. } = managed(&base);
     let mut client = Client::start_with(server, json!({"elicitation": {}})).await;
     let done = client
         .exchange(
@@ -955,7 +965,7 @@ async fn a_read_that_turns_pages_takes_next_and_hides_the_cursor() {
 #[tokio::test]
 async fn a_server_pinned_to_one_site_stays_inside_it() {
     let base = site_with_board().await;
-    let Managed { server, home } = managed(&base);
+    let Managed { server, home, .. } = managed(&base);
     let mut client = Client::start(server.with_site("fixture")).await;
     let names = client.tool_names().await;
     assert!(
@@ -1096,12 +1106,14 @@ async fn a_lost_change_comes_back_with_its_outcome_check_and_in_the_audit() {
     let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
     let net = Arc::new(Network::new(gate, true));
     let vault = Arc::new(Vault::open(store.clone(), Arc::new(MemoryStore::default())).unwrap());
-    let approvals = Arc::new(itda_policy::Approvals::open(store).unwrap());
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let kb = Arc::new(itda_kb::Kb::open(store).unwrap());
     let audit = Arc::new(itda_runtime::audit::AuditLog::new(home.join("audit.jsonl")));
     let runtime = Arc::new(
         Runtime::new(net.clone(), vault.clone())
             .with_approvals(approvals.clone())
-            .with_audit(audit.clone()),
+            .with_audit(audit.clone())
+            .with_kb(kb.recorder()),
     );
     let context = Arc::new(itda_setup::Context {
         home: home.clone(),
@@ -1110,6 +1122,7 @@ async fn a_lost_change_comes_back_with_its_outcome_check_and_in_the_audit() {
         approvals: approvals.clone(),
         audit,
         runtime: runtime.clone(),
+        kb,
         lang: "en".into(),
     });
     let server = Server::new(
@@ -1398,7 +1411,7 @@ async fn on_2026_07_28_a_client_without_forms_gets_an_approval_id() {
 #[tokio::test]
 async fn on_2026_07_28_a_confirmation_is_the_result_and_the_answer_comes_on_the_next_call() {
     let base = site_with_board().await;
-    let Managed { server, home } = managed(&base);
+    let Managed { server, home, .. } = managed(&base);
     let mut client = Modern::start(server, forms()).await;
     let remove = json!({"action": "remove", "site": "fixture"});
 
@@ -1540,4 +1553,151 @@ async fn a_file_read_says_so_in_its_tool_and_links_the_saved_file() {
     assert_eq!(link["size"], 16);
     assert!(!result.to_string().contains("%PDF-1.4"));
     std::fs::remove_dir_all(&files).ok();
+}
+
+/// `itda_shape`, `itda_manage fsck` and `itda_sites` with a site: an agent
+/// learns what a site shows, what has not been tried and what needs an
+/// input, without a terminal and without a single value from the site.
+#[tokio::test]
+async fn shapes_gaps_and_the_guide_come_without_values() {
+    let base = site_with_board().await;
+    let Managed { server, home, .. } = managed(&base);
+    let mut client = Client::start(server).await;
+    assert!(client.tool_names().await.contains(&"itda_shape".to_owned()));
+
+    let checked = client.call("itda_check", json!({"site": "fixture"})).await;
+    assert_eq!(checked["isError"], false, "{checked}");
+
+    let action = client
+        .call(
+            "itda_shape",
+            json!({"site": "fixture", "action": "list-items"}),
+        )
+        .await;
+    assert_eq!(action["isError"], false, "{action}");
+    let shape = &action["structuredContent"];
+    assert_eq!(shape["kind"], "action");
+    assert_eq!(shape["shape"]["items"][0]["id"], "integer");
+    assert_eq!(shape["declared"]["method"], "GET");
+    assert!(shape["declared"].get("shape").is_none());
+
+    let unknown = client.call("itda_shape", json!({"site": "fixture"})).await;
+    assert_eq!(unknown["isError"], true);
+    assert_eq!(unknown["structuredContent"]["status"], "shape_unknown");
+
+    let elsewhere = client
+        .call(
+            "itda_shape",
+            json!({"site": "fixture", "page": "https://example.com/", "fresh": true}),
+        )
+        .await;
+    assert_eq!(elsewhere["isError"], true);
+
+    let page = format!("{base}/board");
+    let fresh = client
+        .call(
+            "itda_shape",
+            json!({"site": "fixture", "page": page, "fresh": true}),
+        )
+        .await;
+    assert_eq!(fresh["isError"], false, "{fresh}");
+    let text = fresh["structuredContent"].to_string();
+    assert!(text.len() <= 24 * 1024, "{}", text.len());
+    assert_eq!(fresh["structuredContent"]["fresh"], true);
+    assert!(
+        fresh["structuredContent"]["shape"]["structure"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["selector"] == "tr"),
+        "{text}"
+    );
+    for value in ["Second", "First", "/n/1"] {
+        assert!(!text.contains(value), "{value} in {text}");
+    }
+    // Known now, so the next call reads it back without fetching.
+    let known = client
+        .call("itda_shape", json!({"site": "fixture", "page": page}))
+        .await;
+    assert_eq!(known["structuredContent"]["fresh"], false, "{known}");
+
+    let fsck = client
+        .call("itda_manage", json!({"action": "fsck", "site": "fixture"}))
+        .await;
+    assert_eq!(fsck["isError"], false, "{fsck}");
+    let gaps = fsck["structuredContent"]["sites"][0]["gaps"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let rules: Vec<(&str, &str)> = gaps
+        .iter()
+        .map(|g| (g["rule"].as_str().unwrap(), g["subject"].as_str().unwrap()))
+        .collect();
+    // `first-item` needs `q`, which no read gives; the change was never
+    // tried, and comes after the read.
+    assert_eq!(
+        rules,
+        [
+            ("read_needs_input", "first-item"),
+            ("endpoint_untried", "delete-item")
+        ]
+    );
+    let untried = &gaps[1];
+    assert_eq!(untried["priority"], 3);
+    assert_eq!(
+        untried["remedy"]["command"],
+        "itda describe fixture.delete-item"
+    );
+    assert_eq!(untried["remedy"]["tool"], "itda_sites");
+    assert_eq!(untried["remedy"]["arguments"]["site"], "fixture");
+    assert_eq!(fsck["structuredContent"]["status"], "ok");
+
+    let detail = client.call("itda_sites", json!({"site": "fixture"})).await;
+    assert_eq!(detail["isError"], false, "{detail}");
+    let site = &detail["structuredContent"];
+    assert_eq!(site["site"], "fixture");
+    assert!(site["verified"].as_u64().unwrap() >= 1, "{site}");
+    assert!(site["pass_rate"].as_f64().unwrap() > 0.0);
+    assert_eq!(site["unstable"], json!([]));
+    let list = site["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["action"] == "list-items")
+        .unwrap();
+    assert_eq!(list["verified"], true);
+    assert_eq!(list["pass_rate"], 1.0);
+    assert!(
+        site["user_guide"]["reads"]
+            .as_str()
+            .unwrap()
+            .starts_with("You can read:"),
+        "{site}"
+    );
+    // The change has no description; the guide names it.
+    assert_eq!(
+        site["user_guide"]["changes"], "You can change, after approving each one: delete-item",
+        "{site}"
+    );
+    let prompts = site["natural_prompts"].as_array().unwrap();
+    assert!((2..=4).contains(&prompts.len()), "{prompts:?}");
+    assert!(site["gaps"].as_array().unwrap().len() <= 3);
+
+    let brief = client.call("itda_sites", json!({})).await;
+    let fixture = &brief["structuredContent"]["sites"][0];
+    assert!(fixture["verified"].as_u64().unwrap() >= 1);
+    assert_eq!(fixture["unstable"], json!([]));
+    std::fs::remove_dir_all(home).ok();
+}
+
+/// A server started for one site says nothing about another.
+#[tokio::test]
+async fn a_server_for_one_site_keeps_the_detail_of_others_to_itself() {
+    let base = site_with_board().await;
+    let Managed { server, home, .. } = managed(&base);
+    let mut client = Client::start(server.with_site("other")).await;
+    let detail = client.call("itda_sites", json!({"site": "fixture"})).await;
+    assert_eq!(detail["isError"], true, "{detail}");
+    assert!(!detail.to_string().contains("You can read"), "{detail}");
+    std::fs::remove_dir_all(home).ok();
 }

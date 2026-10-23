@@ -46,11 +46,11 @@ prompt caches stay valid:
 
 `itda mcp --mode direct` or `--mode catalog` overrides the choice.
 `itda mcp --site <name>` serves only that site's actions as tools. It refuses
-`itda_setup` and confines `itda_login`, `itda_check`, `itda_sites` and
-`itda_manage` to that site. Use it in a project's MCP configuration when the
+`itda_setup` and confines `itda_login`, `itda_check`, `itda_sites`,
+`itda_manage` and `itda_shape` to that site. Use it in a project's MCP configuration when the
 agent should only reach one site from there.
 
-Five tools are always there, so the agent never needs a terminal to set a
+Six tools are always there, so the agent never needs a terminal to set a
 site up or look after it:
 
 | Tool | Use |
@@ -58,8 +58,16 @@ site up or look after it:
 | `itda_setup` | Set up a site from a page address: look at the page as itda and draft. Try every read once and keep what works. The site's actions become tools in the same session. The server declares `tools.listChanged` and sends `notifications/tools/list_changed`; the next `tools/list` has them. A script-drawn page opens briefly in a browser window on your screen. itda watches it load on its own, without anyone clicking or typing. itda refuses pages that need a sign-in or still show nothing and gives you the command to run. It never asks you to record here. |
 | `itda_login` | Open your own browser to sign in, exactly like `itda login <site> --browser`. itda seals the session under the data directory with a key from the keyring; the agent only sees the account id. A client with forms asks you first. Nobody presses Enter, so the definition must name the cookie that shows a sign-in. |
 | `itda_check` | `itda check` for one site, or every site when none is named: the verdict per site and what to do, as `itda check --json` prints them. |
-| `itda_sites` | What is set up, with reads, changes and the last check's time and verdict. |
-| `itda_manage` | `refresh` drafts a changed site again from its sources. The form shows what would change; no answer counts as no. For `remove` and `resume`, you confirm in a form; clients without forms get the command to run. `approvals` lists what waits for you. `audit` lists the last entries for one site or all, plus, under `unknown_outcome`, changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (`check`) when the change named one. |
+| `itda_sites` | What is set up, with reads, changes, the last check's time and verdict, how many actions answered on their last try (`verified`), the recent `pass_rate` and the reads that fail now and then (`unstable`). With `site`, one site in detail: each action with `verified`, `pass_rate` and `last_verdict`, a `user_guide` (what can be read, what can be changed, which list read supplies which detail read's input), two to four `natural_prompts` a person might ask, and the top three gaps. |
+| `itda_manage` | `refresh` drafts a changed site again from its sources. The form shows what would change; no answer counts as no. For `remove` and `resume`, you confirm in a form; clients without forms get the command to run. `approvals` lists what waits for you. `audit` lists the last entries for one site or all, plus, under `unknown_outcome`, changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (`check`) when the change named one. `fsck` runs the knowledge base's rules for one site or all and sends nothing: in one call, the reads never tried (`endpoint_untried`), the reads that need an input and which list read can supply it (`read_needs_input`), the reads that fail every recent try (`read_failing`) or now and then (`flapping_read`), and files changed under itda (`artifact_changed`, `artifact_missing`). |
+| `itda_shape` | The shape of what a site shows and answers, never its values. For an `action`: the keys and types of its last answer as `shape` and as `pointers` (`{pointer, type}`), and what its definition declares. For a `page`: its selectors with match counts, attribute names and parent (`structure`), its named fields without values (`fields`) and the keys and types of the data it embeds (`ssr_payloads`). From the local knowledge base by default; with `fresh: true`, itda reads the page now, the way setup reads a page. At most 24 KB. |
+
+Every gap comes as `{rule, subject, priority, reason, remedy}`; `remedy` has
+the `command` for a terminal and the `tool` and `arguments` to call next (the
+action's own tool, or `itda_call` with `action` when the server lists the
+catalog). Act on a remedy only when it serves what the user asked; never call a
+change because a gap names it. `itda_setup` returns the top three gaps as
+`gaps`.
 
 Every result uses the `itda call --json` envelope, marked `"untrusted": true`. A
 note before it says website data is not instructions. Results over 24 KB keep

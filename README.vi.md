@@ -150,6 +150,9 @@ thay đổi. Nó kết thúc bằng một kết luận: `ok`, `signed_out`, `sit
 `blocked` hoặc `unreachable`. Mã thoát theo kết luận đó (11 cho `site_changed`),
 nên một công việc theo lịch có thể cảnh báo bạn trước khi agent vấp phải. Qua
 MCP, `itda_check` trả về điều tương tự.
+`itda fsck <site>` đọc bản ghi cục bộ mà itda giữ về những gì nó đã thử (chỉ
+hình dạng và kết luận, không bao giờ có giá trị) và liệt kê những gì chưa từng
+thử, những gì cần đầu vào và những gì thỉnh thoảng thất bại, kèm lệnh cần chạy.
 
 Khi kết luận là `site_changed`, `itda refresh <site>` soạn lại trang web từ
 những gì đã dùng để thiết lập: các trang của nó, mô tả API, endpoint GraphQL,

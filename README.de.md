@@ -162,6 +162,10 @@ sendet nie eine Änderung. Es endet mit einem Urteil: `ok`, `signed_out`,
 `site_changed`, `blocked` oder `unreachable`. Der Exit-Code folgt ihm (11 für
 `site_changed`), damit ein geplanter Job Sie warnen kann, bevor ein Agent
 darauf stößt. Über MCP gibt `itda_check` dasselbe zurück.
+`itda fsck <site>` liest die lokale Aufzeichnung dessen, was itda versucht hat
+(Formen und Urteile, nie Werte), und listet, was nie versucht wurde, was eine
+Eingabe braucht und was ab und zu fehlschlägt, jeweils mit dem auszuführenden
+Befehl.
 
 Lautet das Urteil `site_changed`, entwirft `itda refresh <site>` die Site neu
 aus dem, womit sie eingerichtet wurde: ihren Seiten, der API-Beschreibung, dem

@@ -69,6 +69,9 @@ pub struct Runtime {
     audit: Option<Arc<audit::AuditLog>>,
     cursors: Option<Arc<Cursors>>,
     files: Option<PathBuf>,
+    /// Where every try is written down, with the shape of its answer. The
+    /// runtime only writes there; nothing it sends depends on it.
+    recorder: Option<itda_kb::Recorder>,
 }
 
 /// One action call. `account` is only needed for actions with credentials.
@@ -91,6 +94,9 @@ pub struct Call {
     /// Where a file read saves its answer, instead of the runtime's files
     /// folder.
     pub out: Option<PathBuf>,
+    /// What the try is recorded as in the knowledge base: a call unless
+    /// `itda setup` or `itda check` says otherwise.
+    pub stage: itda_kb::Stage,
 }
 
 /// What an agent receives: the shaped data and where it came from, never the
@@ -137,7 +143,16 @@ impl Runtime {
             audit: None,
             cursors: None,
             files: None,
+            recorder: None,
         }
+    }
+
+    /// Write every try down in the knowledge base: the action, the stage,
+    /// the verdict, the status, the time it took and the shape of the
+    /// answer. Never an input or a value.
+    pub fn with_kb(mut self, recorder: itda_kb::Recorder) -> Self {
+        self.recorder = Some(recorder);
+        self
     }
 
     /// Save the answers of file reads under `dir/<site>/`, unless a call
@@ -220,6 +235,43 @@ impl Runtime {
             // The call already happened; a failed record must not hide its
             // result. Changes were recorded before they were sent.
             let _ = log.append(event);
+        }
+        // Only actions the definition has: a mistyped name is not a node.
+        if let Some(recorder) = &self.recorder
+            && spec.op(&call.action).is_ok()
+        {
+            let (verdict, http_status, duration_ms, shape) = match &result {
+                Ok(envelope) => (
+                    "ok".to_owned(),
+                    Some(envelope.meta.http_status),
+                    Some(envelope.meta.duration_ms),
+                    Some(itda_html::shape::shape(&envelope.data)),
+                ),
+                Err(error) => (
+                    error.public_code.clone(),
+                    error
+                        .extra
+                        .get("upstream_status")
+                        .and_then(Value::as_u64)
+                        .map(|status| status as u16),
+                    None,
+                    None,
+                ),
+            };
+            // Like the audit record: the try happened, and a knowledge base
+            // that cannot be written must not change the result.
+            let _ = recorder
+                .attempt(itda_kb::Attempt {
+                    site: spec.site.name.clone(),
+                    action: call.action.clone(),
+                    stage: call.stage,
+                    verdict,
+                    http_status,
+                    duration_ms,
+                    reason: reclassified.unwrap_or_default().to_owned(),
+                    shape,
+                })
+                .await;
         }
         result
     }

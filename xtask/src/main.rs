@@ -16,6 +16,7 @@ const LAYERS: &[(&str, u8)] = &[
     ("itda-types", 0),
     ("itda-html", 1),
     ("itda-store", 1),
+    ("itda-kb", 2),
     ("itda-spec", 2),
     ("itda-policy", 3),
     ("itda-browser", 4),

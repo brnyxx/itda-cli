@@ -130,5 +130,20 @@
   "confirms": "если ответ потерян: ищет новое значение {input} в {read}",
   "spec_valid": "{file}: корректное определение {site} (действий: {n}). itda add {file} установит его.",
   "spec_invalid": "{file}: проблем: {n}; itda не установит его.",
-  "saved_file": "Сохранено {path} ({bytes} байт, sha256 {sha256})"
+  "saved_file": "Сохранено {path} ({bytes} байт, sha256 {sha256})",
+  "fsck_ok": "{site}: смотреть нечего.",
+  "fsck_heading": "{site}: {n} стоит посмотреть",
+  "remedy": "что сделать: {command}",
+  "suggest_heading": "Стоит посмотреть:",
+  "prompts_heading": "Спросите своего агента, например:",
+  "gap_endpoint_untried": "{action} ещё ни разу не пробовали",
+  "gap_read_needs_input": "{action} требует {inputs}",
+  "gap_read_needs_input_fed": "{action} требует {input}; {from} даёт его в {pointer}",
+  "gap_finding_without_evidence": "заметка о {subject} не подкреплена ни одной попыткой",
+  "gap_artifact_missing": "{path} исчез",
+  "gap_artifact_changed": "{path} изменился с тех пор, как itda видел его в последний раз",
+  "gap_read_failing": "{action} не сработало ни в одной из последних {m} попыток",
+  "gap_flapping_read": "{action} не сработал {n} раз из последних {m}",
+  "gap_dangling_edge": "связь указывает на то, чего у itda больше нет ({subject})",
+  "kb_not_written": "база знаний не обновлена ({why}); остальное прошло без неё"
 }

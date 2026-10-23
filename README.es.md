@@ -162,6 +162,10 @@ un cambio. Termina con un solo veredicto: `ok`, `signed_out`, `site_changed`,
 `blocked` o `unreachable`. El código de salida lo sigue (11 para
 `site_changed`), así que una tarea programada puede avisarte antes de que un
 agente se tope con ello. Por MCP, `itda_check` devuelve lo mismo.
+`itda fsck <site>` lee el registro local que itda guarda de lo que probó (formas
+y veredictos, nunca valores) y lista lo que nunca se probó, lo que necesita una
+entrada y lo que falla de vez en cuando, cada uno con el comando que hay que
+ejecutar.
 
 Cuando el veredicto es `site_changed`, `itda refresh <site>` redacta el sitio de
 nuevo a partir de aquello con lo que se configuró: sus páginas, la descripción

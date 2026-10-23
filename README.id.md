@@ -163,6 +163,10 @@ tidak pernah mengirim perubahan. Ia berakhir dengan satu putusan: `ok`,
 mengikutinya (11 untuk `site_changed`), sehingga pekerjaan terjadwal bisa
 memperingatkan Anda sebelum agen tersandung padanya. Lewat MCP, `itda_check`
 mengembalikan hal yang sama.
+`itda fsck <site>` membaca catatan lokal yang disimpan itda tentang apa yang
+dicobanya (bentuk dan putusan, tidak pernah nilai) dan menampilkan apa yang
+belum pernah dicoba, apa yang butuh masukan, dan apa yang sesekali gagal,
+masing-masing dengan perintah yang perlu dijalankan.
 
 Saat putusannya `site_changed`, `itda refresh <site>` menyusun ulang draf situs
 dari sumber penyiapannya: halaman-halamannya, deskripsi API, endpoint GraphQL,

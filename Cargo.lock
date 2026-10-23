@@ -1456,6 +1456,7 @@ dependencies = [
  "clap",
  "itda-browser",
  "itda-html",
+ "itda-kb",
  "itda-mcp",
  "itda-net",
  "itda-policy",
@@ -1486,10 +1487,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "itda-kb"
+version = "0.6.0"
+dependencies = [
+ "itda-store",
+ "itda-types",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "itda-mcp"
 version = "0.6.0"
 dependencies = [
  "axum",
+ "itda-html",
+ "itda-kb",
  "itda-net",
  "itda-policy",
  "itda-runtime",
@@ -1552,6 +1567,7 @@ dependencies = [
  "itda-policy",
  "itda-spec",
  "itda-types",
+ "serde",
  "serde_json",
  "serde_norway",
  "url",
@@ -1563,6 +1579,7 @@ version = "0.6.0"
 dependencies = [
  "axum",
  "itda-html",
+ "itda-kb",
  "itda-net",
  "itda-policy",
  "itda-spec",
@@ -1591,6 +1608,7 @@ dependencies = [
  "axum",
  "itda-browser",
  "itda-html",
+ "itda-kb",
  "itda-net",
  "itda-policy",
  "itda-prep",
