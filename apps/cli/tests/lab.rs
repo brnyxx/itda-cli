@@ -603,7 +603,8 @@ fn lossy_a_lost_answer_is_confirmed_by_the_list_and_never_resent() {
     assert!(login.status.success(), "{}", text(&login));
 
     let before = json(&itda(&home, &["call", &format!("{site}.{read}"), "--json"]));
-    let count_before = before["data"]["items"].as_array().unwrap().len();
+    // The list is paged (ten per page), so count the board by its total.
+    let total_before = before["data"]["total"].as_u64().unwrap();
 
     let title = format!("lab test {}", &itda_types::util::id()[..8]);
     let call: Vec<String> = vec![
@@ -644,10 +645,7 @@ fn lossy_a_lost_answer_is_confirmed_by_the_list_and_never_resent() {
         1,
         "{titles:?}"
     );
-    assert_eq!(
-        after["data"]["items"].as_array().unwrap().len(),
-        count_before + 1
-    );
+    assert_eq!(after["data"]["total"].as_u64().unwrap(), total_before + 1);
 
     // Asking again: a new approval that says the first one landed.
     let again = itda(&home, &call);
