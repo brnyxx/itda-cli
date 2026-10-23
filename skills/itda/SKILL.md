@@ -70,7 +70,7 @@ for a new definition. The last line per site is the verdict:
 | `ok` | retry the action; the site is fine |
 | `signed_out` | ask the user to run `itda login <site>`, or call `itda_login` over MCP |
 | `site_changed` | ask the user to run `itda refresh <site>`, or call `itda_manage` with `refresh` over MCP. It re-drafts from the same sources and keeps the user's decisions |
-| `blocked` | tell the user to check the site, then run `itda resume <site>` |
+| `blocked` | respect `retry_after`; `paused: false` means no resume is needed and other reads remain available. Resume only an explicitly paused site |
 | `unreachable` | wait and check again |
 
 ## New sites and problems

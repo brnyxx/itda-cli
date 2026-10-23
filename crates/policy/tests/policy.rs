@@ -14,6 +14,39 @@ fn spec_from(value: serde_json::Value) -> Spec {
     spec::parse(value.to_string().as_bytes()).unwrap()
 }
 
+#[test]
+fn browser_graphql_requests_must_be_single_read_queries() {
+    let url = url::Url::parse("https://example.test/graphql").unwrap();
+    assert!(itda_policy::safe_graphql_read(
+        &url,
+        br#"{"query":"query { items { id } }"}"#
+    ));
+    for body in [
+        br#"{"query":"mutation { deleteItem(id: 1) }"}"#.as_slice(),
+        br#"{"query":"subscription { events { id } }"}"#.as_slice(),
+        br#"{"query":"query A { items { id } } query B { items { id } }"}"#.as_slice(),
+        br#"{"extensions":{"persistedQuery":{"sha256Hash":"unknown"}}}"#.as_slice(),
+        br#"{"action":"delete"}"#.as_slice(),
+        // A key named twice: a server keeping the first value would run the
+        // mutation itda did not read.
+        br#"{"query":"mutation { deleteItem(id: 1) }","query":"query { items { id } }"}"#
+            .as_slice(),
+        br#"[{"query":"query { items { id } }"}]"#.as_slice(),
+    ] {
+        assert!(!itda_policy::safe_graphql_read(&url, body));
+    }
+    let delete = url::Url::parse("https://example.test/delete").unwrap();
+    assert!(!itda_policy::safe_graphql_read(
+        &delete,
+        br#"{"query":"{ items { id } }"}"#
+    ));
+    let search = url::Url::parse("https://example.test/api/search").unwrap();
+    assert!(!itda_policy::safe_graphql_read(
+        &search,
+        br#"{"query":"not a GraphQL document"}"#
+    ));
+}
+
 fn fixture(origin: &str) -> Spec {
     spec_from(
         json!({"spec_version":1,"site":{"name":"fixture","title":"Fixture website","base_url":origin},"operations":[{"name":"read-items","method":"GET","path":"/items","effect":"read","evidence":"Synthetic fixture documentation"},{"name":"create-item","method":"POST","path":"/items","effect":"write","evidence":"Synthetic fixture documentation","body":{"json":{"title":{"type":"string","required":true}}}}]}),

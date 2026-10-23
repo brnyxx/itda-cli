@@ -13,7 +13,8 @@
 # Design
 
 - [Architecture](ARCHITECTURE.md)
-- [Honest client policy](HONEST_CLIENT.md)
+- [Transport policy](HONEST_CLIENT.md)
+- [Transport measurements](TRANSPORT_BENCHMARKS.md)
 - [Threat model](THREAT_MODEL.md)
 
 ---

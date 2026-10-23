@@ -13,7 +13,8 @@ What you or your agent were doing, and where it stopped.
 
 One or two sentences. If a command or an MCP tool should change, say which.
 
-## Why an honest client can do it
+## How it fits the transport policy
 
-itda never imitates a browser, hides from a site or works around a block
-(see `docs/HONEST_CLIENT.md`). Say in a line how the feature stays inside that.
+Reads may recover through browser transports. Explain how the feature keeps
+account boundaries, rate limits and single-use write approvals intact
+(see `docs/HONEST_CLIENT.md`).

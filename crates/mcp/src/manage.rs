@@ -377,6 +377,13 @@ impl Server {
                         return failure(&needs_terminal(format!("itda remove {site}")));
                     }
                 }
+                let spec = match sites::load(&ctx.home, site) {
+                    Ok(spec) => spec,
+                    Err(error) => return failure(&error),
+                };
+                if let Err(error) = itda_setup::reset_browser_sessions(ctx, &spec).await {
+                    return failure(&error);
+                }
                 if let Err(error) = sites::remove(&ctx.home, site) {
                     return failure(&error);
                 }

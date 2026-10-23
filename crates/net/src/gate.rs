@@ -12,8 +12,7 @@
 //! Derived from Hycli `src/policy.rs` (`acquire`, `release`, `resume`,
 //! `resume_auth`), Apache-2.0. Changes: split out of the approval store and onto
 //! the shared `itda-store` thread; pauses for blocks and expired sessions are
-//! new; the transport strategy tables used to switch blocked requests to a
-//! browser were removed.
+//! new; adaptive read strategies are persisted separately from scope pauses.
 use itda_store::{Migration, Store};
 use itda_types::{
     error::{AppError, AppResult},
@@ -55,13 +54,28 @@ static SCHEMA: Migration = Migration {
     component: "gate",
     steps: &["CREATE TABLE request_gate(scope TEXT PRIMARY KEY, lease TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0, cooldown INTEGER NOT NULL DEFAULT 0, paused TEXT NOT NULL DEFAULT '');
         CREATE TABLE request_event(scope TEXT NOT NULL, at INTEGER NOT NULL);
-        CREATE INDEX request_event_scope_time ON request_event(scope,at);"],
+        CREATE INDEX request_event_scope_time ON request_event(scope,at);",
+        "CREATE TABLE strategy_gate(
+            origin TEXT NOT NULL, account TEXT NOT NULL, method TEXT NOT NULL,
+            path TEXT NOT NULL, digest TEXT NOT NULL, transport TEXT NOT NULL,
+            succeeded INTEGER NOT NULL, expires INTEGER NOT NULL,
+            PRIMARY KEY(origin,account,method,path,digest,transport));
+        CREATE TABLE transport_preference(
+            origin TEXT NOT NULL, account TEXT NOT NULL, transport TEXT NOT NULL,
+            expires INTEGER NOT NULL, PRIMARY KEY(origin,account));",
+        "ALTER TABLE transport_preference RENAME TO transport_preference_legacy;
+        CREATE TABLE transport_preference(
+            origin TEXT NOT NULL, account TEXT NOT NULL, contract TEXT NOT NULL,
+            transport TEXT NOT NULL, expires INTEGER NOT NULL,
+            PRIMARY KEY(origin,account,contract));
+        INSERT INTO transport_preference SELECT origin,account,'',transport,expires FROM transport_preference_legacy;
+        DROP TABLE transport_preference_legacy;"],
 };
 
 type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
 pub struct Gate {
-    store: Store,
+    pub(crate) store: Store,
     interval_ms: i64,
     budget: i64,
     clock: Clock,
@@ -97,6 +111,10 @@ impl std::fmt::Debug for Lease<'_> {
 }
 
 impl Lease<'_> {
+    pub fn abandon(mut self) {
+        self.released = true;
+    }
+
     /// Let the next caller through, recording how this request ended.
     pub async fn release(mut self, outcome: Outcome) -> AppResult<()> {
         self.gate.release(&self.scope, &self.token, outcome).await?;
@@ -130,6 +148,10 @@ impl Lease<'_> {
 /// How long a turn lasts once taken; a transfer longer than this renews it.
 pub const LEASE_MS: i64 = 120_000;
 
+/// The longest wait a site, or a resource a page loads, can ask for before
+/// itda tries again on its own: an hour, whatever `Retry-After` said.
+const MAX_COOLDOWN_MS: i64 = 60 * 60 * 1000;
+
 impl Drop for Lease<'_> {
     fn drop(&mut self) {
         if !self.released {
@@ -140,6 +162,100 @@ impl Drop for Lease<'_> {
 }
 
 impl Gate {
+    pub async fn admit_origin(&self, origin: &str, interval: Option<Duration>) -> AppResult<()> {
+        self.acquire(&format!("{origin}|*"), interval)
+            .await?
+            .release(Outcome::Done)
+            .await
+    }
+
+    pub async fn observe_origin(&self, origin: &str, outcome: Outcome) -> AppResult<()> {
+        let (cooldown, paused) = match outcome {
+            Outcome::Done => return Ok(()),
+            Outcome::RateLimited(wait) => (
+                self.now().saturating_add(
+                    i64::try_from(wait.unwrap_or(Duration::from_secs(60)).as_millis())
+                        .unwrap_or(i64::MAX)
+                        .min(MAX_COOLDOWN_MS),
+                ),
+                "",
+            ),
+            Outcome::Pause(reason) => (0, reason),
+        };
+        let scope = format!("{origin}|*");
+        self.store.call(move |conn| {
+            conn.execute(
+                "INSERT INTO request_gate(scope,cooldown,paused) VALUES(?1,?2,?3)
+                 ON CONFLICT(scope) DO UPDATE SET cooldown=MAX(request_gate.cooldown,excluded.cooldown),
+                 paused=CASE WHEN excluded.paused='' THEN request_gate.paused ELSE excluded.paused END",
+                params![scope, cooldown, paused],
+            )?;
+            Ok(())
+        }).await
+    }
+
+    pub(crate) async fn cooldowns(
+        &self,
+    ) -> AppResult<Vec<itda_browser::transport::OriginCooldown>> {
+        let now = self.now();
+        self.store
+            .call(move |conn| {
+                let mut query = conn.prepare(
+                    "SELECT substr(scope,1,length(scope)-2),cooldown FROM request_gate
+                 WHERE scope LIKE '%|*' AND cooldown>?1",
+                )?;
+                let values = query
+                    .query_map([now], |row| {
+                        Ok(itda_browser::transport::OriginCooldown {
+                            origin: row.get(0)?,
+                            until_ms: row.get(1)?,
+                        })
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(values)
+            })
+            .await
+    }
+
+    pub(crate) async fn observe_cooldowns(
+        &self,
+        limits: &[itda_browser::transport::OriginCooldown],
+    ) -> AppResult<()> {
+        // The page named these origins; one itda would not fetch is left
+        // out rather than failing the read that already answered.
+        let now = self.now();
+        let mut active = Vec::new();
+        for limit in limits {
+            if limit.until_ms <= now {
+                continue;
+            }
+            let Some(origin) = itda_types::url::validate_url(&limit.origin)
+                .ok()
+                .map(|url| url.origin().ascii_serialization())
+                .filter(|origin| *origin == limit.origin)
+            else {
+                continue;
+            };
+            let until = limit.until_ms.min(now.saturating_add(MAX_COOLDOWN_MS));
+            active.push((format!("{origin}|*"), until));
+        }
+        if active.is_empty() {
+            return Ok(());
+        }
+        self.store.call(move |conn| {
+            let tx = conn.transaction()?;
+            for (scope, until) in active {
+                tx.execute(
+                    "INSERT INTO request_gate(scope,cooldown) VALUES(?1,?2)
+                     ON CONFLICT(scope) DO UPDATE SET cooldown=MAX(request_gate.cooldown,excluded.cooldown)",
+                    params![scope, until],
+                )?;
+            }
+            tx.commit()?;
+            Ok(())
+        }).await
+    }
+
     /// The default pace: 1.2 seconds between requests, 60 per ten minutes.
     pub fn open(store: Store) -> AppResult<Self> {
         Self::with_limits(store, DEFAULT_INTERVAL.as_millis() as i64, 60)
@@ -165,7 +281,7 @@ impl Gate {
         self
     }
 
-    fn now(&self) -> i64 {
+    pub(crate) fn now(&self) -> i64 {
         (self.clock)()
     }
 
@@ -258,8 +374,18 @@ impl Gate {
             .call(move |conn| {
                 conn.execute(
                     "UPDATE request_gate SET paused='',cooldown=0 WHERE scope=?1",
-                    [scope],
+                    [&scope],
                 )?;
+                if let Some((origin, account)) = scope.rsplit_once('|') {
+                    conn.execute(
+                        "DELETE FROM strategy_gate WHERE origin=?1 AND account=?2",
+                        params![origin, account],
+                    )?;
+                    conn.execute(
+                        "DELETE FROM transport_preference WHERE origin=?1 AND account=?2",
+                        params![origin, account],
+                    )?;
+                }
                 Ok(())
             })
             .await

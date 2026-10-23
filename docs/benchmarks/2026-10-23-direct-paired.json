@@ -1,0 +1,675 @@
+{
+  "date": "2026-10-23T03:10:34.349Z",
+  "platform": "darwin-arm64",
+  "binaries": {
+    "itda": "release/itda (feature/adaptive-transport worktree)",
+    "hycli": "release/hycli (192d71329720f553b382a366573ef06f4e156bb7)"
+  },
+  "hashes": {
+    "itda": "b1a5f142c439ea189d2e5cf2af6e77c512b2e19d4e9d6ee552d016e9361c9c70",
+    "hycli": "166ca7eb20a3d419039f16978f964321e4e46998d2a28bdde776534d25e2cf83"
+  },
+  "browser": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "browser_version": "Google Chrome 155.0.8059.86",
+  "cpu": "Apple M4 Pro",
+  "samples": 30,
+  "think_time_ms": 1500,
+  "methodology": "Direct-only follow-up alternates AB/BA order within each pair, with equal think time between pairs. Each tool retains one home and policy database. Latency is spawn-to-exit; cold samples and all failures are retained separately.",
+  "groups": [
+    {
+      "key": "hycli|direct-paired",
+      "count": 30,
+      "failures": 0,
+      "p50_ms": 18.623416999995243,
+      "p95_ms": 68.07650000000012,
+      "p99_ms": 118.36625000000095
+    },
+    {
+      "key": "itda|direct-paired",
+      "count": 30,
+      "failures": 0,
+      "p50_ms": 17.65229200000249,
+      "p95_ms": 94.19783300000017,
+      "p99_ms": 163.7252499999995
+    }
+  ],
+  "batches": [
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "wire_requests": 30
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "wire_requests": 30
+    }
+  ],
+  "results": [
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 172.38529199999994,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 283.07883300000003,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 40.28099999999995,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 22.791167000000314,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 59.454374999999345,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 68.07650000000012,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 33.93312499999956,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 163.7252499999995,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 42.946500000000015,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 51.14129200000025,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 47.648959000000104,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.59545900000012,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 94.19783300000017,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 29.980290999999852,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 118.36625000000095,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 28.623665999999503,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 30.8224999999984,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.44812499999898,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 40.95899999999892,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.754541000002064,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.65229200000249,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.4632500000007,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 38.79162500000166,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.505958000001556,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 39.16387499999837,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 21.327665999997407,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.137541000000056,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 23.67370799999844,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.51391599999988,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 31.413625000001048,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.47687500000029,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 15.545792000000802,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 14.909041999999317,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.71770800000013,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 46.025916999999026,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 38.288541999998415,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.382667000001675,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 15.75079199999891,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 21.533166000001074,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 28.483165999998164,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.691167000004498,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.836083999995026,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.40008300000045,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 15.08929199999693,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.069750000002387,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.18791699999565,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.721042000004672,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 15.327916000002006,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.68616699999984,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.35454100000061,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.331082999997307,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 15.887416999998095,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.083166000003985,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 15.81095799999457,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.022125000003143,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.255792000003566,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.351667000002635,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.1572079999969,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.337249999996857,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.536416000002646,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.31812500000524,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct-paired",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.623416999995243,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    }
+  ],
+  "cleanup_failures": [],
+  "source": {
+    "itda_base": "9bb0fa8128e5d284c6ee819d884762c9a39097c3",
+    "hycli": "192d71329720f553b382a366573ef06f4e156bb7"
+  }
+}

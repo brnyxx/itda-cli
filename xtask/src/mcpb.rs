@@ -61,7 +61,7 @@ pub fn manifest(target: &str, version: &str) -> Option<Value> {
         "display_name": "itda",
         "version": version,
         "description": "Use the websites you use through your agent: named actions in plain words, reads that just work, changes that wait for your approval.",
-        "long_description": "Tell Claude \"use the-site-you-use.example\" and itda looks at the page as itself, names what the site can do in plain words, tries every read once and keeps what works. Reads run right away. A change never runs until you approve it. Sites behind a sign-in keep their session on this computer; the agent only ever sees the account id. itda identifies itself to every site, never imitates a browser and stops when a site says no.",
+        "long_description": "Tell Claude \"use the-site-you-use.example\" and itda looks at the page, names what the site can do in plain words, tries every read once and keeps what works. Reads run right away; a page behind a challenge gets one more try in the browser on this computer. A change never runs until you approve it, and is sent once. Sites behind a sign-in keep their session on this computer; the agent only ever sees the account id.",
         "author": {
             "name": "the itda contributors",
             "url": "https://github.com/brnyxx/itda-cli"

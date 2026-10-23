@@ -77,7 +77,7 @@ verlegt diese Arbeit in einen Installationsschritt:
 | Änderungen auf der Site | Was immer das Modell entscheidet | Einmalige Freigabe für genaue Eingaben, von einem Menschen im Terminal oder in der Agenten-App erteilt |
 | Text auf der Seite, der „ignoriere vorherige Anweisungen“ sagt | Im Prompt | Als nicht vertrauenswürdige Daten markiert, nie ein Werkzeug |
 | Zugangsdaten | Vom Modell in die Seite getippt | Im Schlüsselbund des Systems; der Agent sieht nur Konto-IDs |
-| Blockiert werden | Erneut versuchen, IP wechseln, Browser imitieren | Anhalten, Ihnen sagen, warten, bis Sie fortsetzen |
+| Blockiert werden | Erneut versuchen, IP wechseln, Browser imitieren | Den Lesevorgang einmal mehr in Ihrem eigenen installierten Browser versuchen, sich merken, was funktioniert hat, nichts anhalten |
 | Was passiert ist | Chat-Verlauf | Hash-verkettetes Audit-Log, das Sie prüfen können |
 
 ## Was es kann und was nicht
@@ -120,6 +120,14 @@ weggelassen haben.
   benannte Datei sendet; Sie geben sie nach Name, Größe und Hash frei.
 - Alles, was Sie selbst beim Benutzen aufgezeichnet haben, im Browser oder als
   HAR-Datei.
+- Seiten hinter einer Challenge-Seite, wenn der Browser auf Ihrem Computer
+  daran vorbeikommt. itda versucht den Lesevorgang einmal mehr in diesem
+  Browser, verborgen, nur für diese eine Site und dieses Konto, und merkt sich,
+  was funktioniert hat, sodass der nächste Aufruf dort beginnt. Der Browser
+  bleibt zwischen CLI-Aufrufen warm und schließt sich nach fünf Minuten ohne
+  Nutzung; ein geänderter Suchbegriff startet ihn nicht neu. Alles, was die
+  Seite lädt, durchläuft dieselben Adress- und Leseprüfungen wie eine direkte
+  Anfrage. Siehe [die Transportrichtlinie](docs/HONEST_CLIENT.md).
 
 **Funktioniert nach dem Aufzeichnen**
 
@@ -141,10 +149,9 @@ weggelassen haben.
   damit macht.
 - Inhalt, der auf ein Canvas oder in ein Bild gezeichnet wird. itda liest Text
   in HTML, JSON und XML; es sieht sich keine Pixel an.
-- Sites hinter einer Challenge oder einem Bot-Manager (Cloudflare, Akamai, ein
-  Captcha). itda sagt, wer es ist, und imitiert nie einen Browser. Es pausiert
-  die Site, bis Sie sie fortsetzen. Siehe
-  [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- Eine Challenge, an der auch Ihr Browser nicht vorbeikommt, oder ein Captcha.
+  itda löst keine Captchas. Der Lesevorgang schlägt fehl und sagt das; nichts
+  wird pausiert. Siehe [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - Alles, was Ihr Konto nicht sehen kann. itda hat kein eigenes Konto; es
   benutzt Ihres.
 
@@ -171,7 +178,10 @@ sie von Hand.
 
 Das ist der Kompromiss. Ein Browser-Agent passt sich bei jedem Lauf an, und ist
 dafür langsam und nicht deterministisch. itda ist eine Anfrage und jedes Mal
-dieselbe Antwort. Es bricht laut, wenn sich die Site bewegt.
+dieselbe Antwort; nach einer Challenge ist es ein Versuch mehr in Ihrem Browser,
+und immer noch dieselbe Antwort. Es bricht laut, wenn sich die Site bewegt.
+`docs/TRANSPORT_BENCHMARKS.md` hat die Zahlen, auch die eine, die itda noch
+nicht erreicht.
 
 ## Neben Browser-Agenten
 
@@ -339,7 +349,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # was Agenten getan haben
 itda check [<site>|--all]                # passt jeder Lesevorgang noch zur Site?
 itda refresh <site>                      # eine Site hat sich geändert: neu entwerfen, Ihre Entscheidungen behalten
-itda resume <site>                       # nachdem eine Site abgelehnt hat oder ein Schlüssel abgelaufen ist
+itda resume <site>                       # nach einer Pause im direkten HTTP-Modus oder einem abgelaufenen Schlüssel
 itda feedback                            # ein Problem melden: öffnet ein neues Issue, ausgefüllt
 ```
 
@@ -375,7 +385,7 @@ nach dem Exit-Code verzweigen:
 | 2 | falsche Eingabe oder unbekannte Aktion |
 | 10 | erneut anmelden (`itda login`) |
 | 11 | die Seite passt nicht mehr zu ihrer Definition |
-| 12 | die Site hat abgelehnt; pausiert bis `itda resume` |
+| 12 | die Site hat diesen Lesevorgang abgelehnt, auch im Browser; `paused: false` heißt, es gibt nichts fortzusetzen |
 | 13 | Rate begrenzt |
 | 14 | die Site hat diese eine Anfrage als nicht erlaubt abgelehnt; erneut anmelden hilft nicht |
 | 20 | braucht Freigabe, oder der Benutzer hat noch nicht geantwortet (oder Änderungen sind aus) |
@@ -393,8 +403,11 @@ nach dem Exit-Code verzweigen:
 - **Menschen geben Änderungen frei.** Jede Freigabe gilt für eine Anfrage mit
   genauen Eingaben, Konto, Definition und Zugangsdaten. Sie funktioniert einmal
   und läuft ab.
-- **Sperren werden gemeldet, nicht umgangen.** itda sagt, wer es ist, und
-  imitiert nie einen Browser. Es pausiert eine Site, die es ablehnt. Siehe
+- **Eine Challenge bekommt einen Versuch mehr, in Ihrem Browser.** Ein
+  Lesevorgang, den die Site mit einer Challenge-Seite beantwortet, läuft einmal
+  mehr im Browser, der auf Ihrem Computer installiert ist; itda merkt sich, was
+  funktioniert hat. Eine Änderung wird einmal gesendet und nie über den
+  Browser. `ITDA_TRANSPORT=http` bleibt bei direktem HTTP. Siehe
   [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - **Geprüfte Aktionen.** Eine Definition erklärt, wie eine richtige Antwort
   aussieht, sodass „abgemeldet“ und „die Site hat sich geändert“ Fehler sind,
@@ -411,8 +424,9 @@ das durch.
 | 1 | `itda-html`, `itda-store` | Skriptfreie HTML-Extraktion; der lokale SQLite-Speicher |
 | 2 | `itda-spec` | Definitionsformat, Aufbau der Anfragen, Prüfung der Antworten |
 | 3 | `itda-policy` | Lese-/Schreib-Einstufung, Sicherheitsprüfungen für Definitionen, Freigaben |
-| 4 | `itda-net` | Begrenztes HTTP, Taktung, Erkennung von Sperren, Schutz vor privaten Adressen |
-| 5 | `itda-vault` | Konten und Geheimnisse im Schlüsselbund des Systems oder in der Umgebung |
+| 4 | `itda-browser` | Anmeldung, Aufzeichnung, isolierter Browser-Lesetransport |
+| 5 | `itda-net` | Adaptiver Transport, Strategie-Cache, Taktung, Schutz vor privaten Adressen |
+| 6 | `itda-vault` | Konten und Geheimnisse im Schlüsselbund des Systems oder in der Umgebung |
 | 7 | `itda-runtime` | Führt Aktionen aus: Zugangsdaten, Freigaben, Formung, Audit-Log |
 | 9 | `itda-setup` | Die Schritte für Einrichtung, Anmeldung und Prüfung, für CLI und MCP-Server gleichermaßen |
 | 10 | `itda-mcp` | MCP-Server über stdio |

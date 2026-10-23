@@ -76,7 +76,7 @@ cài đặt:
 | Thay đổi trên trang web | Tùy mô hình quyết định | Phê duyệt dùng một lần cho đúng đầu vào đó, do một người đưa ra trong terminal hoặc ứng dụng agent |
 | Chữ trên trang nói "bỏ qua các chỉ dẫn trước" | Nằm trong prompt | Đánh dấu là dữ liệu không đáng tin, không bao giờ là công cụ |
 | Thông tin đăng nhập | Mô hình gõ vào trang | Trong keyring của hệ điều hành; agent chỉ thấy id tài khoản |
-| Khi bị chặn | Thử lại, đổi IP, giả làm trình duyệt | Dừng, báo cho bạn, chờ bạn tiếp tục |
+| Khi bị chặn | Thử lại, đổi IP, giả làm trình duyệt | Thử lượt đọc thêm một lần trong trình duyệt đã cài trên máy của bạn, nhớ cách đã được, không tạm dừng gì |
 | Chuyện gì đã xảy ra | Lịch sử chat | Nhật ký kiểm toán nối chuỗi hash mà bạn kiểm chứng được |
 
 ## Làm được gì và không làm được gì
@@ -112,6 +112,13 @@ hợp nào; `itda draft page` hoặc `itda record` nói chúng đã bỏ gì.
   một thay đổi gửi tệp bạn chỉ định; bạn phê duyệt nó theo tên, kích thước và
   hash.
 - Bất cứ gì bạn tự ghi lại khi dùng, trong trình duyệt hoặc dưới dạng tệp HAR.
+- Trang nằm sau một trang thử thách, khi trình duyệt trên máy tính của bạn vượt
+  qua được. itda thử lượt đọc thêm một lần bên trong trình duyệt đó, ẩn, dành
+  riêng cho một trang web và tài khoản đó, và nhớ cách đã được, nên lần gọi sau
+  bắt đầu từ đó. Trình duyệt giữ ấm giữa các lần gọi CLI và đóng sau năm phút
+  không dùng; đổi từ khóa tìm kiếm không khởi động lại nó. Mọi thứ trang tải về
+  đều qua cùng các kiểm tra địa chỉ và lượt đọc như một yêu cầu trực tiếp. Xem
+  [chính sách truyền tải](docs/HONEST_CLIENT.md).
 
 **Chạy được sau khi bạn ghi lại**
 
@@ -130,9 +137,9 @@ hợp nào; `itda draft page` hoặc `itda record` nói chúng đã bỏ gì.
   nó.
 - Nội dung vẽ trên canvas hoặc trong ảnh. itda đọc chữ trong HTML, JSON và XML;
   nó không nhìn vào pixel.
-- Trang web nằm sau thử thách hoặc bộ chặn bot (Cloudflare, Akamai, captcha).
-  itda nói rõ nó là ai và không bao giờ giả làm trình duyệt. Nó tạm dừng trang
-  web cho đến khi bạn tiếp tục. Xem [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- Thử thách mà trình duyệt của bạn cũng không vượt qua được, hoặc captcha. itda
+  không giải captcha. Lượt đọc thất bại và báo như vậy; không gì bị tạm dừng.
+  Xem [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - Bất cứ gì tài khoản của bạn không thấy được. itda không có tài khoản riêng;
   nó dùng tài khoản của bạn.
 
@@ -156,8 +163,10 @@ lại các phê duyệt đang chờ cho trang web đó và kiểm tra lại tran
 hãy sửa tay.
 
 Đó là sự đánh đổi. Một agent trình duyệt tự thích nghi mỗi lần chạy, và vì thế
-chậm và mỗi lần một khác. itda là một yêu cầu và cùng một câu trả lời mọi lần.
-Nó báo to khi trang web thay đổi.
+chậm và mỗi lần một khác. itda là một yêu cầu và cùng một câu trả lời mọi lần;
+sau một thử thách là thêm một lần thử trong trình duyệt của bạn, và vẫn cùng một
+câu trả lời. Nó báo to khi trang web thay đổi. `docs/TRANSPORT_BENCHMARKS.md`
+có các con số, kể cả con số itda chưa đạt.
 
 ## Bên cạnh các agent trình duyệt
 
@@ -315,7 +324,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # agent đã làm gì
 itda check [<site>|--all]                # mọi lượt đọc còn khớp với trang web không?
 itda refresh <site>                      # trang web đã đổi: soạn lại, giữ những gì bạn đã quyết
-itda resume <site>                       # sau khi trang web từ chối hoặc khóa hết hạn
+itda resume <site>                       # sau khi tạm dừng ở chế độ HTTP trực tiếp, hoặc khóa hết hạn
 itda feedback                            # báo lỗi: mở một issue mới, đã điền sẵn
 ```
 
@@ -350,7 +359,7 @@ Agent chỉ có shell có thể gọi `itda call … --json` và rẽ nhánh the
 | 2 | đầu vào sai hoặc hành động không rõ |
 | 10 | đăng nhập lại (`itda login`) |
 | 11 | trang không còn khớp với định nghĩa của nó |
-| 12 | trang web đã từ chối; tạm dừng cho đến `itda resume` |
+| 12 | trang web đã từ chối lượt đọc này, trong trình duyệt cũng vậy; `paused: false` nghĩa là không có gì để tiếp tục |
 | 13 | bị giới hạn tần suất |
 | 14 | trang web từ chối riêng yêu cầu này vì không được phép; đăng nhập lại cũng không giúp |
 | 20 | cần phê duyệt, hoặc người dùng chưa trả lời (hoặc thay đổi đang tắt) |
@@ -367,9 +376,11 @@ Agent chỉ có shell có thể gọi `itda call … --json` và rẽ nhánh the
 - **Con người phê duyệt thay đổi.** Mỗi phê duyệt áp dụng cho một yêu cầu với
   đúng đầu vào, tài khoản, định nghĩa và thông tin đăng nhập. Nó dùng được một
   lần và hết hạn.
-- **Bị chặn thì báo, không vòng qua.** itda nói rõ nó là ai và không bao giờ giả
-  làm trình duyệt. Nó tạm dừng trang web từ chối nó. Xem
-  [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- **Thử thách được thêm một lần thử, trong trình duyệt của bạn.** Lượt đọc mà
+  trang web trả về bằng một trang thử thách sẽ chạy thêm một lần bên trong trình
+  duyệt đã cài trên máy tính của bạn; itda nhớ cách đã được. Thay đổi được gửi
+  một lần và không bao giờ qua trình duyệt. `ITDA_TRANSPORT=http` giữ nguyên chỉ
+  HTTP trực tiếp. Xem [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - **Hành động được kiểm chứng.** Một định nghĩa khai báo phản hồi đúng trông như
   thế nào, nên "đã đăng xuất" và "trang web đã đổi" là lỗi, không phải dữ liệu.
 
@@ -384,8 +395,9 @@ buộc điều đó.
 | 1 | `itda-html`, `itda-store` | Trích xuất HTML không script; kho SQLite cục bộ |
 | 2 | `itda-spec` | Định dạng định nghĩa, dựng yêu cầu, kiểm chứng phản hồi |
 | 3 | `itda-policy` | Phân loại đọc/ghi, kiểm tra an toàn định nghĩa, phê duyệt |
-| 4 | `itda-net` | HTTP có giới hạn, điều tiết, phát hiện chặn, bảo vệ địa chỉ riêng |
-| 5 | `itda-vault` | Tài khoản và bí mật trong keyring của hệ điều hành hoặc môi trường |
+| 4 | `itda-browser` | Đăng nhập, bản ghi, truyền tải đọc qua trình duyệt cách ly |
+| 5 | `itda-net` | Truyền tải thích ứng, bộ đệm chiến lược, điều tiết, bảo vệ địa chỉ riêng |
+| 6 | `itda-vault` | Tài khoản và bí mật trong keyring của hệ điều hành hoặc môi trường |
 | 7 | `itda-runtime` | Chạy hành động: thông tin đăng nhập, phê duyệt, định hình, nhật ký kiểm toán |
 | 9 | `itda-setup` | Các bước thiết lập, đăng nhập và kiểm tra, dùng chung cho CLI và máy chủ MCP |
 | 10 | `itda-mcp` | Máy chủ MCP qua stdio |

@@ -65,8 +65,9 @@ The easiest contribution is a site. Two kinds live in the repository:
 
 A good definition reads public data or uses the site's documented API. Every
 read has a `response` check and a `model`. It keeps only the few changes an
-agent needs and links each action's docs in `evidence`. It never works around a
-block or imitates a browser; see [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+agent needs and links each action's docs in `evidence`. Read recovery may use
+browser transports while preserving account boundaries, pacing and write-once
+approvals; see [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 Before opening the pull request, run `itda add sites/<name>.yaml` and
 `itda check <name>` against the real site and paste the check's summary into the
 description.

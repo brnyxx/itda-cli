@@ -1,0 +1,2103 @@
+{
+  "date": "2026-10-23T03:03:16.054Z",
+  "platform": "darwin-arm64",
+  "binaries": {
+    "itda": "release/itda (feature/adaptive-transport worktree)",
+    "hycli": "release/hycli (192d71329720f553b382a366573ef06f4e156bb7)"
+  },
+  "hashes": {
+    "itda": "b1a5f142c439ea189d2e5cf2af6e77c512b2e19d4e9d6ee552d016e9361c9c70",
+    "hycli": "166ca7eb20a3d419039f16978f964321e4e46998d2a28bdde776534d25e2cf83"
+  },
+  "browser": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "browser_version": "Google Chrome 155.0.8059.86",
+  "cpu": "Apple M4 Pro",
+  "samples": 20,
+  "think_time_ms": 1500,
+  "methodology": "Interactive latency is spawn-to-exit including internal pacing, after equal think time. Parallel throughput includes pacing. Default CLI compares product defaults; optional live CDP isolates Hycli warm-engine performance. Cold samples are separate; only correct successes enter latency quantiles, failures remain counted.",
+  "groups": [
+    {
+      "key": "hycli|direct",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 20.551833000001352,
+      "p95_ms": 47.99720800000068,
+      "p99_ms": 48.452666999999565
+    },
+    {
+      "key": "itda|direct",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 19.745834000001196,
+      "p95_ms": 56.13237500000105,
+      "p99_ms": 58.67287500000384
+    },
+    {
+      "key": "hycli|browser-fetch",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 2240.443333000003,
+      "p95_ms": 3845.788750000007,
+      "p99_ms": 4213.005166999996
+    },
+    {
+      "key": "itda|browser-fetch",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 115.09916700000758,
+      "p95_ms": 167.5067080000008,
+      "p99_ms": 182.0934159999888
+    },
+    {
+      "key": "hycli|render",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 3071.1790000000037,
+      "p95_ms": 5281.173374999984,
+      "p99_ms": 5576.190999999992
+    },
+    {
+      "key": "itda|render",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 115.5015419999836,
+      "p95_ms": 210.2719999999972,
+      "p99_ms": 284.1376670000027
+    },
+    {
+      "key": "hycli|render-live-cdp",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 1558.988000000012,
+      "p95_ms": 1571.7402499999735,
+      "p99_ms": 1585.2471249999944
+    },
+    {
+      "key": "hycli|parallel-render",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 6434.306708000018,
+      "p95_ms": 7024.076082999993,
+      "p99_ms": 7048.731958999997
+    },
+    {
+      "key": "itda|parallel-render",
+      "count": 20,
+      "failures": 0,
+      "p50_ms": 1302.7142079999903,
+      "p95_ms": 1455.385042000038,
+      "p99_ms": 1495.1653749999823
+    }
+  ],
+  "batches": [
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "wire_requests": 20,
+      "unattributed_requests": 0
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "wire_requests": 20,
+      "unattributed_requests": 0
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "wire_requests": 20,
+      "unattributed_requests": 40
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "wire_requests": 40,
+      "unattributed_requests": 0
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "wire_requests": 0,
+      "unattributed_requests": 40
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "wire_requests": 20,
+      "unattributed_requests": 0
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "elapsed_ms": 32251.133333000005,
+      "requests": 20,
+      "success": 20,
+      "requests_per_second": 0.6201332459698586
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "elapsed_ms": 6471.008749999979,
+      "requests": 20,
+      "success": 20,
+      "requests_per_second": 3.0907082299958355
+    }
+  ],
+  "results": [
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 248.195083,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 42.88195799999994,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 22.451874999999745,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 48.452666999999565,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 47.99720800000068,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 26.906750000000102,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 21.009874999999738,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.32787499999904,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.59900000000016,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 21.87566700000025,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.621083,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.113499999999476,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.016875000001164,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.551833000001352,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.030041000001802,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.49083299999984,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.49158300000272,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 23.343124999999418,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.10845899999913,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.83129199999894,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 22.712917000000743,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 917.997707999999,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.450417000000016,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.745834000001196,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 24.440457999997307,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 56.13237500000105,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 21.833915999995952,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.958542000000307,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 34.02204199999687,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.298625000003085,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.375832999998238,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.60295799999585,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.60016600000381,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.37825000000157,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 19.91870899999776,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 17.54966599999898,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 46.377417000003334,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 20.08929199999693,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 18.52104099999997,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 37.22754200000054,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 16.14891699999862,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "direct",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 58.67287500000384,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 2966.4277920000095,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2202.9718330000032,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3038.701125000007,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 4213.005166999996,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3845.788750000007,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3423.5713749999995,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2931.032084000006,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2045.1890420000127,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2902.918458,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2562.3850000000093,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1910.8327079999872,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2005.1944169999915,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2253.0631250000006,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2099.9758750000037,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1606.5092920000025,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2170.068584000008,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2774.965209000002,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2240.443333000003,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2317.1467080000148,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2219.778457999986,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1966.7413750000123,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 2792.3950830000103,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 115.09916700000758,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 167.5067080000008,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 128.20462499998393,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 122.87079099999391,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 97.59491600000183,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 123.45783299999312,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 136.11154099999112,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 109.1713340000133,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 127.665708000015,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 124.8159169999999,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 182.0934159999888,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 126.57308299999568,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 125.14483299999847,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 100.22750000000815,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 101.5808750000142,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 107.60870900002192,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 104.26745899999514,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 104.64466600000742,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 103.27395899998373,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "browser-fetch",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 102.45229200000176,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 3198.582374999998,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2797.4849159999867,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3763.299167000019,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3081.228167000023,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2707.99337500002,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3204.503040999989,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 5576.190999999992,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 5281.173374999984,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 4673.525792,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 4572.671666999988,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3310.782416000002,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2850.2562090000138,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2836.0909589999937,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3281.4037499999977,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2771.04800000001,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2950.5974589999823,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3071.1790000000037,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 3266.3015000000014,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2742.6878329999745,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2937.443957999989,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 2690.9972919999855,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 3142.89291699999,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 115.68291700002737,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 129.9565419999999,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 108.0777910000179,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 127.49145800003316,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 130.03866699995706,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 139.2192919999943,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 127.56033299997216,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 115.5015419999836,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 117.0527080000029,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 109.71545800002059,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 112.382249999966,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 112.84754200000316,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 210.2719999999972,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 120.11837500002002,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 110.37520800001221,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 105.62820799998008,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 105.79700000002049,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 107.10862499999348,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 108.19208400003845,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 284.1376670000027,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 2079.7565419999883,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1561.421875,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1557.5217920000432,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1556.5823749999981,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1559.576624999987,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1557.5311249999795,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1561.8198749999865,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1557.3031670000055,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1556.1512080000248,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1562.9324170000036,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1564.8499590000138,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1585.2471249999944,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1559.9245830000145,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1555.1240420000395,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1555.0622500000172,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1560.6450420000474,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1558.988000000012,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1558.604875000019,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1557.9894159999676,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1565.2733340000268,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "render-live-cdp",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1571.7402499999735,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 3,
+      "elapsed_ms": 5281.784625000029,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 5332.482750000025,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 1,
+      "elapsed_ms": 5339.292000000016,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 2,
+      "elapsed_ms": 5356.514915999956,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 5800.484583000012,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 5802.751917000045,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 5823.076667000016,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 5902.545417000016,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 6246.453500000003,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 6275.733957999968,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 6315.11599999998,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 6247.718249999976,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 6434.306708000018,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 6756.353375000006,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 6979.558250000002,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 7048.731958999997,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 6598.61054199998,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 7024.076082999993,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 6478.26333300001,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 6566.806125000003,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 6286.002958999947,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 6484.723874999967,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 6571.856166999962,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "hycli",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 6653.130166999996,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 3,
+      "elapsed_ms": 6308.955749999965,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 0,
+      "elapsed_ms": 6394.37604100001,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 1,
+      "elapsed_ms": 6423.540957999998,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": true,
+      "site": 2,
+      "elapsed_ms": 6492.131208000006,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 1329.7018749999697,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 1401.6373749999912,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 1437.1035409999895,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1455.385042000038,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 1299.0984580000513,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1302.7142079999903,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 1414.0460409999941,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 1495.1653749999823,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1026.410709000018,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 1049.4761250000447,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 1118.0185409999685,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 1148.53933400003,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 1174.9817080000066,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1247.5607500000042,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 1168.927834000031,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 1176.7090830000234,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 2,
+      "elapsed_ms": 1400.4349999999977,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 3,
+      "elapsed_ms": 1324.2012089999625,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 0,
+      "elapsed_ms": 1424.1060000000289,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    },
+    {
+      "tool": "itda",
+      "cohort": "parallel-render",
+      "cold": false,
+      "site": 1,
+      "elapsed_ms": 1327.219374999986,
+      "success": true,
+      "exit_code": 0,
+      "timeout": false
+    }
+  ],
+  "cleanup_failures": [],
+  "source": {
+    "itda_base": "9bb0fa8128e5d284c6ee819d884762c9a39097c3",
+    "hycli": "192d71329720f553b382a366573ef06f4e156bb7"
+  }
+}

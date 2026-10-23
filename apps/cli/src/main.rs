@@ -1,6 +1,7 @@
 //! The `itda` command. This is the composition root: it picks the data
 //! directory, the secret store and the network settings, and hands them to
 //! the runtime. Commands that need no network never start an async runtime.
+mod browser_worker;
 mod feedback;
 mod install;
 mod output;
@@ -42,6 +43,26 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    #[command(name = "__browser-worker", hide = true)]
+    BrowserWorker {
+        #[arg(long)]
+        state_dir: PathBuf,
+        #[arg(long)]
+        allow_local: bool,
+        #[arg(long)]
+        browser: Option<PathBuf>,
+    },
+    #[command(name = "__browser-stop", hide = true)]
+    BrowserStop,
+    #[command(name = "__browser-process", hide = true)]
+    BrowserProcess {
+        #[arg(long)]
+        browser: PathBuf,
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(last = true, allow_hyphen_values = true)]
+        arguments: Vec<std::ffi::OsString>,
+    },
     /// List installed sites and their actions
     Ls {
         /// Only this site
@@ -392,6 +413,34 @@ fn main() -> ExitCode {
         )
         || matches!(&command, Command::Call { rest, .. } if rest.iter().any(|a| a == "--json"));
     let result = home().and_then(|home| match command {
+        Command::BrowserWorker {
+            state_dir,
+            allow_local,
+            browser,
+        } => {
+            itda_browser::broker::run(
+                itda_browser::broker::BrokerConfig {
+                    state_dir,
+                    allow_local,
+                    browser,
+                    executable: std::env::current_exe()?,
+                },
+                std::io::stdout(),
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::BrowserStop => {
+            browser_worker::stop(&home)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::BrowserProcess {
+            browser,
+            profile,
+            arguments,
+        } => {
+            itda_browser::supervisor::run(&browser, &profile, &arguments)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Ls { site, json } => ls(&home, site.as_deref(), json),
         Command::Describe { target, json } => describe(&home, &target, json),
         Command::Add { source, force } => block_on(add(&home, &source, force)),
@@ -778,8 +827,29 @@ fn audit_log(home: &Path) -> AuditLog {
 fn open(home: &Path) -> AppResult<Parts> {
     let store = Store::open(&home.join("itda.db"))?;
     let gate = Arc::new(Gate::open(store.clone())?);
+    // `auto` (the default, and what an empty value means) recovers reads
+    // through the browser; `http` keeps direct HTTP only.
+    let transport = std::env::var_os("ITDA_TRANSPORT")
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let net = match transport.trim().to_ascii_lowercase().as_str() {
+        "http" => Network::new(gate, allow_local()),
+        "" | "auto" => {
+            let config = browser_worker::config(home, allow_local())?;
+            let identity_cache = config.state_dir.clone();
+            Network::adaptive(gate, allow_local())
+                .with_browser(itda_browser::broker::BrowserClient::broker(config))
+                .with_identity_cache(identity_cache)
+        }
+        _ => {
+            return Err(usage(
+                text::tf("transport_invalid", &[("value", &transport)]),
+                text::t("transport_fix"),
+            ));
+        }
+    };
     Ok(Parts {
-        net: Arc::new(Network::new(gate, allow_local())),
+        net: Arc::new(net),
         approvals: Arc::new(Approvals::open(store.clone())?),
         cursors: Arc::new(Cursors::open(store.clone())?),
         audit: Arc::new(audit_log(home)),
@@ -1490,7 +1560,22 @@ async fn add(home: &Path, source: &str, force: bool) -> AppResult<ExitCode> {
 }
 
 fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
+    let spec = sites::load(home, site).ok();
     sites::remove(home, site)?;
+    // The browser sessions the site had are closed as a courtesy; a worker
+    // that does not answer closes them itself within five minutes.
+    if let Some(spec) = spec
+        && let Ok(parts) = open(home)
+        && let Err(error) = block_on(async {
+            itda_setup::reset_browser_sessions(&parts.context(home), &spec)
+                .await
+                .map(|()| ExitCode::SUCCESS)
+        })
+    {
+        eprintln!(
+            "Could not close the browser sessions of {site}: {error}. They close on their own within five minutes."
+        );
+    }
     block_on(async {
         approvals_store(home)?.invalidate(Some(site), None).await?;
         Ok(ExitCode::SUCCESS)
@@ -1613,7 +1698,7 @@ fn refusal_words(refused: &itda_setup::Refused) -> AppError {
     error
 }
 
-/// Fetch each page with the honest client, then draft from what they show.
+/// Fetch each page through the gate, then draft from what they show.
 /// A page that refuses or redirects to a sign-in is reported, never worked
 /// around; `itda record` covers sites that need an account.
 async fn draft_page(
@@ -1947,6 +2032,17 @@ async fn logout(home: &Path, site: &str, account: &str) -> AppResult<ExitCode> {
         .invalidate(Some(site), Some(account))
         .await?;
     eprintln!("Removed {site}/{account} and its saved secrets.");
+    // The account's browser sessions are closed as a courtesy; a worker that
+    // does not answer closes them itself within five minutes.
+    if let Ok(spec) = sites::load(home, site) {
+        for origin in itda_setup::browser_origins(&spec) {
+            if let Err(error) = browser_worker::reset(home, &origin, account).await {
+                eprintln!(
+                    "Could not close the browser session for {origin}: {error}. It closes on its own within five minutes."
+                );
+            }
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -2186,6 +2282,8 @@ fn mcp_install(client: &str, dry_run: bool, approve_in_client: bool) -> AppResul
     let mut env: Vec<(String, String)> = [
         "ITDA_HOME",
         "ITDA_ALLOW_LOCAL",
+        "ITDA_TRANSPORT",
+        "ITDA_BROWSER",
         "ITDA_SECRET_STORE",
         "ITDA_APPROVE_IN_CLIENT",
     ]

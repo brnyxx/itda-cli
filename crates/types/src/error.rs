@@ -112,8 +112,18 @@ fn remedy(public_code: &str) -> &'static str {
             "Wait for the website's request limit to clear before retrying."
         }
         "blocked_by_site" => {
-            "The website refused this request. Open it in your browser and check whether access is allowed; requests stay paused until you resume them."
+            "The website refused this read, in the browser too. Check it in your browser. When paused is false nothing is paused and other reads still work; only a site paused with ITDA_TRANSPORT=http needs itda resume."
         }
+        "browser_unavailable" => {
+            "itda could not use the installed browser for this read. Install Chrome, Edge or Chromium, or set ITDA_BROWSER to one; ITDA_TRANSPORT=http reads without a browser."
+        }
+        "browser_state_not_private" | "browser_state_mismatch" | "browser_broker_mismatch" => {
+            "The files itda keeps for its browser worker are not as it left them. Run itda doctor; remove the browser-runtime directory under the data directory if the problem stays."
+        }
+        "unsafe_method" => {
+            "Only a GET can be read as a rendered page; other reads use direct HTTP or a browser fetch."
+        }
+        "response_too_large" => "The answer is larger than this read accepts.",
         "writes_disabled" => "Changes are off for this website. Only the user can allow them.",
         "approval_required" => {
             "Ask the user to review and approve it with `itda approve <id>`, then call again with the approval id."

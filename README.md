@@ -74,7 +74,7 @@ install step:
 | Changes on the site | Whatever the model decides | Single-use approval for exact inputs, granted by a person in a terminal or the agent app |
 | Text on the page saying "ignore previous instructions" | In the prompt | Marked untrusted data, never a tool |
 | Credentials | Typed into the page by the model | In the OS keyring; the agent sees account ids only |
-| Being blocked | Retry, rotate, imitate a browser | Stop, tell you, wait for you to resume |
+| Being blocked | Retry, rotate, imitate a browser | Try the read once more in your own installed browser, remember what worked, pause nothing |
 | What happened | Chat history | Hash-chained audit log you can verify |
 
 ## What it can and cannot do
@@ -110,6 +110,13 @@ Every line here is true of the code today. `itda setup` says which case it met;
   hash, never the bytes. A form with a file control becomes a change that
   sends a file you name; you approve it by name, size and hash.
 - Anything you recorded yourself using, in your browser or as a HAR file.
+- Pages behind a challenge page, when the browser on your computer gets
+  past it. itda tries the read once more inside that browser, hidden, kept for
+  that one site and account, and remembers what worked, so the next call
+  starts there. The browser stays warm between CLI calls and closes after five
+  idle minutes; changing a search term does not restart it. Everything the page
+  loads passes the same address and read checks as a direct request. See [the
+  transport policy](docs/HONEST_CLIENT.md).
 
 **Works after you record it**
 
@@ -128,9 +135,9 @@ Every line here is true of the code today. `itda setup` says which case it met;
   does with it.
 - Content drawn on a canvas or into an image. itda reads text in HTML, JSON
   and XML; it does not look at pixels.
-- Sites behind a challenge or a bot manager (Cloudflare, Akamai, a captcha).
-  itda identifies itself and never imitates a browser. It pauses the site until
-  you resume it. See [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- A challenge your browser does not get past either, or a captcha. itda does
+  not solve captchas. The read fails and says so; nothing is paused. See
+  [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - Anything your account cannot see. itda has no account of its own; it uses
   yours.
 
@@ -153,8 +160,10 @@ site and checks the site again right after. A definition installed with
 `itda add` has no sources and cannot be refreshed; edit it by hand.
 
 That is the trade-off. A browser agent adapts on every run, and is slow and
-nondeterministic for it. itda is one request and the same answer every time. It
-breaks loudly when the site moves.
+nondeterministic for it. itda is one request and the same answer every time;
+after a challenge it is one more try in your browser, and the same answer still.
+It breaks loudly when the site moves. `docs/TRANSPORT_BENCHMARKS.md` has the
+numbers, including the one itda does not yet meet.
 
 ## Next to browser agents
 
@@ -309,7 +318,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # what agents did
 itda check [<site>|--all]                # does every read still match the site?
 itda refresh <site>                      # a site changed: draft it again, keep what you decided
-itda resume <site>                       # after a site refused or a key expired
+itda resume <site>                       # after a pause in direct-HTTP mode, or an expired key
 itda feedback                            # report a problem: opens a new issue, filled in
 ```
 
@@ -343,7 +352,7 @@ exit code:
 | 2 | bad input or unknown action |
 | 10 | sign in again (`itda login`) |
 | 11 | the page no longer matches its definition |
-| 12 | the site refused; paused until `itda resume` |
+| 12 | the site refused this read, in the browser too; `paused: false` means nothing to resume |
 | 13 | rate limited |
 | 14 | the site refused this one request as not allowed; signing in again will not help |
 | 20 | needs approval, or the user has not answered yet (or changes are off) |
@@ -358,8 +367,10 @@ exit code:
   path, inputs and GraphQL document all agree. Everything else is a change.
 - **People approve changes.** Each approval covers one request with exact
   inputs, account, definition and credential. It works once and expires.
-- **Blocks are reported, not bypassed.** itda identifies itself and never
-  imitates a browser. It pauses a site that refuses it. See
+- **A challenge gets one more try, in your browser.** A read the site answers
+  with a challenge page runs once more inside the browser installed on your
+  computer; itda remembers what worked. A change is sent once and never through
+  the browser. `ITDA_TRANSPORT=http` keeps direct HTTP only. See
   [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - **Verified actions.** A definition declares what a correct response looks
   like, so "signed out" and "the site changed" are errors, not data.
@@ -374,8 +385,9 @@ Crates depend only on crates below them; `cargo xtask check-layers` enforces it.
 | 1 | `itda-html`, `itda-store` | Script-free HTML extraction; the local SQLite store |
 | 2 | `itda-spec` | Definition format, request building, response verification |
 | 3 | `itda-policy` | Read/write classification, definition safety checks, approvals |
-| 4 | `itda-net` | Bounded HTTP, pacing, block detection, private-address guard |
-| 5 | `itda-vault` | Accounts and secrets in the OS keyring or environment |
+| 4 | `itda-browser` | Sign-in, recording, isolated browser read transport |
+| 5 | `itda-net` | Adaptive transport, strategy cache, pacing, private-address guard |
+| 6 | `itda-vault` | Accounts and secrets in the OS keyring or environment |
 | 7 | `itda-runtime` | Runs actions: credentials, approvals, shaping, audit log |
 | 9 | `itda-setup` | The setup, sign-in and check steps, for the CLI and the MCP server alike |
 | 10 | `itda-mcp` | MCP server over stdio |

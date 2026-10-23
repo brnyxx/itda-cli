@@ -185,6 +185,64 @@ pub fn operation_effect(op: &Operation, args: &BTreeMap<String, String>) -> Effe
     Effect::Unknown
 }
 
+pub fn safe_graphql_read(url: &url::Url, body: &[u8]) -> bool {
+    if body.len() > 65_536 || !safe_read_url(url) {
+        return false;
+    }
+    let Ok(SingleValued(document)) = serde_json::from_slice::<SingleValued>(body) else {
+        return false;
+    };
+    let Some(query) = document.get("query").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    if itda_spec::graphql_too_deep(query) || graphql_parser::parse_query::<&str>(query).is_err() {
+        return false;
+    }
+    let op = Operation {
+        name: "query".into(),
+        method: "POST".into(),
+        path: url.path().into(),
+        effect: Effect::Read,
+        evidence: "Parsed GraphQL query".into(),
+        ..Operation::default()
+    };
+    let args = document
+        .iter()
+        .map(|(name, value)| (name.clone(), util::plain(value)))
+        .collect();
+    operation_effect(&op, &args) == Effect::Read
+}
+
+/// A JSON object that names no key twice. A server that keeps the first of
+/// two `query` values would run a document other than the one itda read, so
+/// such a body is not a document at all.
+struct SingleValued(serde_json::Map<String, serde_json::Value>);
+
+impl<'de> serde::Deserialize<'de> for SingleValued {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Keys;
+        impl<'de> serde::de::Visitor<'de> for Keys {
+            type Value = SingleValued;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("an object with distinct keys")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut object = serde_json::Map::new();
+                while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
+                    if object.insert(key, value).is_some() {
+                        return Err(serde::de::Error::custom("a key named twice"));
+                    }
+                }
+                Ok(SingleValued(object))
+            }
+        }
+        deserializer.deserialize_map(Keys)
+    }
+}
+
 fn nested_change_intent(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Object(object) => object.iter().any(|(key, value)| {

@@ -160,7 +160,7 @@ do:
 | `ok` | every read still matches | retry the action; the failure was not the site |
 | `signed_out` | the site no longer accepts the account | ask the user to run `itda login <site>` |
 | `site_changed` | a page or answer no longer matches its definition, the address is gone (404, 405, 410) or the site no longer accepts the query | Ask the user to run `itda refresh <site>`, or call `itda_manage` with `refresh`. itda drafts the site again from its original sources. The user confirms the diff; itda keeps the sign-in, name and hand-edited actions. |
-| `blocked` | the site refused or rate limited itda; it is paused | tell the user; they check the site and run `itda resume <site>` |
+| `blocked` | read recovery failed or the site rate limited itda | respect `retry_after`; `paused: false` needs no resume. Only an explicitly paused site needs `itda resume <site>` |
 | `unreachable` | the site did not answer | wait, then run `itda check` again |
 
 A site with several problems gets one verdict, in this order: `signed_out`, then
@@ -183,7 +183,7 @@ branch on the exit code:
 | 2 | bad input or unknown action (the remedy names the nearest one), a read that preflight would have turned into a change (`effect_changed`), or a read whose built request itda cannot classify (`effect_unknown`, the remedy says what is missing) | `itda describe <site>` |
 | 10 | signed out or no key | ask the user to run `itda login` |
 | 11 | the page no longer matches its definition, the site answered the query with errors (`query_failed`), or a file read got a page, a part or nothing (`wrong_media_type`, `partial_answer`, `empty_answer`) | update the definition, or check the inputs |
-| 12 | the site refused; it is paused | tell the user; `itda resume` after checking |
+| 12 | the site refused this read, in the browser too (`blocked_by_site`) | tell the user to check the site in their browser. With `paused: false` other reads still work and nothing needs resuming; only a site paused in direct-HTTP mode (`ITDA_TRANSPORT=http`) needs `itda resume` |
 | 13 | rate limited | wait as long as `retry_after` says, then retry the read |
 | 14 | the site refused this one request as not allowed (`api_denied`) | tell the user what `provider_reason` says; do not sign in again |
 | 20 | needs approval (`approval_required`), the user has not answered yet (`approval_pending`), or changes are off | ask the user to run `itda approve <id>`, or wait and call again with the same id |

@@ -38,15 +38,16 @@ itda draft page https://example.com/board https://example.com/board/42
 itda draft page https://example.com/board --name board --install
 ```
 
-itda fetches each page as itself (`itda/<version>`, never a browser), under the
-same rules as every other request. Private addresses need `ITDA_ALLOW_LOCAL=1`.
-If a page refuses or challenges the request, itda pauses the site without
-retrying. The draft then stops with what the gate saw, as `itda call` would
-report it: `blocked_by_site` (exit 12) naming Cloudflare, a bot manager or a
-captcha, or `site_rate_limited` (exit 13) with the wait the site asked for. A
-page that sends itda on to a sign-in page stops with `auth_required` (exit 10)
-and points at `itda record`. itda does not go around a block; the site's
-official API, or its owner, is the way in. Each page that answers becomes a read
+itda fetches each page under the same rules as every other read: once over
+HTTP and, when the page answers with a challenge, once more inside the browser
+installed on the computer (see [HONEST_CLIENT.md](HONEST_CLIENT.md)). Private
+addresses need `ITDA_ALLOW_LOCAL=1`. If the page still refuses, the draft stops
+with what the gate saw, as `itda call` would report it: `blocked_by_site` (exit
+12) naming Cloudflare, a bot manager or a captcha, or `site_rate_limited` (exit
+13) with the wait the site asked for; nothing is paused. A page that sends itda
+on to a sign-in page stops with `auth_required` (exit 10) and points at `itda
+record`. itda does not solve a captcha; the site's official API, or its owner,
+is the way in. Each page that answers becomes a read
 with a response check, so `itda check` notices when the page changes:
 
 | What the page has | What the draft gets |
@@ -179,15 +180,17 @@ way has no sources to redraft from, so `itda refresh` does not apply.
 
 ## When setup tries the reads
 
-`itda setup` tries every read once while you watch. A read the site blocks or
-challenges (a 403 from a bot manager, a captcha, a 200 page titled as a
-challenge) is a finding of the setup, not a refusal to remember: that read is
-left out with one line, "<path>: the site does not give itda this page", and
-nothing more is sent to the site in that run. The reads after it are kept and
+`itda setup` tries every read once while you watch, over HTTP and then, when
+the site answers with a challenge, once more in the installed browser. A read
+the site still blocks or challenges (a 403 from a bot manager, a captcha, a 200
+page titled as a challenge) is a finding of the setup, not a refusal to
+remember: that read is left out with one line, "<path>: the site does not give
+itda this page", and nothing more is sent to the site in that run. The reads after it are kept and
 shown as not tried, so the next `itda check` tries them. The site is not paused,
 since nothing was retried. itda installs reads that already answered.
-`itda check`, `itda call` and the MCP tools on an installed site keep the rule
-that a block or challenge pauses the site until you resume it.
+`itda check`, `itda call` and the MCP tools on an installed site try a
+challenged read in the browser as well; only in direct-HTTP mode
+(`ITDA_TRANSPORT=http`) does a block pause the site until you resume it.
 
 ## Start from a browser recording
 
@@ -356,11 +359,12 @@ usual error envelope.
 | `base_url` | yes | `https://` origin every path is joined to. Local and private addresses also need `ITDA_ALLOW_LOCAL=1`. |
 
 `defaults.headers` adds headers to every request (for example an `Accept`
-language). itda refuses headers that imitate a browser (`sec-*`, client hints);
+language). Browser-controlled headers (`sec-*`, client hints) belong to the
+transport and cannot be supplied by a definition;
 see [HONEST_CLIENT.md](HONEST_CLIENT.md).
 
 `defaults.interval` sets the minimum time between requests to a site, written as
-`2s` or `500ms`. itda sends one request at a time per site, about 1.2 seconds
+`2s` or `500ms`. itda spaces action-request admissions to an origin about 1.2 seconds
 apart by default; a definition can increase this to 30 seconds but cannot reduce
 it. Use it when the site's terms name a rate, or when `itda check` keeps running
 into `site_rate_limited`.

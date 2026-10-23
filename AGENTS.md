@@ -80,7 +80,7 @@ do:
 | `ok` | every read still matches | retry the action; the failure was not the site |
 | `signed_out` | the site no longer accepts the account | ask the user to run `itda login <site>`, or call `itda_login` over MCP |
 | `site_changed` | a page or answer no longer matches its definition | ask the user to run `itda refresh <site>`, or call `itda_manage` with `refresh` over MCP. itda drafts the site again from the same sources. The user confirms changes; itda keeps their choices (sign-in, name, hand-edited actions) |
-| `blocked` | the site refused or rate limited itda; it is paused | tell the user. They check the site in a browser, then run `itda resume <site>` (or confirm `itda_manage` `resume` over MCP) |
+| `blocked` | read recovery failed or the site rate limited itda | respect `retry_after` when present. `paused: false` means other reads remain available and no resume is needed. Only an explicitly paused site needs `itda resume <site>` |
 | `unreachable` | the site did not answer | wait, then check again |
 
 `itda check --json` carries the verdict as `verdict` and per site under

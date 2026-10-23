@@ -106,8 +106,7 @@ itda call sandbox.notice-board --json       # HTML table extracted into records
 itda call sandbox.me                        # exit 10: no API key yet
 echo sandbox-key | itda login sandbox       # stores the key in the OS keyring
 itda call sandbox.me                        # signed in
-itda call sandbox.reports                   # exit 12: refused, so the site is paused
-itda resume sandbox
+itda call sandbox.reports                   # exit 12: refused, in your browser too; nothing is paused
 ```
 
 Make a change:
