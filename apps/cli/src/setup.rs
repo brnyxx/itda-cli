@@ -127,6 +127,15 @@ pub async fn run(home: &Path, flags: Flags) -> AppResult<ExitCode> {
         }
     };
     let site = done.site;
+    if let Some(why) = &done.unrecorded {
+        eprintln!("    {}", tf("kb_not_written", &[("why", why)]));
+    }
+    if !done.gaps.is_empty() {
+        eprintln!("    {}", t("suggest_heading"));
+        for gap in &done.gaps {
+            eprintln!("    {}", crate::gap_line(gap).replace('\n', "\n    "));
+        }
+    }
 
     // 5. Connect an agent.
     let clients = match &flags.client {

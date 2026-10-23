@@ -15,6 +15,7 @@ pub mod credentials;
 pub mod description;
 pub mod frames;
 pub mod introspect;
+pub mod knowledge;
 pub mod login;
 pub mod record;
 pub mod refresh;
@@ -44,6 +45,8 @@ pub struct Context {
     pub approvals: Arc<Approvals>,
     pub audit: Arc<AuditLog>,
     pub runtime: Arc<Runtime>,
+    /// What itda found and tried on each site, shapes only.
+    pub kb: Arc<itda_kb::Kb>,
     /// `ITDA_LANG` or the system language: what the drafted descriptions are
     /// written in.
     pub lang: String,
@@ -396,6 +399,13 @@ pub struct Done {
     pub kept_credentials: bool,
     /// The software the site was recognised as, when a template was used.
     pub recognised: Option<software::Recognised>,
+    /// What the knowledge base's rules found worth a look, worst first:
+    /// reads never tried, reads that need an input another read can
+    /// supply, and so on. Three at most here; `itda fsck` has them all.
+    pub gaps: Vec<itda_kb::Gap>,
+    /// Why the knowledge base could not be written, when it could not. The
+    /// site works without it.
+    pub unrecorded: Option<String>,
 }
 
 /// Why the steps ended without a site.
@@ -457,6 +467,8 @@ pub async fn run(
     // The recording a watched load or the person left: its pages are the
     // site's pages for a refresh.
     let mut har = Vec::new();
+    // The pages fetched as itda, as shapes for the knowledge base.
+    let mut shapes: Vec<knowledge::PageShape> = Vec::new();
     // A site with a ready-made definition gets it, the way `itda add` would
     // install it, unless a template was asked for or turned off.
     let bundled = (!record && request.template == Template::Auto)
@@ -558,6 +570,13 @@ pub async fn run(
                     }
                     if draft.is_none() {
                         let pages = with_frames(page, &mut framed);
+                        shapes = pages
+                            .iter()
+                            .map(|page| knowledge::PageShape {
+                                url: page.url.clone(),
+                                shape: itda_html::shape::page(&page.html),
+                            })
+                            .collect();
                         draft = Some(
                             draft_pages(
                                 ctx,
@@ -654,8 +673,10 @@ pub async fn run(
     }
     itda_types::util::atomic_file(&path, draft.yaml.as_bytes())?;
     if replaced {
-        // What the user may have reviewed is no longer what would be sent.
+        // What the user may have reviewed is no longer what would be sent,
+        // and what was known about the old site is about another site now.
         ctx.approvals.invalidate(Some(&site), None).await?;
+        let _ = ctx.kb.forget(&site).await;
     }
     let mut kept_credentials = false;
     if let Some(rec) = &recording {
@@ -716,7 +737,7 @@ pub async fn run(
     }
     report(Progress::Saved { site: &site });
     let spec = sites::load(&ctx.home, &site)?;
-    Ok(Finished::Done(Box::new(Done {
+    let mut done = Done {
         site,
         path,
         spec,
@@ -726,7 +747,21 @@ pub async fn run(
         removed,
         kept_credentials,
         recognised,
-    })))
+        gaps: Vec::new(),
+        unrecorded: None,
+    };
+    // What was found and tried, as shapes. A knowledge base that cannot be
+    // written does not undo a site that works: one note says so.
+    match knowledge::remember_setup(&ctx.kb, &ctx.home, &done, &shapes, draft.described.as_ref())
+        .await
+    {
+        Ok(mut gaps) => {
+            gaps.truncate(3);
+            done.gaps = gaps;
+        }
+        Err(error) => done.unrecorded = Some(error.msg),
+    }
+    Ok(Finished::Done(Box::new(done)))
 }
 
 /// A ready-made definition as a draft, so the same steps save and try it.

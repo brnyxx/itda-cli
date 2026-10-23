@@ -130,5 +130,20 @@
   "confirms": "si la réponse se perd : cherche la nouvelle valeur de {input} dans {read}",
   "spec_valid": "{file} : une définition valide de {site} ({n} actions). itda add {file} l'installe.",
   "spec_invalid": "{file} : {n} problèmes ; itda ne l'installerait pas.",
-  "saved_file": "Enregistré {path} ({bytes} octets, sha256 {sha256})"
+  "saved_file": "Enregistré {path} ({bytes} octets, sha256 {sha256})",
+  "fsck_ok": "{site} : rien à examiner.",
+  "fsck_heading": "{site} : {n} à examiner",
+  "remedy": "solution : {command}",
+  "suggest_heading": "À examiner :",
+  "prompts_heading": "Demandez à votre agent, par exemple :",
+  "gap_endpoint_untried": "{action} n'a jamais été essayé",
+  "gap_read_needs_input": "{action} a besoin de {inputs}",
+  "gap_read_needs_input_fed": "{action} a besoin de {input} ; {from} le donne à {pointer}",
+  "gap_finding_without_evidence": "une note sur {subject} n'est appuyée par aucun essai",
+  "gap_artifact_missing": "{path} a disparu",
+  "gap_artifact_changed": "{path} a changé depuis la dernière fois qu'itda l'a vu",
+  "gap_read_failing": "{action} a échoué à ses {m} derniers essais",
+  "gap_flapping_read": "{action} a échoué {n} fois sur les {m} derniers essais",
+  "gap_dangling_edge": "un lien pointe vers quelque chose qu'itda n'a plus ({subject})",
+  "kb_not_written": "base de connaissances non mise à jour ({why}) ; le reste a continué sans elle"
 }

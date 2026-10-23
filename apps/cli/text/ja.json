@@ -130,5 +130,20 @@
   "confirms": "応答が失われたとき: {read} で新しい {input} の値を確認します",
   "spec_valid": "{file}: {site} の正しい定義です (アクション {n} 個)。itda add {file} でインストールします。",
   "spec_invalid": "{file}: 問題が {n} 件あります。itda はこの定義をインストールしません。",
-  "saved_file": "{path} に保存しました（{bytes} バイト、sha256 {sha256}）"
+  "saved_file": "{path} に保存しました（{bytes} バイト、sha256 {sha256}）",
+  "fsck_ok": "{site}: 確認すべきものはありません。",
+  "fsck_heading": "{site}: 確認すべきもの {n} 件",
+  "remedy": "対処: {command}",
+  "suggest_heading": "確認しておくとよいもの:",
+  "prompts_heading": "エージェントにはたとえばこう頼めます:",
+  "gap_endpoint_untried": "{action} はまだ一度も試していません",
+  "gap_read_needs_input": "{action} には {inputs} が必要です",
+  "gap_read_needs_input_fed": "{action} には {input} が必要です。{from} の {pointer} から得られます",
+  "gap_finding_without_evidence": "{subject} についてのメモがありますが、裏付けとなる試行がありません",
+  "gap_artifact_missing": "{path} がなくなっています",
+  "gap_artifact_changed": "{path} は itda が最後に見た後に変わっています",
+  "gap_read_failing": "{action} は直近 {m} 回すべて失敗しました",
+  "gap_flapping_read": "{action} は直近 {m} 回のうち {n} 回失敗しました",
+  "gap_dangling_edge": "itda がもう持っていないものを指すリンクがあります ({subject})",
+  "kb_not_written": "ナレッジベースを更新できませんでした ({why})。残りはそのまま進めました"
 }

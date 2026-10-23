@@ -1003,6 +1003,7 @@ async fn mcp_serves_installed_actions_over_stdio() {
             "itda_check",
             "itda_sites",
             "itda_manage",
+            "itda_shape",
         ]
     );
     assert_eq!(
@@ -1551,6 +1552,135 @@ async fn setup_goes_from_a_page_to_working_actions_in_one_go() {
     .await;
     assert!(one_line.status.success(), "{one_line:?}");
     assert!(home.join("specs/board2/spec.yaml").exists());
+    std::fs::remove_dir_all(home).ok();
+}
+
+/// Setup, check, call and fsck on a page full of values that must not be
+/// kept: the knowledge base ends up with shapes, counts and verdicts, and
+/// not one of them. `itda remove` takes it all away.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_knowledge_base_keeps_shapes_and_never_a_value() {
+    let home = home();
+    let router = Router::new().route(
+        "/board",
+        get(|| async {
+            axum::response::Html(
+                "<html lang='en'><head><title>Notices</title><meta name='csrf-token' content='csrf-SECRET-9911'>
+                 <meta name='description' content='desc-PRIVATE-3141'></head><body>
+                 <span data-user-id='user-VALUE-4471'>hi</span>
+                 <form action='/board/search' method='get'><input name='q' value='query-VALUE-2718'></form>
+                 <table><thead><tr><th>No</th><th>Title</th></tr></thead>
+                 <tr><td>2</td><td><a href='/n/2'>Quarterly-Record-Title-7731</a></td></tr>
+                 <tr><td>1</td><td><a href='/n/1'>Another-Record-Title-5521</a></td></tr></table>
+                 <script id='__NEXT_DATA__' type='application/json'>{\"props\":{\"session\":\"sess-ABCD-1234\",\"email\":\"alice@example.org\"}}</script>
+                 </body></html>",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let url = format!("{base}/board");
+    let english = [("ITDA_LANG", "en")];
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &url,
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &english,
+    )
+    .await;
+    assert!(
+        done.status.success(),
+        "{}",
+        String::from_utf8_lossy(&done.stderr)
+    );
+    let checked = itda(&home, &["check", "board"], &english).await;
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    let called = itda(&home, &["call", "board.get-board", "--json"], &[]).await;
+    assert_eq!(
+        stdout_json(&called)["data"]["items"][0]["title"],
+        "Quarterly-Record-Title-7731"
+    );
+
+    let fsck = itda(&home, &["fsck", "board", "--json"], &[]).await;
+    assert_eq!(
+        fsck.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&fsck.stdout)
+    );
+    assert_eq!(stdout_json(&fsck)["status"], "ok");
+    let listed = stdout_json(&itda(&home, &["ls", "board", "--json"], &english).await);
+    let site = &listed[0];
+    assert!(site["verified"].as_u64().unwrap() >= 1, "{site}");
+    assert!(site["pass_rate"].as_f64().unwrap() > 0.0, "{site}");
+    assert_eq!(site["unstable"], json!([]));
+    assert!(
+        site["user_guide"]["reads"]
+            .as_str()
+            .unwrap()
+            .starts_with("You can read:"),
+        "{site}"
+    );
+    assert!(
+        site["natural_prompts"].as_array().unwrap().len() >= 2,
+        "{site}"
+    );
+    let described = itda(&home, &["describe", "board"], &english).await;
+    assert!(
+        String::from_utf8_lossy(&described.stdout).contains("Ask your agent, for example:"),
+        "{}",
+        String::from_utf8_lossy(&described.stdout)
+    );
+
+    let kb = itda_kb::Kb::open(itda_store::Store::open(&home.join("itda.db")).unwrap()).unwrap();
+    let counts = kb.counts("board").await.unwrap();
+    assert!(
+        counts.nodes >= 2 && counts.attempts >= 2 && counts.artifacts >= 2,
+        "{counts:?}"
+    );
+    let dump = kb.dump().await.unwrap();
+    assert!(
+        dump.contains("\tsetup\t") && dump.contains("\tcheck\t") && dump.contains("\tcall\t"),
+        "{dump}"
+    );
+    for value in [
+        "csrf-SECRET-9911",
+        "desc-PRIVATE-3141",
+        "user-VALUE-4471",
+        "query-VALUE-2718",
+        "Quarterly-Record-Title-7731",
+        "Another-Record-Title-5521",
+        "sess-ABCD-1234",
+        "alice@example.org",
+        "/n/2",
+    ] {
+        assert!(!dump.contains(value), "{value} in {dump}");
+    }
+
+    assert!(
+        itda(&home, &["remove", "board"], &[])
+            .await
+            .status
+            .success()
+    );
+    assert_eq!(
+        kb.counts("board").await.unwrap(),
+        itda_kb::Counts::default()
+    );
     std::fs::remove_dir_all(home).ok();
 }
 

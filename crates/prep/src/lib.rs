@@ -7,6 +7,7 @@
 //! time, so problems show up before anyone runs it.
 mod confirm;
 pub mod graphql;
+pub mod guide;
 mod har;
 pub mod label;
 mod openapi;

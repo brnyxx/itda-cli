@@ -10,13 +10,15 @@ mod setup;
 mod text;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use itda_kb::Kb;
 use itda_net::{Gate, Network};
 use itda_policy::{Approvals, Cursors, operation_effect};
+use itda_prep::guide::Flow;
 use itda_runtime::{
     Call, Runtime,
     audit::{AuditLog, Event},
 };
-use itda_setup::{check, sites};
+use itda_setup::{check, knowledge, sites};
 use itda_spec::{Operation, Spec};
 use itda_store::Store;
 use itda_types::error::{AppError, AppResult, usage};
@@ -257,6 +259,17 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// What the knowledge base's rules find worth a look on a site: reads
+    /// never tried, reads that need an input another read can supply, reads
+    /// that fail now and then, files that changed. Each with what to run.
+    /// Exit 0 when nothing is open at priority 1, else 1
+    Fsck {
+        /// Only this site; every site when left out
+        site: Option<String>,
+        /// Print JSON for scripts and agents
+        #[arg(long)]
+        json: bool,
+    },
     /// Draft a site again from the sources it was set up from, show what
     /// would change, and keep what you decided: the sign-in, the defaults,
     /// the name and every action you edited by hand. Then checks the site
@@ -405,6 +418,7 @@ fn main() -> ExitCode {
         || matches!(&command, Command::Accounts { json: true, .. })
         || matches!(&command, Command::Audit { json: true, .. })
         || matches!(&command, Command::Check { json: true, .. })
+        || matches!(&command, Command::Fsck { json: true, .. })
         || matches!(
             &command,
             Command::Spec {
@@ -622,6 +636,7 @@ fn main() -> ExitCode {
             account,
             json,
         } => block_on(check(&home, site.as_deref(), all, account.as_deref(), json)),
+        Command::Fsck { site, json } => block_on(fsck(&home, site.as_deref(), json)),
         Command::Refresh { site, yes } => block_on(refresh::run(&home, &site, yes)),
         Command::Mcp {
             command:
@@ -745,7 +760,7 @@ fn home() -> AppResult<PathBuf> {
     })
 }
 
-fn block_on<F: Future<Output = AppResult<ExitCode>>>(future: F) -> AppResult<ExitCode> {
+fn block_on<T, F: Future<Output = AppResult<T>>>(future: F) -> AppResult<T> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -785,6 +800,7 @@ struct Parts {
     approvals: Arc<Approvals>,
     cursors: Arc<Cursors>,
     audit: Arc<AuditLog>,
+    kb: Arc<Kb>,
 }
 
 impl Parts {
@@ -798,15 +814,17 @@ impl Parts {
             .with_pagination(self.cursors)
             .with_audit(self.audit)
             .with_files(home.join("files"))
+            .with_kb(self.kb.recorder())
     }
 
     /// The same parts, with a runtime built on them, for the setup steps.
     fn context(self, home: &Path) -> itda_setup::Context {
-        let (net, vault, approvals, audit) = (
+        let (net, vault, approvals, audit, kb) = (
             self.net.clone(),
             self.vault.clone(),
             self.approvals.clone(),
             self.audit.clone(),
+            self.kb.clone(),
         );
         itda_setup::Context {
             home: home.to_path_buf(),
@@ -815,6 +833,7 @@ impl Parts {
             vault,
             approvals,
             audit,
+            kb,
             lang: lang(),
         }
     }
@@ -853,8 +872,42 @@ fn open(home: &Path) -> AppResult<Parts> {
         approvals: Arc::new(Approvals::open(store.clone())?),
         cursors: Arc::new(Cursors::open(store.clone())?),
         audit: Arc::new(audit_log(home)),
+        kb: Arc::new(open_kb(store.clone())?),
         vault: Arc::new(Vault::open(store, secret_store(home))?),
     })
+}
+
+/// The knowledge base on `store`, or, when it cannot be opened there (a
+/// database a newer itda wrote), one in memory that is gone on exit:
+/// nothing itda does depends on it.
+fn open_kb(store: Store) -> AppResult<Kb> {
+    Kb::open(store).or_else(|error| {
+        eprintln!("{}", text::tf("kb_not_written", &[("why", &error.msg)]));
+        Kb::open(Store::in_memory()?)
+    })
+}
+
+/// The knowledge base alone, for commands that send nothing.
+fn knowledge_base(home: &Path) -> AppResult<Kb> {
+    Kb::open(Store::open(&home.join("itda.db"))?)
+}
+
+/// What the knowledge base says about a site, for `ls --json`: how its
+/// actions fared, the guide and the prompts. A knowledge base that cannot
+/// be read says nothing about how they fared.
+fn site_knowledge(kb: Option<&Kb>, spec: &Spec) -> (Vec<itda_kb::ActionStats>, Vec<Flow>) {
+    let Some(kb) = kb else {
+        return (Vec::new(), Vec::new());
+    };
+    block_on(async {
+        Ok((
+            knowledge::stats(kb, spec).await.unwrap_or_default(),
+            knowledge::flows(kb, &spec.site.name)
+                .await
+                .unwrap_or_default(),
+        ))
+    })
+    .unwrap_or_default()
 }
 
 fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
@@ -868,20 +921,34 @@ fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
         sites::load(home, name)?;
     }
     if as_json {
+        let kb = knowledge_base(home).ok();
         let rows: Vec<Value> = installed
             .iter()
             .map(|site| match &site.spec {
-                Ok(spec) => json!({
-                    "site": site.name,
-                    "title": spec.site.title,
-                    "base_url": spec.site.base_url,
-                    "actions": spec.operations.iter().map(|op| json!({
-                        "name": op.name,
-                        "effect": operation_effect(op, &BTreeMap::new()).as_str(),
-                        "desc": op.desc,
-                        "example": example_command(&spec.site.name, op),
-                    })).collect::<Vec<_>>(),
-                }),
+                Ok(spec) => {
+                    let (stats, flows) = site_knowledge(kb.as_ref(), spec);
+                    let stat = |name: &str| stats.iter().find(|s| s.action == name);
+                    let summary = itda_kb::summary(&stats);
+                    let (guide, prompts) = knowledge::guide_for(spec, &flows, text::lang());
+                    json!({
+                        "site": site.name,
+                        "title": spec.site.title,
+                        "base_url": spec.site.base_url,
+                        "verified": summary.verified,
+                        "pass_rate": summary.pass_rate,
+                        "unstable": summary.unstable,
+                        "actions": spec.operations.iter().map(|op| json!({
+                            "name": op.name,
+                            "effect": operation_effect(op, &BTreeMap::new()).as_str(),
+                            "desc": op.desc,
+                            "example": example_command(&spec.site.name, op),
+                            "verified": stat(&op.name).is_some_and(|s| s.verified),
+                            "pass_rate": stat(&op.name).map(|s| s.pass_rate),
+                        })).collect::<Vec<_>>(),
+                        "user_guide": guide,
+                        "natural_prompts": prompts,
+                    })
+                }
                 Err(error) => json!({"site": site.name, "path": site.path, "error": error.msg}),
             })
             .collect();
@@ -912,6 +979,81 @@ fn ls(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// `itda fsck [site]`: the gaps the rules find, each with what to run.
+/// Exit 0 when none is at priority 1, 1 when one is.
+async fn fsck(home: &Path, only: Option<&str>, as_json: bool) -> AppResult<ExitCode> {
+    let specs: Vec<Spec> = match only {
+        Some(site) => vec![sites::load(home, site)?],
+        None => sites::list(home)
+            .into_iter()
+            .filter_map(|s| s.spec.ok())
+            .collect(),
+    };
+    let kb = knowledge_base(home)?;
+    let mut rows = Vec::new();
+    for spec in &specs {
+        let gaps = knowledge::audit(&kb, home, spec).await?;
+        rows.push((spec.site.name.clone(), gaps));
+    }
+    let problems = rows
+        .iter()
+        .any(|(_, gaps)| gaps.iter().any(|g| g.priority == 1));
+    let status = if problems { "problems" } else { "ok" };
+    if as_json {
+        let sites: Vec<Value> = rows
+            .iter()
+            .map(|(site, gaps)| json!({"site": site, "gaps": knowledge::gaps_json(gaps)}))
+            .collect();
+        println!("{}", json!({"status": status, "sites": sites}));
+    } else {
+        for (site, gaps) in &rows {
+            if gaps.is_empty() {
+                println!("{}", text::tf("fsck_ok", &[("site", site)]));
+                continue;
+            }
+            println!(
+                "{}",
+                text::tf(
+                    "fsck_heading",
+                    &[("site", site), ("n", &gaps.len().to_string())]
+                )
+            );
+            for gap in gaps {
+                println!("  {}", gap_line(gap));
+            }
+        }
+    }
+    Ok(if status == "ok" {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+/// One gap in the person's language, with what to run.
+pub(crate) fn gap_line(gap: &itda_kb::Gap) -> String {
+    let fields: Vec<(&str, &str)> = gap
+        .fields
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    let key = if gap.rule == "read_needs_input" && gap.fields.contains_key("from") {
+        "gap_read_needs_input_fed".to_owned()
+    } else {
+        format!("gap_{}", gap.rule)
+    };
+    let words = match text::t(&key) {
+        "?" => gap.reason.clone(),
+        _ => text::tf(&key, &fields),
+    };
+    format!(
+        "{} {}: {words}\n    {}",
+        gap.priority,
+        gap.rule,
+        text::tf("remedy", &[("command", &gap.remedy.command)])
+    )
 }
 
 /// Check a definition file the way `itda add` does, without installing it:
@@ -986,6 +1128,15 @@ fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
         println!("{}", Value::Array(rows));
         return Ok(ExitCode::SUCCESS);
     }
+    // What a person can do with the site, from the descriptions and from
+    // the flows the knowledge base saw between reads.
+    let flows = knowledge_base(home)
+        .and_then(|kb| {
+            let name = spec.site.name.clone();
+            block_on(async move { knowledge::flows(&kb, &name).await })
+        })
+        .unwrap_or_default();
+    let (guide, prompts) = knowledge::guide_for(&spec, &flows, text::lang());
     println!("{}  {}", spec.site.name, spec.site.base_url);
     for op in ops {
         let effect = operation_effect(op, &BTreeMap::new());
@@ -1053,6 +1204,22 @@ fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
                     "         {}",
                     text::tf("confirms", &[("read", &confirm.read), ("input", input)])
                 );
+            }
+        }
+    }
+    if action.is_none() {
+        for line in guide
+            .reads
+            .iter()
+            .chain(guide.changes.iter())
+            .chain(guide.flows.iter())
+        {
+            println!("  {line}");
+        }
+        if !prompts.is_empty() {
+            println!("  {}", text::t("prompts_heading"));
+            for prompt in &prompts {
+                println!("    \"{prompt}\"");
             }
         }
     }
@@ -1204,8 +1371,8 @@ async fn call(home: &Path, target: &str, rest: Vec<String>) -> AppResult<ExitCod
                 account,
                 approval,
                 next,
-                discovery: false,
                 out,
+                ..Call::default()
             },
         )
         .await?;
@@ -1262,9 +1429,13 @@ async fn check(
             .filter_map(|site| site.spec.ok())
             .collect(),
     };
-    let outcomes = check::run(&open(home)?.runtime(home), &specs, account).await;
+    let parts = open(home)?;
+    let kb = parts.kb.clone();
+    let outcomes = check::run(&parts.runtime(home), &specs, account).await;
     let verdicts = check::verdicts(&outcomes);
-    check::remember(home, &verdicts)?;
+    for why in check::remember(home, &kb, &specs, &verdicts).await? {
+        eprintln!("{}", text::tf("kb_not_written", &[("why", &why)]));
+    }
     let status = check::exit_status(&outcomes);
     if as_json {
         println!(
@@ -1561,6 +1732,12 @@ async fn add(home: &Path, source: &str, force: bool) -> AppResult<ExitCode> {
 
 fn remove(home: &Path, site: &str) -> AppResult<ExitCode> {
     let spec = sites::load(home, site).ok();
+    // What was known about the site goes first, so a failure leaves the
+    // site there to remove again.
+    if sites::path(home, site).is_some() {
+        let kb = knowledge_base(home)?;
+        block_on(async { kb.forget(site).await })?;
+    }
     sites::remove(home, site)?;
     // The browser sessions the site had are closed as a courtesy; a worker
     // that does not answer closes them itself within five minutes.

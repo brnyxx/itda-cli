@@ -256,7 +256,7 @@ async fn try_added(
             .collect(),
         ..spec.clone()
     };
-    let tried = check::run(&ctx.runtime, std::slice::from_ref(&trial), None).await;
+    let tried = check::try_refreshed(&ctx.runtime, &trial).await;
     let failed: Vec<String> = tried
         .iter()
         .filter(|o| o.failed())
@@ -279,16 +279,26 @@ async fn try_added(
     itda_spec::parse(merged.yaml.as_bytes())
 }
 
-/// Write the merged definition and the sources with the new hashes.
-pub fn apply(home: &Path, plan: &Plan) -> AppResult<()> {
+/// Write the merged definition and the sources with the new hashes, then
+/// what changed into the knowledge base: a changed action keeps its history
+/// under another name and points at the new one with `replaced_by`. A
+/// knowledge base that cannot be written does not undo the refresh; what
+/// went wrong comes back for the caller to show.
+pub async fn apply(ctx: &Context, plan: &Plan) -> AppResult<Vec<String>> {
     util::atomic_file(&plan.path, plan.yaml.as_bytes())?;
     let sources = Sources {
         drafted_at: util::now(),
         ..plan.sources.clone()
     };
     util::atomic_file(
-        &sources_path(home, &plan.site),
+        &sources_path(&ctx.home, &plan.site),
         &serde_json::to_vec_pretty(&sources)?,
+    )?;
+    Ok(
+        match crate::knowledge::remember_refresh(&ctx.kb, &ctx.home, plan).await {
+            Ok(()) => Vec::new(),
+            Err(error) => vec![error.msg],
+        },
     )
 }
 

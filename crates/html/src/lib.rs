@@ -8,6 +8,7 @@
 //! marketplace's Remix payload was removed. `resolve_pointer` moved to
 //! `itda_types::json`.
 pub mod evidence;
+pub mod shape;
 
 use itda_types::json::resolve_pointer;
 use scraper::{Html, Selector};

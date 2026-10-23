@@ -130,5 +130,20 @@
   "confirms": "jika jawaban hilang: mencari nilai {input} yang baru di {read}",
   "spec_valid": "{file}: definisi {site} yang valid ({n} aksi). itda add {file} memasangnya.",
   "spec_invalid": "{file}: {n} masalah; itda tidak akan memasangnya.",
-  "saved_file": "Tersimpan {path} ({bytes} byte, sha256 {sha256})"
+  "saved_file": "Tersimpan {path} ({bytes} byte, sha256 {sha256})",
+  "fsck_ok": "{site}: tidak ada yang perlu dilihat.",
+  "fsck_heading": "{site}: {n} yang perlu dilihat",
+  "remedy": "perbaikan: {command}",
+  "suggest_heading": "Layak dilihat:",
+  "prompts_heading": "Minta agen Anda, misalnya:",
+  "gap_endpoint_untried": "{action} belum pernah dicoba",
+  "gap_read_needs_input": "{action} membutuhkan {inputs}",
+  "gap_read_needs_input_fed": "{action} membutuhkan {input}; {from} menyediakannya di {pointer}",
+  "gap_finding_without_evidence": "catatan tentang {subject} tidak didukung percobaan apa pun",
+  "gap_artifact_missing": "{path} sudah hilang",
+  "gap_artifact_changed": "{path} berubah sejak terakhir itda melihatnya",
+  "gap_read_failing": "{action} gagal pada {m} percobaan terakhirnya",
+  "gap_flapping_read": "{action} gagal {n} dari {m} percobaan terakhir",
+  "gap_dangling_edge": "sebuah tautan menunjuk ke sesuatu yang tidak lagi dimiliki itda ({subject})",
+  "kb_not_written": "basis pengetahuan tidak diperbarui ({why}); sisanya tetap berjalan tanpanya"
 }

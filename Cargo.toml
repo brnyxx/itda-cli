@@ -16,6 +16,7 @@ homepage = "https://github.com/brnyxx/itda-cli"
 itda-types = { path = "crates/types" }
 itda-html = { path = "crates/html" }
 itda-store = { path = "crates/store" }
+itda-kb = { path = "crates/kb" }
 itda-spec = { path = "crates/spec" }
 itda-policy = { path = "crates/policy" }
 itda-net = { path = "crates/net" }

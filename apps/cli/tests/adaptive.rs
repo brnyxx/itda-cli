@@ -162,6 +162,22 @@ async fn separate_cli_processes_keep_the_session_when_inputs_change() {
     }
     assert_eq!(direct.load(Ordering::SeqCst), 1);
     assert_eq!(sessions.load(Ordering::SeqCst), 1);
+    // The knowledge base has one try per call, written once the answer is
+    // settled: the refused direct request and the browser read that
+    // recovered it are one call. It keeps no word of how it was sent.
+    let kb = itda_kb::Kb::open(itda_store::Store::open(&home.join("itda.db")).unwrap()).unwrap();
+    let stats = kb.stats("fixture").await.unwrap();
+    assert_eq!((stats[0].attempts, stats[0].passed), (2, 2), "{stats:?}");
+    let dump = kb.dump().await.unwrap().to_lowercase();
+    for word in [
+        "browser",
+        "sec-fetch",
+        "strategy",
+        "transport",
+        "just a moment",
+    ] {
+        assert!(!dump.contains(word), "{word} in {dump}");
+    }
     cleanup(&home, &browser).await;
     server.abort();
 }

@@ -17,6 +17,7 @@ path = "src/main.rs"
 itda-types = { workspace = true }
 itda-spec.workspace = true
 itda-html.workspace = true
+itda-kb.workspace = true
 itda-policy.workspace = true
 itda-store.workspace = true
 itda-net.workspace = true

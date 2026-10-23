@@ -132,11 +132,7 @@ fn call(action: &str, args: &[(&str, &str)]) -> Call {
             .iter()
             .map(|(k, v)| ((*k).into(), (*v).into()))
             .collect::<BTreeMap<_, _>>(),
-        account: None,
-        approval: None,
-        next: None,
-        discovery: false,
-        out: None,
+        ..Call::default()
     }
 }
 
@@ -1853,4 +1849,82 @@ async fn an_upload_is_approved_by_hash_and_sent_once() {
     assert!(!text.contains(&path_text), "{text}");
     assert_eq!(log.verify().unwrap(), records.len() as u64);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The same calls, in the same order, for the knowledge base test.
+async fn kb_sequence(runtime: &Runtime, spec: &Spec) -> Vec<Result<u16, String>> {
+    let mut outcomes = Vec::new();
+    for _ in 0..3 {
+        for (action, args) in [
+            ("list-items", &[("q", "secret-word")][..]),
+            ("profile", &[][..]),
+            ("create-item", &[("title", "secret-title")][..]),
+        ] {
+            outcomes.push(
+                runtime
+                    .call(spec, call(action, args))
+                    .await
+                    .map(|e| e.meta.http_status)
+                    .map_err(|e| e.public_code),
+            );
+        }
+    }
+    outcomes
+}
+
+/// The knowledge base is written after every try and read by nothing that
+/// sends: the same calls make the same requests whether it is empty or full,
+/// and what it keeps is the shape of the answer, never the answer.
+#[tokio::test]
+async fn the_knowledge_base_records_tries_and_changes_no_request() {
+    let site = site().await;
+    let spec = spec(&site.base);
+    let store = Store::in_memory().unwrap();
+    let kb = itda_kb::Kb::open(store.clone()).unwrap();
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let recording = Runtime::new(Arc::new(Network::new(gate, true)), vault).with_kb(kb.recorder());
+    let (plain, _) = runtime().await;
+
+    let before = site.hits.load(Ordering::SeqCst);
+    let with_empty_kb = kb_sequence(&recording, &spec).await;
+    let hits_recording = site.hits.load(Ordering::SeqCst) - before;
+    // The knowledge base now holds the tries; the same sequence again makes
+    // exactly the same requests, and so does a runtime without one.
+    let before = site.hits.load(Ordering::SeqCst);
+    let with_full_kb = kb_sequence(&recording, &spec).await;
+    assert_eq!(site.hits.load(Ordering::SeqCst) - before, hits_recording);
+    let before = site.hits.load(Ordering::SeqCst);
+    let without_kb = kb_sequence(&plain, &spec).await;
+    assert_eq!(site.hits.load(Ordering::SeqCst) - before, hits_recording);
+    assert_eq!(with_empty_kb, with_full_kb);
+    assert_eq!(with_empty_kb, without_kb);
+
+    let stats = kb.stats("fixture").await.unwrap();
+    let list = stats.iter().find(|s| s.action == "list-items").unwrap();
+    assert_eq!((list.attempts, list.passed, list.verified), (6, 6, true));
+    let profile = stats.iter().find(|s| s.action == "profile").unwrap();
+    assert_eq!(profile.passed, 0);
+    // The verdict is the code the call ended with.
+    assert_eq!(profile.last_verdict, with_empty_kb[1].clone().err());
+    // A change itda refused to send is on record, but is not a try.
+    let change = stats.iter().find(|s| s.action == "create-item").unwrap();
+    assert_eq!(change.attempts, 0, "{with_empty_kb:?}");
+    let node = &kb
+        .nodes("fixture", Some("action"), Some("list-items"))
+        .await
+        .unwrap()[0];
+    assert_eq!(node.props["shape"]["items"][0]["title"], "string");
+    let dump = kb.dump().await.unwrap();
+    assert!(dump.contains("\tcall\t"), "{dump}");
+    for value in [
+        "secret-word",
+        "secret-title",
+        "first books",
+        "first secret",
+        KEY,
+        SID,
+    ] {
+        assert!(!dump.contains(value), "{value} in {dump}");
+    }
 }

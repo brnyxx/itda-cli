@@ -58,13 +58,17 @@ pub async fn run(home: &Path, site: &str, yes: bool) -> AppResult<ExitCode> {
         eprintln!("{}", tf("refresh_kept", &[("site", site)]));
         return Ok(ExitCode::SUCCESS);
     }
-    refresh::apply(home, &plan)?;
+    for why in refresh::apply(&ctx, &plan).await? {
+        eprintln!("    {}", tf("kb_not_written", &[("why", &why)]));
+    }
     // What the user may have reviewed is no longer what would be sent.
     ctx.approvals.invalidate(Some(site), None).await?;
     eprintln!("{}", tf("refresh_written", &[("site", site)]));
     let outcomes = check::run(&ctx.runtime, std::slice::from_ref(&plan.spec), None).await;
     let verdicts = check::verdicts(&outcomes);
-    check::remember(home, &verdicts)?;
+    for why in check::remember(home, &ctx.kb, std::slice::from_ref(&plan.spec), &verdicts).await? {
+        eprintln!("    {}", tf("kb_not_written", &[("why", &why)]));
+    }
     crate::say_check(&outcomes, &verdicts);
     Ok(ExitCode::from(crate::output::exit_code(
         check::exit_status(&outcomes),

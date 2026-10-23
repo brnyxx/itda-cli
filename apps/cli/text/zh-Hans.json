@@ -130,5 +130,20 @@
   "confirms": "回应丢失时：在 {read} 中查找新的 {input} 值",
   "spec_valid": "{file}：{site} 的有效定义（{n} 个操作）。用 itda add {file} 安装。",
   "spec_invalid": "{file}：有 {n} 个问题；itda 不会安装它。",
-  "saved_file": "已保存 {path}（{bytes} 字节，sha256 {sha256}）"
+  "saved_file": "已保存 {path}（{bytes} 字节，sha256 {sha256}）",
+  "fsck_ok": "{site}: 没有需要查看的内容。",
+  "fsck_heading": "{site}: {n} 项需要查看",
+  "remedy": "处理: {command}",
+  "suggest_heading": "值得一看:",
+  "prompts_heading": "可以这样问你的代理:",
+  "gap_endpoint_untried": "{action} 从未尝试过",
+  "gap_read_needs_input": "{action} 需要 {inputs}",
+  "gap_read_needs_input_fed": "{action} 需要 {input}；可从 {from} 的 {pointer} 取得",
+  "gap_finding_without_evidence": "关于 {subject} 的记录没有任何尝试作为依据",
+  "gap_artifact_missing": "{path} 已不存在",
+  "gap_artifact_changed": "{path} 在 itda 上次查看后发生了变化",
+  "gap_read_failing": "{action} 最近 {m} 次全部失败",
+  "gap_flapping_read": "{action} 在最近 {m} 次尝试中失败了 {n} 次",
+  "gap_dangling_edge": "有一条连接指向 itda 已不再拥有的内容 ({subject})",
+  "kb_not_written": "未能更新知识库（{why}）；其余步骤照常完成"
 }
