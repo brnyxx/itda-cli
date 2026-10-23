@@ -41,7 +41,7 @@ operations:
     path: /projects/lab/issues
     auth: session
     effect: write
-    evidence: the new issue form on /projects/lab/issues/new posts authenticity_token and issue[...] fields to /projects/lab/issues and answers with a redirect to the issue
+    evidence: the new issue form on /projects/lab/issues/new posts authenticity_token and issue[...] fields to /projects/lab/issues and answers with a redirect to the issue; GET /projects/lab/issues lists it under subject, so list-issues confirms it after a lost answer
     preflight:
       - name: form
         path: /projects/lab/issues/new
@@ -55,3 +55,6 @@ operations:
         "issue[status_id]": {type: int, default: 1}
         "issue[priority_id]": {type: int, default: 2}
         authenticity_token: {type: string, default: "{{step.form.token}}"}
+    confirm:
+      read: list-issues
+      match: {pointer: /items/*/subject, from: "body.issue[subject]"}

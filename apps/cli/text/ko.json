@@ -114,5 +114,13 @@
   "query_missing": "{site} 로그인은 됐지만 정의에 적힌 {name} 쿼리 매개변수가 오지 않았습니다",
   "query_missing_fix": "정의의 auth 항목 value_from을 확인하세요. 키는 로그인 뒤 리다이렉트 주소나 첫 페이지의 링크에 있어야 합니다.",
   "session_saved_query": "로그인했습니다. {site}/{account}의 {name} 세션 값을 시스템 키링의 키로 데이터 폴더에 봉인했습니다. 사이트 요청 주소마다 붙입니다. 에이전트는 계정 id만 봅니다.",
-  "nothing_works": "동작하는 읽기가 없어 아무것도 남기지 않았습니다. `itda record {url}`로 사이트를 쓰는 모습을 녹화해 보세요."
+  "nothing_works": "동작하는 읽기가 없어 아무것도 남기지 않았습니다. `itda record {url}`로 사이트를 쓰는 모습을 녹화해 보세요.",
+  "outcome_landed": "사이트가 응답하지 않았지만 {read}에 변경이 보입니다. 반영된 것이니 다시 요청하지 마세요.",
+  "outcome_not_found": "사이트가 응답하지 않았고 {read}에도 변경이 보이지 않습니다. 여전히 원하면 다시 요청하고 새 승인을 검토하세요. itda는 스스로 다시 보내지 않습니다.",
+  "outcome_unknown": "사이트가 응답하지 않았고 확인용 읽기 {read}도 실패했습니다({error}). 변경을 다시 요청하기 전에 사이트를 확인하세요.",
+  "lost_answers": "보낸 뒤 응답을 잃은 변경 {n}건:",
+  "lost_landed": "{read}에서 반영 확인",
+  "lost_not_found": "{read}에 보이지 않음",
+  "lost_unknown": "확인용 읽기 {read}도 실패",
+  "lost_unchecked": "확인용 읽기 없음, 사이트를 확인하세요"
 }

@@ -114,5 +114,13 @@
   "query_missing": "{site} accepted the sign-in, but did not hand out the {name} query parameter its definition names",
   "query_missing_fix": "Check value_from in the definition's auth entry; the key must appear in the sign-in's redirect or on the links of the first page after it.",
   "session_saved_query": "Signed in. itda sealed the {name} session value for {site}/{account} under the data directory with a key in the system keyring. It goes on the address of each request to the site; agents only see the account id.",
-  "nothing_works": "No read worked; itda kept nothing. Try `itda record {url}` and use the site while it watches."
+  "nothing_works": "No read worked; itda kept nothing. Try `itda record {url}` and use the site while it watches.",
+  "outcome_landed": "The site did not answer, but {read} shows the change landed. It is in; do not ask for it again.",
+  "outcome_not_found": "The site did not answer, and {read} does not show the change. If you still want it, ask for it again and review the new approval; itda never resends on its own.",
+  "outcome_unknown": "The site did not answer, and the confirming read {read} failed too ({error}). Check the site before asking for the change again.",
+  "lost_answers": "{n} change(s) whose answer was lost after sending:",
+  "lost_landed": "{read} showed it landed",
+  "lost_not_found": "{read} did not show it",
+  "lost_unknown": "the confirming read {read} failed too",
+  "lost_unchecked": "no confirming read; check the site"
 }

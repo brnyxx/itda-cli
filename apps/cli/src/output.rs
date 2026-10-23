@@ -39,13 +39,46 @@ pub fn fail(error: &AppError, as_json: bool) -> ExitCode {
         if !error.remedy.is_empty() {
             eprintln!("  fix: {}", error.remedy);
         }
+        if let Some(line) = outcome_check_words(error) {
+            eprintln!("  {line}");
+        }
     }
     ExitCode::from(exit_code(&error.public_code))
+}
+
+/// What the confirming read said after a lost answer, in the person's
+/// language; `None` when no read was run.
+fn outcome_check_words(error: &AppError) -> Option<String> {
+    let check = error.extra.get("outcome_check")?;
+    let read = check["read"].as_str().unwrap_or_default();
+    let failed = check["error"].as_str().unwrap_or("unknown");
+    Some(match check["result"].as_str() {
+        Some("landed") => crate::text::tf("outcome_landed", &[("read", read)]),
+        Some("not_found") => crate::text::tf("outcome_not_found", &[("read", read)]),
+        _ => crate::text::tf("outcome_unknown", &[("read", read), ("error", failed)]),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_outcome_check_is_said_in_words() {
+        let landed = AppError::api("action_outcome_unknown", 502).with(
+            "outcome_check",
+            json!({"read": "list-notices", "result": "landed"}),
+        );
+        let words = outcome_check_words(&landed).unwrap();
+        assert!(words.contains("list-notices"), "{words}");
+        let unknown = AppError::api("action_outcome_unknown", 502).with(
+            "outcome_check",
+            json!({"read": "list-notices", "result": "unknown", "error": "timeout"}),
+        );
+        let words = outcome_check_words(&unknown).unwrap();
+        assert!(words.contains("timeout"), "{words}");
+        assert!(outcome_check_words(&AppError::api("action_outcome_unknown", 502)).is_none());
+    }
 
     #[test]
     fn codes_follow_the_contract() {

@@ -46,7 +46,7 @@ operations:
     path: /
     auth: session
     effect: write
-    evidence: POST /?rest_route=/wp/v2/posts with X-WP-Nonce creates a post and answers 201 with it
+    evidence: POST /?rest_route=/wp/v2/posts with X-WP-Nonce creates a post and answers 201 with it; the private post list carries it under title, so list-private-posts confirms it after a lost answer
     query:
       rest_route: {type: string, default: /wp/v2/posts}
     preflight:
@@ -65,6 +65,9 @@ operations:
       format: json
       required_pointers: [/id]
     model: post
+    confirm:
+      read: list-private-posts
+      match: {pointer: /*/title, from: body.title}
 models:
   post:
     id: {path: id, type: int}

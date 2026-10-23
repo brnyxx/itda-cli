@@ -47,7 +47,10 @@ Read only as many pages as the question needs, never a whole site. On
   itda sends it once. `approval_pending` means they have not answered yet:
   wait and call again with the same id. Other inputs withdraw the approval.
 - `action_outcome_unknown` (exit 22) means itda sent the change but got no
-  answer. Never call it again. Ask the user to check the site.
+  answer. Never call it again. With `outcome_check`, itda already ran the read
+  that shows it: `landed` means it is in, `not_found` means the user may ask
+  for a new approval, `unknown` means that read failed too. Without it, ask
+  the user to check the site.
 
 ## When something that worked stops working
 

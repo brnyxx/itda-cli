@@ -319,6 +319,245 @@ async fn audit_and_doctor_show_a_change_without_an_outcome() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn audit_lists_lost_answers_with_what_the_confirming_read_said() {
+    use itda_runtime::audit::{AuditLog, Event};
+    let home = home();
+    install(&home, "http://127.0.0.1:9");
+    let log = AuditLog::new(home.join("audit.jsonl"));
+    let lost = |check: &str| Event {
+        kind: "call",
+        site: "fixture".into(),
+        action: "create-item".into(),
+        effect: "write".into(),
+        approval: "abc123".into(),
+        outcome: "action_outcome_unknown".into(),
+        outcome_check: check.into(),
+        confirm_read: if check.is_empty() {
+            String::new()
+        } else {
+            "list-items".into()
+        },
+        ..Event::default()
+    };
+    log.append(lost("landed")).unwrap();
+    log.append(lost("not_found")).unwrap();
+    log.append(lost("")).unwrap();
+
+    let audit = itda(&home, &["audit"], &[("ITDA_LANG", "en")]).await;
+    let text = String::from_utf8_lossy(&audit.stdout);
+    assert!(
+        text.contains("3 change(s) whose answer was lost after sending:"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "fixture.create-item (record 1, approval abc123): list-items showed it landed"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("(record 2, approval abc123): list-items did not show it"),
+        "{text}"
+    );
+    assert!(
+        text.contains("(record 3, approval abc123): no confirming read; check the site"),
+        "{text}"
+    );
+    // Only the records shown are summed up.
+    let last = itda(&home, &["audit", "--limit", "1"], &[("ITDA_LANG", "en")]).await;
+    let text = String::from_utf8_lossy(&last.stdout);
+    assert!(text.contains("1 change(s) whose answer was lost"), "{text}");
+    assert!(!text.contains("record 1,"), "{text}");
+    std::fs::remove_dir_all(home).ok();
+}
+
+/// A site that keeps a POST and then drops the connection without an
+/// answer, while its GET lists what it kept.
+async fn serve_lossy() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let kept: Arc<std::sync::Mutex<Vec<String>>> = Arc::default();
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut raw = Vec::new();
+            let mut buffer = [0u8; 4096];
+            let request = loop {
+                let n = socket.read(&mut buffer).await.unwrap_or(0);
+                if n == 0 {
+                    break String::from_utf8_lossy(&raw).into_owned();
+                }
+                raw.extend_from_slice(&buffer[..n]);
+                let text = String::from_utf8_lossy(&raw).into_owned();
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let length: usize = head
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse().unwrap_or(0))
+                        })
+                        .unwrap_or(0);
+                    if body.len() >= length {
+                        break text;
+                    }
+                }
+            };
+            if request.starts_with("POST") {
+                let body = request.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
+                if let Ok(json) = serde_json::from_str::<Value>(body)
+                    && let Some(title) = json["title"].as_str()
+                {
+                    kept.lock().unwrap().push(title.to_owned());
+                }
+                drop(socket);
+                continue;
+            }
+            let items: Vec<Value> = kept
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|title| json!({"title": title}))
+                .collect();
+            let body = json!({"items": items}).to_string();
+            let answer = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(answer.as_bytes()).await;
+            let _ = socket.shutdown().await;
+        }
+    });
+    base
+}
+
+fn install_confirming(home: &Path, base: &str) {
+    let dir = home.join("specs/lossy");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("spec.yaml"),
+        format!(
+            "spec_version: 1
+site: {{name: lossy, base_url: {base}}}
+operations:
+  - name: list-items
+    desc: List items
+    method: GET
+    path: /items
+    effect: read
+    evidence: doc
+    response: {{format: json, required_pointers: [/items]}}
+  - name: create-item
+    desc: Add an item
+    method: POST
+    path: /items
+    effect: write
+    evidence: doc
+    body:
+      json:
+        title: {{type: string, required: true}}
+    confirm:
+      read: list-items
+      match: {{pointer: /items/*/title, from: body.title}}
+"
+        ),
+    )
+    .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_lost_change_is_checked_against_the_read_it_names() {
+    let home = home();
+    let base = serve_lossy().await;
+    install_confirming(&home, &base);
+    let en = [("ITDA_LANG", "en")];
+
+    let waiting = itda(
+        &home,
+        &["call", "lossy.create-item", "--title", "hi", "--json"],
+        &en,
+    )
+    .await;
+    let id = stdout_json(&waiting)["approval"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let store =
+        itda_policy::Approvals::open(itda_store::Store::open(&home.join("itda.db")).unwrap())
+            .unwrap();
+    store.claim(&id).await.unwrap();
+    let lost = itda(
+        &home,
+        &[
+            "call",
+            "lossy.create-item",
+            "--title",
+            "hi",
+            "--approval",
+            &id,
+            "--json",
+        ],
+        &en,
+    )
+    .await;
+    assert_eq!(lost.status.code(), Some(22), "{lost:?}");
+    let envelope = stdout_json(&lost);
+    assert_eq!(envelope["status"], "action_outcome_unknown");
+    assert_eq!(envelope["outcome_check"]["read"], "list-items");
+    assert_eq!(envelope["outcome_check"]["result"], "landed");
+
+    // The same change again: the person is told the first one landed, in
+    // the approval review and in the agent's answer.
+    let again = itda(&home, &["call", "lossy.create-item", "--title", "hi"], &en).await;
+    assert_eq!(again.status.code(), Some(20), "{again:?}");
+    let said = String::from_utf8_lossy(&again.stderr);
+    assert!(said.contains("showed it landed"), "{said}");
+    let pending = stdout_json(&itda(&home, &["approvals", "--json"], &en).await);
+    let note = pending[0]["inputs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["label"] == "note")
+        .unwrap();
+    assert!(
+        note["value"]
+            .as_str()
+            .unwrap()
+            .contains("list-items showed it landed"),
+        "{note}"
+    );
+    let id = pending[0]["id"].as_str().unwrap().to_owned();
+    store.claim(&id).await.unwrap();
+    // Without --json the check is said in words, in the person's language.
+    let lost = itda(
+        &home,
+        &[
+            "call",
+            "lossy.create-item",
+            "--title",
+            "hi",
+            "--approval",
+            &id,
+        ],
+        &en,
+    )
+    .await;
+    assert_eq!(lost.status.code(), Some(22), "{lost:?}");
+    let said = String::from_utf8_lossy(&lost.stderr);
+    assert!(
+        said.contains("The site did not answer, but list-items shows the change landed."),
+        "{said}"
+    );
+    let audit = itda(&home, &["audit"], &en).await;
+    let text = String::from_utf8_lossy(&audit.stdout);
+    assert!(text.contains("list-items showed it landed"), "{text}");
+    let verified = stdout_json(&itda(&home, &["audit", "--verify", "--json"], &en).await);
+    assert_eq!(verified["status"], "ok");
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn calls_return_an_untrusted_envelope() {
     let home = home();
     install(&home, &serve().await);

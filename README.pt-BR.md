@@ -359,7 +359,7 @@ pelo código de saída:
 | 14 | o site recusou esta requisição específica como não permitida; entrar de novo não vai ajudar |
 | 20 | precisa de aprovação, ou o usuário ainda não respondeu (ou as alterações estão desligadas) |
 | 21 | aprovação usada, recusada, expirada ou retirada porque as entradas mudaram |
-| 22 | o itda enviou uma alteração mas o resultado é desconhecido; verifique o site |
+| 22 | o itda enviou uma alteração mas o resultado é desconhecido; com `outcome_check`, a leitura que a alteração nomeia diz se ela foi aplicada |
 | 30 | erro de rede |
 
 ## Princípios

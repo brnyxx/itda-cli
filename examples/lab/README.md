@@ -21,6 +21,7 @@ Nothing here is published anywhere. Images are pinned by digest in
 | framed | http://127.0.0.1:8086 | `intranet/framed.py` on Python 3.12 | the notices table two iframes deep (`/` -> `/frame/board` -> `/frame/list`), each behind the same sign-in; a plain fetch of the home page sees only the shell |
 | scripted | http://127.0.0.1:8087 | `intranet/scripted.py` on Python 3.12 | an empty `/board` shell a script fills from `GET /api/notices` (JSON), public to read; a post needs the session and the `X-CSRF-Token` the shell carries in `<meta name="csrf-token">` |
 | urltoken | http://127.0.0.1:8088 | `intranet/urltoken.py` on Python 3.12 | no cookie at all: the sign-in redirects to `/notices?sid=<token>` and every link and form carries the `sid`; a request without a valid one goes to `/login` |
+| lossy | http://127.0.0.1:8089 | `intranet/lossy.py` on Python 3.12 | the scripted portal whose `POST /api/notices` saves the notice and then drops the connection before any answer, the way a proxy times out after the application already wrote; `GET /api/notices` lists what was kept |
 
 ## Run it
 
@@ -79,7 +80,12 @@ second call with the same approval is refused, the read shows the change,
 check` says `ok`.
 
 The three uglier cases have their own tests. `framed`, `scripted` and `urltoken`
-run from the reviewed definition to an approved change the same way. `urltoken`
+run from the reviewed definition to an approved change the same way. `lossy`
+runs the reviewed definition to an approved change whose answer is lost: the
+call ends with exit 22 and `outcome_check.result: landed`, the list shows the
+notice exactly once, a second request for the same change carries
+`previous_outcome: landed` and a `note` in its review, and `itda audit` says
+which read showed it landed. `urltoken`
 also tests setup, signing in and keeping the `?sid=` session. `scripted` tests
 the browser watch on Unix only; it needs `ITDA_TEST_BROWSER` set to a Chrome or
 Chromium binary and skips the test without one. `framed` has a setup test too:
@@ -155,6 +161,30 @@ are the uglier ones, alongside the five earlier services.
   `/notices/{id}?sid=[private]`, reported as landed). itda refuses a second call
   with the same approval. The `sid` never appears in the audit log;
   `itda audit --verify` and `itda check` pass.
+
+- **lossy (8089).** The reviewed `specs/lossy.yaml` is `scripted.yaml` with
+  `confirm: {read: list-notices, match: {pointer: /items/*/title, from:
+  body.title}}` on the post. Measured with the server run directly under
+  Python 3.14 (not through compose): a post waits for approval; the approved
+  call gets no answer and ends with exit 22, `action_outcome_unknown`, and
+  `outcome_check: {read: list-notices, result: landed}`; the list has 26
+  notices where it had 25, the new title first; the change was sent once. A
+  second call with the used approval is refused (`approval_expired`). Asking
+  for the same change again returns `approval_required` with
+  `previous_outcome: landed`, and the review shows a `note` line saying when
+  it was sent and that `list-notices` showed it landed. `itda audit` ends
+  with "1 change(s) whose answer was lost after sending" and the read's
+  verdict. A definition whose `confirm` names a read that does not exist
+  shows up in `itda ls` as invalid and in `itda doctor` under `sites`.
+- **Drafting `confirm`.** `itda setup http://127.0.0.1:8085/notices --user
+  lab` (the legacy intranet, run directly under Python) drafts
+  `create-notice` with `confirm: {read: list-notices, match: {pointer:
+  /items/*/title, from: body.title}}` and says why in its evidence ("GET
+  /notices lists it under title, so list-notices confirms it after a lost
+  answer"). The scripted portal drafts no post while itda only watches, so
+  its `confirm` is added by hand with the post, as in `specs/scripted.yaml`.
+  Every reviewed definition in `specs/` names the read that confirms its
+  change; `the_lab_definitions_are_valid` checks that.
 
 The test suite below encodes these outcomes. The framed, scripted and urltoken
 cases run to an approved change, and it checks the browser watch, the url-token

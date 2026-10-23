@@ -114,5 +114,13 @@
   "query_missing": "{site} 接受了登入，但沒有給出其定義中指名的 {name} 查詢參數",
   "query_missing_fix": "檢查定義裡 auth 項目的 value_from；這個鍵必須出現在登入後的重新導向網址裡，或者出現在之後第一個頁面的連結上。",
   "session_saved_query": "已登入。itda 用系統鑰匙圈中的金鑰把 {site}/{account} 的 {name} 工作階段值封存在資料目錄下。它會附在發往網站的每個請求的網址上；代理只看到帳號 id。",
-  "nothing_works": "沒有一個讀取成功；itda 什麼都沒有保留。試試 `itda record {url}`，在它觀察時使用網站。"
+  "nothing_works": "沒有一個讀取成功；itda 什麼都沒有保留。試試 `itda record {url}`，在它觀察時使用網站。",
+  "outcome_landed": "網站沒有回應，但 {read} 顯示變更已生效。它已經在網站上了，請不要再次請求。",
+  "outcome_not_found": "網站沒有回應，{read} 也沒有顯示該變更。如果仍然需要，請再次請求並審閱新的核准；itda 從不自行重送。",
+  "outcome_unknown": "網站沒有回應，用於確認的讀取 {read} 也失敗了（{error}）。再次請求變更前請檢查網站。",
+  "lost_answers": "送出後回應遺失的變更 {n} 項：",
+  "lost_landed": "{read} 顯示已生效",
+  "lost_not_found": "{read} 未顯示",
+  "lost_unknown": "用於確認的讀取 {read} 也失敗了",
+  "lost_unchecked": "沒有用於確認的讀取；請檢查網站"
 }

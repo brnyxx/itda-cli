@@ -114,5 +114,13 @@
   "query_missing": "{site} menerima proses masuk, tetapi tidak memberikan parameter kueri {name} yang disebut definisinya",
   "query_missing_fix": "Periksa value_from pada entri auth di definisi; kuncinya harus muncul di pengalihan setelah masuk atau di tautan halaman pertama sesudahnya.",
   "session_saved_query": "Berhasil masuk. itda menyegel nilai sesi {name} untuk {site}/{account} di bawah direktori data dengan kunci di keyring sistem. Nilai itu disertakan di alamat setiap permintaan ke situs; agen hanya melihat id akun.",
-  "nothing_works": "Tidak ada pembacaan yang berhasil; itda tidak menyimpan apa pun. Coba `itda record {url}` dan pakai situs itu sementara itda mengamati."
+  "nothing_works": "Tidak ada pembacaan yang berhasil; itda tidak menyimpan apa pun. Coba `itda record {url}` dan pakai situs itu sementara itda mengamati.",
+  "outcome_landed": "Situs tidak menjawab, tetapi {read} menunjukkan perubahan sudah masuk. Perubahan itu sudah ada; jangan minta lagi.",
+  "outcome_not_found": "Situs tidak menjawab dan {read} tidak menunjukkan perubahan itu. Jika masih menginginkannya, minta lagi dan tinjau persetujuan baru; itda tidak pernah mengirim ulang sendiri.",
+  "outcome_unknown": "Situs tidak menjawab dan pembacaan pengonfirmasi {read} juga gagal ({error}). Periksa situs sebelum meminta perubahan itu lagi.",
+  "lost_answers": "{n} perubahan yang jawabannya hilang setelah dikirim:",
+  "lost_landed": "{read} menunjukkan sudah masuk",
+  "lost_not_found": "{read} tidak menunjukkannya",
+  "lost_unknown": "pembacaan pengonfirmasi {read} juga gagal",
+  "lost_unchecked": "tidak ada pembacaan pengonfirmasi; periksa situs"
 }

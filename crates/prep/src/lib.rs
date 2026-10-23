@@ -5,6 +5,7 @@
 //! changes, and whatever could not be translated is listed as a note instead of
 //! guessed. The draft is checked with the same rules `itda` applies at install
 //! time, so problems show up before anyone runs it.
+mod confirm;
 pub mod graphql;
 mod har;
 pub mod label;
@@ -511,11 +512,12 @@ pub(crate) fn finish(parts: Parts, title: &str) -> Draft {
         title: own_title,
         base_url,
         auth,
-        operations,
+        mut operations,
         models,
         notes,
         source,
     } = parts;
+    confirm::fill(&mut operations, &models);
     let title = if title.is_empty() {
         own_title.as_str()
     } else {

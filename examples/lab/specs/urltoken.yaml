@@ -65,8 +65,11 @@ operations:
     path: /notices
     auth: session
     effect: write
-    evidence: the write form on /notices posts title and body to /notices and answers with a redirect to the new notice
+    evidence: the write form on /notices posts title and body to /notices and answers with a redirect to the new notice; GET /notices lists it under title, so list-notices confirms it after a lost answer
     body:
       form:
         title: {type: string, required: true}
         body: {type: string}
+    confirm:
+      read: list-notices
+      match: {pointer: /items/*/title, from: body.title}

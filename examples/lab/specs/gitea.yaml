@@ -38,7 +38,7 @@ operations:
     path: /lab/intranet/issues/new
     auth: session
     effect: write
-    evidence: the new issue form on /lab/intranet/issues/new posts _csrf, title and content to the same path and answers with a redirect to the issue
+    evidence: the new issue form on /lab/intranet/issues/new posts _csrf, title and content to the same path and answers with a redirect to the issue; GET /lab/intranet/issues lists it under title, so list-issues confirms it after a lost answer
     preflight:
       - name: form
         path: /lab/intranet/issues/new
@@ -49,3 +49,6 @@ operations:
         title: {type: string, required: true}
         content: {type: string}
         _csrf: {type: string, default: "{{step.form.csrf}}"}
+    confirm:
+      read: list-issues
+      match: {pointer: /items/*/title, from: body.title}

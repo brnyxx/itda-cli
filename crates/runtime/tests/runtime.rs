@@ -555,6 +555,291 @@ async fn a_read_whose_answer_is_lost_keeps_its_network_code() {
     assert_eq!(error.public_code, "request_failed");
 }
 
+/// A site that takes a POST, keeps the record when `keeps` says so, and then
+/// drops the connection without an answer, while its GET lists the records
+/// it kept. The server decides what happens; nothing here waits on time.
+struct LossySite {
+    base: String,
+    posts: Arc<AtomicUsize>,
+    gets: Arc<AtomicUsize>,
+}
+
+async fn lossy_site(keeps: bool, lists: bool) -> LossySite {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let (posts, gets) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+    let kept: Arc<std::sync::Mutex<Vec<String>>> = Arc::default();
+    let (post_count, get_count) = (posts.clone(), gets.clone());
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut raw = Vec::new();
+            let mut buffer = [0u8; 4096];
+            let request = loop {
+                let n = socket.read(&mut buffer).await.unwrap_or(0);
+                if n == 0 {
+                    break String::from_utf8_lossy(&raw).into_owned();
+                }
+                raw.extend_from_slice(&buffer[..n]);
+                let text = String::from_utf8_lossy(&raw).into_owned();
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let length: usize = head
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse().unwrap_or(0))
+                        })
+                        .unwrap_or(0);
+                    if body.len() >= length {
+                        break text;
+                    }
+                }
+            };
+            if request.starts_with("POST") {
+                post_count.fetch_add(1, Ordering::SeqCst);
+                let body = request.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
+                if keeps
+                    && let Ok(json) = serde_json::from_str::<Value>(body)
+                    && let Some(title) = json["title"].as_str()
+                {
+                    kept.lock().unwrap().push(title.to_owned());
+                }
+                drop(socket);
+                continue;
+            }
+            get_count.fetch_add(1, Ordering::SeqCst);
+            if !lists {
+                drop(socket);
+                continue;
+            }
+            let items: Vec<Value> = kept
+                .lock()
+                .unwrap()
+                .iter()
+                .enumerate()
+                .map(|(i, title)| json!({"id": i + 1, "title": title}))
+                .collect();
+            let body = json!({"items": items, "total": items.len()}).to_string();
+            let answer = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(answer.as_bytes()).await;
+            let _ = socket.shutdown().await;
+        }
+    });
+    LossySite { base, posts, gets }
+}
+
+/// The fixture definition with `create-item` naming `list-items` as the
+/// read that shows a new item.
+fn confirming_spec(base: &str) -> Spec {
+    let mut value = serde_json::to_value(spec(base)).unwrap();
+    value["operations"][1]["body"]["json"]["title"]["required"] = true.into();
+    value["operations"][1]["confirm"] = json!({
+        "read": "list-items",
+        "match": {"pointer": "/items/*/title", "from": "body.title"}
+    });
+    itda_spec::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+struct Approving {
+    runtime: Runtime,
+    approvals: Arc<itda_policy::Approvals>,
+    log: Arc<itda_runtime::audit::AuditLog>,
+    dir: std::path::PathBuf,
+}
+
+fn approving(tag: &str) -> Approving {
+    let store = Store::in_memory().unwrap();
+    let approvals = Arc::new(itda_policy::Approvals::open(store.clone()).unwrap());
+    let gate = Arc::new(Gate::with_limits(store.clone(), 0, 1000).unwrap());
+    let vault = Arc::new(Vault::open(store, Arc::new(MemoryStore::default())).unwrap());
+    let dir = std::env::temp_dir().join(format!("itda-runtime-{tag}-{}", itda_types::util::id()));
+    let log = Arc::new(itda_runtime::audit::AuditLog::new(dir.join("audit.jsonl")));
+    let runtime = Runtime::new(Arc::new(Network::new(gate, true)), vault)
+        .with_approvals(approvals.clone())
+        .with_audit(log.clone());
+    Approving {
+        runtime,
+        approvals,
+        log,
+        dir,
+    }
+}
+
+/// Ask for the approval of `create-item` with `title`, grant it the way
+/// `itda approve` does, and send the change.
+async fn send_approved(
+    fixture: &Approving,
+    spec: &Spec,
+    title: &str,
+) -> itda_types::error::AppError {
+    let error = fixture
+        .runtime
+        .call(spec, call("create-item", &[("title", title)]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.public_code, "approval_required");
+    let id = error.extra["approval"].as_str().unwrap().to_owned();
+    fixture.approvals.claim(&id).await.unwrap();
+    let mut approved = call("create-item", &[("title", title)]);
+    approved.approval = Some(id);
+    fixture.runtime.call(spec, approved).await.unwrap_err()
+}
+
+#[tokio::test]
+async fn a_lost_change_is_confirmed_by_its_read_and_never_resent() {
+    let site = lossy_site(true, true).await;
+    let fixture = approving("landed");
+    let spec = confirming_spec(&site.base);
+
+    let error = send_approved(&fixture, &spec, "hello").await;
+    assert_eq!(error.public_code, "action_outcome_unknown", "{error:?}");
+    assert_eq!(error.extra["outcome_check"]["result"], "landed");
+    assert_eq!(error.extra["outcome_check"]["read"], "list-items");
+    assert!(
+        error.msg.contains("list-items shows the change landed"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.remedy.contains("do not ask for it again"),
+        "{}",
+        error.remedy
+    );
+    // The read ran once; the change was sent once.
+    assert_eq!(site.posts.load(Ordering::SeqCst), 1);
+    assert_eq!(site.gets.load(Ordering::SeqCst), 1);
+    // Only the match result travels, never the read's answer.
+    let text = serde_json::to_string(&error.extra).unwrap();
+    assert!(!text.contains("hello"), "{text}");
+
+    let records = fixture.log.records().unwrap();
+    let last = records.last().unwrap();
+    assert_eq!(last.outcome, "action_outcome_unknown");
+    assert_eq!(last.outcome_check, "landed");
+    assert_eq!(last.confirm_read, "list-items");
+    assert_eq!(fixture.log.lost_answers().unwrap().len(), 1);
+
+    // An agent that replays the used approval sends nothing and does not
+    // change what the person is told next.
+    let mut replay = call("create-item", &[("title", "hello")]);
+    replay.approval = Some(last.approval.clone());
+    let replayed = fixture.runtime.call(&spec, replay).await.unwrap_err();
+    assert_eq!(replayed.public_code, "approval_expired");
+    assert_eq!(site.posts.load(Ordering::SeqCst), 1);
+
+    // Asking for the same change again: the person is told it landed.
+    let again = fixture
+        .runtime
+        .call(&spec, call("create-item", &[("title", "hello")]))
+        .await
+        .unwrap_err();
+    assert_eq!(again.public_code, "approval_required");
+    assert_eq!(again.extra["previous_outcome"], "landed");
+    assert!(again.msg.contains("showed it landed"), "{}", again.msg);
+    let id = again.extra["approval"].as_str().unwrap();
+    let review = fixture.approvals.review(id).await.unwrap();
+    let note = review.inputs.iter().find(|i| i.label == "note").unwrap();
+    assert!(
+        note.value.contains("list-items showed it landed"),
+        "{}",
+        note.value
+    );
+    assert!(
+        note.value.contains("Approving sends it again"),
+        "{}",
+        note.value
+    );
+    // Other inputs are another change: no note.
+    let other = fixture
+        .runtime
+        .call(&spec, call("create-item", &[("title", "other")]))
+        .await
+        .unwrap_err();
+    assert!(other.extra.get("previous_outcome").is_none());
+    let review = fixture
+        .approvals
+        .review(other.extra["approval"].as_str().unwrap())
+        .await
+        .unwrap();
+    assert!(review.inputs.iter().all(|i| i.label != "note"));
+    assert_eq!(site.posts.load(Ordering::SeqCst), 1);
+    std::fs::remove_dir_all(fixture.dir).ok();
+}
+
+#[tokio::test]
+async fn a_lost_change_the_site_dropped_is_reported_as_not_found() {
+    let site = lossy_site(false, true).await;
+    let fixture = approving("not-found");
+    let spec = confirming_spec(&site.base);
+
+    let error = send_approved(&fixture, &spec, "hello").await;
+    assert_eq!(error.public_code, "action_outcome_unknown", "{error:?}");
+    assert_eq!(error.extra["outcome_check"]["result"], "not_found");
+    assert!(
+        error.msg.contains("does not show the change"),
+        "{}",
+        error.msg
+    );
+    assert!(error.remedy.contains("new approval"), "{}", error.remedy);
+    assert!(error.remedy.contains("never resends"), "{}", error.remedy);
+    assert_eq!(site.posts.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        fixture.log.records().unwrap().last().unwrap().outcome_check,
+        "not_found"
+    );
+
+    // The normal path: a new approval the person sees, without a landed note.
+    let again = fixture
+        .runtime
+        .call(&spec, call("create-item", &[("title", "hello")]))
+        .await
+        .unwrap_err();
+    assert_eq!(again.public_code, "approval_required");
+    assert!(again.extra.get("previous_outcome").is_none());
+    assert_eq!(site.posts.load(Ordering::SeqCst), 1);
+    std::fs::remove_dir_all(fixture.dir).ok();
+}
+
+#[tokio::test]
+async fn when_the_confirming_read_fails_too_the_outcome_stays_unknown() {
+    let site = lossy_site(true, false).await;
+    let fixture = approving("unknown");
+    let spec = confirming_spec(&site.base);
+
+    let error = send_approved(&fixture, &spec, "hello").await;
+    assert_eq!(error.public_code, "action_outcome_unknown", "{error:?}");
+    assert_eq!(error.extra["outcome_check"]["result"], "unknown");
+    assert_eq!(error.extra["outcome_check"]["error"], "request_failed");
+    assert!(error.msg.contains("failed too"), "{}", error.msg);
+    assert!(error.remedy.contains("never resends"), "{}", error.remedy);
+    assert_eq!(site.posts.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        fixture.log.records().unwrap().last().unwrap().outcome_check,
+        "unknown"
+    );
+    std::fs::remove_dir_all(fixture.dir).ok();
+}
+
+#[tokio::test]
+async fn a_change_without_confirm_runs_no_read_after_a_lost_answer() {
+    let site = lossy_site(true, true).await;
+    let fixture = approving("plain");
+    let error = send_approved(&fixture, &spec(&site.base), "hello").await;
+    assert_eq!(error.public_code, "action_outcome_unknown");
+    assert!(error.extra.get("outcome_check").is_none());
+    assert_eq!(site.gets.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        fixture.log.records().unwrap().last().unwrap().outcome_check,
+        ""
+    );
+    std::fs::remove_dir_all(fixture.dir).ok();
+}
+
 #[tokio::test]
 async fn a_rate_limited_read_says_how_long_the_site_asked_to_wait() {
     let router = Router::new().route(

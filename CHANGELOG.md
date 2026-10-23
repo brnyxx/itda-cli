@@ -20,6 +20,24 @@ change the definition format or the CLI.
   remedies, site definitions) stays English. The strings live in
   `apps/cli/text/<tag>.json`, `site/i18n/<tag>.js` and `README.<tag>.md`;
   `docs/i18n.md` has the glossary and the rules.
+- Outcome check after a lost answer: a change may name the read that shows
+  it landed (`confirm: {read, match: {pointer, from}}` in the definition).
+  When the change is sent and its answer is lost (`action_outcome_unknown`,
+  exit 22), itda runs that read once, as a read, and reports `landed`,
+  `not_found` or `unknown` next to the error, as `outcome_check` in the CLI
+  output, `--json`, the MCP result and the audit record (`outcome_check`,
+  `confirm_read`). The change is never resent. After `landed`, a new approval
+  request for the same inputs carries a `note` in the review and
+  `previous_outcome: landed` in the answer, so the person can decline. `itda
+  audit` lists lost answers with what the read said; `itda_manage audit`
+  returns them under `unknown_outcome` with `check`. `itda ls` and `itda
+  doctor` report a `confirm` that names a missing operation, a change or a
+  read that needs inputs as a definition problem. `itda setup` and `itda
+  draft` fill `confirm` when a `POST`'s list read is on the same path prefix
+  and a string input of the change appears in the read's records; the
+  evidence says so. The lab gets `lossy` (8089), the scripted portal whose
+  post is saved and then the line drops, and every reviewed lab definition
+  names its confirming read.
 
 ### Changed
 

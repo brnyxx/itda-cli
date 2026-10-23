@@ -365,6 +365,7 @@ Each operation is one action, called as `itda call <site>.<name>`.
 | `response` | What a correct answer looks like. Strongly recommended for reads. |
 | `model` | Name of an entry in `models` that picks and renames fields from the JSON. |
 | `pagination` | How a read that lists things goes on to its next page. See below. |
+| `confirm` | For a change: the read that shows it landed, run once when the change's answer is lost. See below. |
 
 ### Inputs
 
@@ -692,6 +693,68 @@ fields its answers had, and from a GraphQL `after` variable with
 `send: {body: after}`. Pages with pagination links (`?page=2`) get `style: page`
 on reads returning their records.
 
+## `confirm`
+
+itda sends a change once and never resends it. When the answer is lost after
+sending (a timeout, a dropped connection), the call fails with
+`action_outcome_unknown` and nobody knows whether the site applied it. A change
+can name the read that would show it, so itda checks instead of guessing:
+
+```yaml
+operations:
+  - name: list-notices
+    method: GET
+    path: /api/notices
+    effect: read
+    evidence: GET /api/notices answers {items: [{id, title}]}
+    response:
+      format: json
+      required_pointers: [/items]
+  - name: create-notice
+    method: POST
+    path: /api/notices
+    effect: write
+    evidence: POST /api/notices creates a notice; GET /api/notices lists it under title
+    body:
+      json:
+        title: {type: string, required: true}
+    confirm:
+      read: list-notices
+      match: {pointer: /items/*/title, from: body.title}
+```
+
+| Field | Meaning |
+|---|---|
+| `read` | A read in the same definition, with `effect: read`, that runs on its defaults alone (no required input without a default, no path input). |
+| `match.pointer` | A JSON pointer into the read's answer as itda returns it, after `extract_pointer` and `model`: `/items/*/title` for records under `items`, `/*/title` for a list. `*` stands for every element. HTML reads return their records under `items`, so the same shape works for them. |
+| `match.from` | The change's input to compare with, as `body.<name>`, `query.<name>` or `params.<name>`. A string or number input that is required or has a default; never one a preflight step fills. |
+
+After `action_outcome_unknown`, itda runs the read once, as a read: no
+approval, through the same gate and pacing, with the change's account, first
+page only. It compares each value at the pointer with the input as text and
+reports one of three results next to the error, as `outcome_check` in
+`--json` and MCP results and as `outcome_check` on the audit record:
+
+| `result` | Meaning | What follows |
+|---|---|---|
+| `landed` | the input is in the read's answer | the change is in; itda tells the agent not to ask for it again. A new approval request with the same inputs carries a `note` saying the earlier one landed, so you can decline it |
+| `not_found` | it is not there | the normal path: the agent may ask again, and you review a new approval |
+| `unknown` | the read failed too (`error` says why) | check the site before asking for the change again |
+
+The result stays `action_outcome_unknown` (exit 22) in every case; the check is
+information next to it, never a reason to resend. The read's answer is not
+passed on, only the read's name and the match result. A `confirm` that names a
+missing operation, a change, or a read that needs inputs is a definition
+problem, reported by `itda ls` and `itda doctor` like any other.
+
+`itda setup` and `itda draft` fill `confirm` when the draft itself shows it: a
+`POST` whose list read is on the same path or above it (`POST /api/notices`
+with `GET /api/notices`, `POST /issues/new` with `GET /issues`) and a string
+input of the change that the read's records carry under the same name (an
+HTML read's `fields`, a `model`'s fields, or `/0/<field>` in
+`required_pointers`). The evidence says so. Without that, the change keeps no
+`confirm`; add one by hand when you know the read.
+
 ## Keep it working
 
 Sites change. `itda check` runs every read needing no input; give inputs a
@@ -784,6 +847,7 @@ exit code says whether the new definition matches. Over MCP, `itda_manage` with
 ## Checklist before sharing a definition
 
 - Every read declares a `response`, and `itda check` passes.
+- Every change whose records a read lists names that read in `confirm`.
 - Every `desc` says what the action does, in one line.
 - `evidence` points at something a reviewer can check.
 - No credentials, personal data or internal hostnames in the file you share.

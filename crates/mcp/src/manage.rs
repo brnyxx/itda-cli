@@ -71,7 +71,7 @@ pub(crate) fn tools() -> Vec<Tool> {
         .with_annotations(read_only.clone()),
         Tool::new(
             "itda_manage",
-            "Manage itda without a terminal. refresh: when itda_check says site_changed, draft the site again from the sources it was set up from, show the user what would change (actions added, removed, changed; the ones they edited by hand are kept, as are the sign-in and the site's name) in a form they confirm, write it and check the site. remove: forget a site (the user confirms in a form; its accounts stay). resume: lift the pause after a site blocked itda (the user confirms, after checking the site in a browser). approvals: the changes waiting for the user's decision. audit: the last entries of the audit log, for one site or all.",
+            "Manage itda without a terminal. refresh: when itda_check says site_changed, draft the site again from the sources it was set up from, show the user what would change (actions added, removed, changed; the ones they edited by hand are kept, as are the sign-in and the site's name) in a form they confirm, write it and check the site. remove: forget a site (the user confirms in a form; its accounts stay). resume: lift the pause after a site blocked itda (the user confirms, after checking the site in a browser). approvals: the changes waiting for the user's decision. audit: the last entries of the audit log, for one site or all, plus unknown_outcome: changes interrupted mid-process and changes whose answer was lost, each with what the confirming read said (landed, not_found or unknown) when the change named one.",
             schema(json!({"type": "object", "properties": {
                 "action": {"type": "string", "enum": ["refresh", "remove", "resume", "approvals", "audit"]},
                 "site": {"type": "string", "description": "Needed by refresh, remove and resume; narrows audit."},
@@ -453,23 +453,45 @@ impl Server {
                     Ok(unfinished) => unfinished,
                     Err(error) => return failure(&error),
                 };
-                let unfinished: Vec<Value> = unfinished
+                let entry = |r: &itda_runtime::audit::Record, outcome: &str| {
+                    json!({
+                        "seq": r.seq,
+                        "at": r.at,
+                        "site": r.site,
+                        "action": r.action,
+                        "approval": r.approval,
+                        "outcome": outcome,
+                    })
+                };
+                let mut unknown: Vec<Value> = unfinished
                     .iter()
                     .filter(|r| site.is_none_or(|site| r.site == site))
                     .map(|r| {
-                        json!({
-                            "seq": r.seq,
-                            "at": r.at,
-                            "site": r.site,
-                            "action": r.action,
-                            "approval": r.approval,
-                            "outcome": "unknown: the process stopped after the change was sent; check the site",
-                        })
+                        entry(
+                            r,
+                            "unknown: the process stopped after the change was sent; check the site",
+                        )
                     })
                     .collect();
+                // Changes whose answer was lost, among the entries returned,
+                // with what the confirming read said when there was one.
+                unknown.extend(
+                    recent
+                        .iter()
+                        .filter(|r| r.kind == "call" && r.outcome == "action_outcome_unknown")
+                        .map(|r| {
+                            let mut lost =
+                                entry(r, "unknown: the answer was lost after the change was sent");
+                            lost["check"] = match r.outcome_check.as_str() {
+                                "" => Value::Null,
+                                result => json!({"read": r.confirm_read, "result": result}),
+                            };
+                            lost
+                        }),
+                );
                 match serde_json::to_value(recent) {
                     Ok(records) => structured(
-                        json!({"status": "ok", "records": records, "unknown_outcome": unfinished}),
+                        json!({"status": "ok", "records": records, "unknown_outcome": unknown}),
                     ),
                     Err(_) => failure(&AppError::api("internal", 500)),
                 }

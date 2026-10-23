@@ -114,5 +114,13 @@
   "query_missing": "{site} hat die Anmeldung angenommen, aber den Query-Parameter {name}, den seine Definition nennt, nicht herausgegeben",
   "query_missing_fix": "Prüfen Sie value_from im auth-Eintrag der Definition; der Schlüssel muss in der Weiterleitung nach der Anmeldung oder in den Links der ersten Seite danach vorkommen.",
   "session_saved_query": "Angemeldet. itda hat den Sitzungswert {name} für {site}/{account} versiegelt im Datenverzeichnis abgelegt, mit einem Schlüssel im Schlüsselbund des Systems. Er wird an die Adresse jeder Anfrage an die Site angehängt; Agenten sehen nur die Konto-ID.",
-  "nothing_works": "Kein Lesevorgang hat funktioniert; itda hat nichts behalten. Versuchen Sie `itda record {url}` und benutzen Sie die Site, während es zusieht."
+  "nothing_works": "Kein Lesevorgang hat funktioniert; itda hat nichts behalten. Versuchen Sie `itda record {url}` und benutzen Sie die Site, während es zusieht.",
+  "outcome_landed": "Die Site hat nicht geantwortet, aber {read} zeigt, dass die Änderung angekommen ist. Sie ist drin; fordern Sie sie nicht noch einmal an.",
+  "outcome_not_found": "Die Site hat nicht geantwortet, und {read} zeigt die Änderung nicht. Wenn Sie sie weiterhin wollen, fordern Sie sie erneut an und prüfen Sie die neue Freigabe; itda sendet nie von sich aus erneut.",
+  "outcome_unknown": "Die Site hat nicht geantwortet, und der bestätigende Lesevorgang {read} ist ebenfalls fehlgeschlagen ({error}). Prüfen Sie die Site, bevor Sie die Änderung erneut anfordern.",
+  "lost_answers": "{n} Änderung(en), deren Antwort nach dem Senden verloren ging:",
+  "lost_landed": "{read} hat gezeigt, dass sie angekommen ist",
+  "lost_not_found": "{read} hat sie nicht gezeigt",
+  "lost_unknown": "der bestätigende Lesevorgang {read} ist ebenfalls fehlgeschlagen",
+  "lost_unchecked": "kein bestätigender Lesevorgang; prüfen Sie die Site"
 }

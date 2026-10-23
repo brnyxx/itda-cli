@@ -506,6 +506,58 @@ fn pagination_is_for_reads_and_may_name_a_page_token() {
 }
 
 #[test]
+fn a_confirming_read_must_really_read() {
+    let base = json!({"spec_version":1,"site":{"name":"p","base_url":"https://p.example"}});
+    let with = |ops: serde_json::Value| {
+        let mut value = base.clone();
+        value["operations"] = ops;
+        spec_from(value)
+    };
+    let create = |read: &str| {
+        json!({"name":"create","method":"POST","path":"/items","effect":"write","evidence":"doc",
+        "body":{"json":{"title":{"type":"string","required":true}}},
+        "confirm":{"read":read,"match":{"pointer":"/items/*/title","from":"body.title"}}})
+    };
+    validate_spec(&with(json!([
+        {"name":"list","method":"GET","path":"/items","effect":"read","evidence":"doc"},
+        create("list")
+    ])))
+    .unwrap();
+    // `effect: read` on a GET /items/delete is still a change for the
+    // classifier, so it cannot confirm anything.
+    let error = validate_spec(&with(json!([
+        {"name":"clear","method":"GET","path":"/items/delete","effect":"read","evidence":"doc"},
+        create("clear")
+    ])))
+    .unwrap_err();
+    assert!(
+        error.msg.contains("clear would change the site"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("operations.create.confirm.read"),
+        "{}",
+        error.msg
+    );
+    // A read has no outcome to check.
+    let error = validate_spec(&with(json!([
+        {"name":"list","method":"GET","path":"/items","effect":"read","evidence":"doc"},
+        {"name":"peek","method":"GET","path":"/peek","effect":"read","evidence":"doc",
+         "query":{"title":{"type":"string","required":true}},
+         "confirm":{"read":"list","match":{"pointer":"/items/*/title","from":"query.title"}}}
+    ])))
+    .unwrap_err();
+    assert!(
+        error
+            .msg
+            .contains("only a change names the read that confirms it"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn a_sign_in_form_belongs_to_a_browser_credential_on_the_site() {
     let with = |kind: &str, path: &str, user: &str, password: &str| {
         spec_from(

@@ -40,7 +40,7 @@ operations:
     path: /api/notices
     auth: session
     effect: write
-    evidence: the shell posts JSON to /api/notices with the session cookie and the X-CSRF-Token from <meta name="csrf-token">, and answers with the created notice
+    evidence: the shell posts JSON to /api/notices with the session cookie and the X-CSRF-Token from <meta name="csrf-token">, and answers with the created notice; GET /api/notices lists it under title, so list-notices confirms it after a lost answer
     preflight:
       - name: shell
         path: /board
@@ -52,3 +52,6 @@ operations:
       json:
         title: {type: string, required: true}
         body: {type: string}
+    confirm:
+      read: list-notices
+      match: {pointer: /items/*/title, from: body.title}

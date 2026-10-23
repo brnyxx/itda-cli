@@ -41,10 +41,22 @@ for that site or account: what you reviewed differs from what itda would send.
 
 itda never retries changes or follows their redirects. If the answer is lost
 after sending or a GraphQL answer carries `errors` behind a 2xx, the call fails
-with `action_outcome_unknown` (exit 22). Check the site before trying again. A
-change that never left the machine (the gate gave no turn, the name did not
-resolve, the connection was refused) keeps its network code. itda reports it as
-not sent.
+with `action_outcome_unknown` (exit 22). When the change names the read that
+shows it (`confirm` in the definition, see [SPEC.md](SPEC.md#confirm)), itda
+runs that read once, as a read, and says what it found next to the error:
+`landed` (the record is there: the change is in, and the agent is told not to
+ask for it again), `not_found` (it is not: the agent may ask again and you
+review a new approval) or `unknown` (the read failed too). Only the read's name
+and the match result are reported, never its answer. Without `confirm`, check
+the site yourself before trying again. In no case does itda send the change
+again. A change that never left the machine (the gate gave no turn, the name
+did not resolve, the connection was refused) keeps its network code. itda
+reports it as not sent.
+
+After a `landed` check, asking for the same change with the same inputs still
+needs a new approval, and its review carries a `note` line: when the earlier
+one was sent and which read showed it landed. Approving sends it again; decline
+if one is enough.
 
 ### Approving in your MCP client
 
@@ -131,5 +143,11 @@ The audit log is intact: 4 records in /home/you/.local/share/itda/audit.jsonl.
   "unknown outcome". `itda doctor` counts them under `changes`.
   `itda_manage audit` returns them under `unknown_outcome`. Check the site
   before asking for the change again.
+- **A lost answer shows with its check.** A `call` record ending in
+  `action_outcome_unknown` carries `outcome_check` (`landed`, `not_found` or
+  `unknown`) and `confirm_read` when the change named a confirming read.
+  `itda audit` lists those changes among the records shown, each with what
+  the read said; `itda_manage audit` lists them under `unknown_outcome` with
+  `check`.
 
 `itda audit --json` prints the records for scripts.

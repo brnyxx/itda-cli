@@ -98,7 +98,10 @@ blocked_by_site means the site refused automated access and is paused until the 
 site_rate_limited means the site asked for a wait longer than itda gives on its own: wait the \
 retry_after seconds it carries before calling that site again. \
 action_outcome_unknown means a change was sent but no answer came back: never call it again; \
-ask the user to check the site first. \
+ask the user to check the site first. When it carries outcome_check, itda already ran the read \
+that shows whether the change landed: result landed means the change is in, tell the user and do \
+not ask for it again; not_found means the site shows no trace of it, so the user may ask for a new \
+approval; unknown means that read failed too. \
 A read that lists things returns meta.next when the site has another page: call it again \
 with next set to that handle and the same inputs to read the following page, only as far as \
 the user's question needs; never page through a whole site on your own. pagination_expired or \
@@ -129,6 +132,8 @@ mod tests {
             "Never run a change the user did not ask for",
             "action_outcome_unknown",
             "never call it again",
+            "outcome_check",
+            "result landed means the change is in",
             "meta.next",
             "never page through a whole site",
             "itda_check",

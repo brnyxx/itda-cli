@@ -114,5 +114,13 @@
   "query_missing": "{site} 接受了登录，但没有给出其定义中指名的 {name} 查询参数",
   "query_missing_fix": "检查定义里 auth 条目的 value_from；这个键必须出现在登录后的重定向地址里，或者出现在之后第一个页面的链接上。",
   "session_saved_query": "已登录。itda 用系统密钥环中的密钥把 {site}/{account} 的 {name} 会话值封存在数据目录下。它会附在发往站点的每个请求的地址上；代理只看到账户 id。",
-  "nothing_works": "所有读取操作均未成功；itda 未保留任何内容。试试 `itda record {url}`，并在 itda 观察时使用站点。"
+  "nothing_works": "所有读取操作均未成功；itda 未保留任何内容。试试 `itda record {url}`，并在 itda 观察时使用站点。",
+  "outcome_landed": "站点没有回应，但 {read} 显示更改已生效。它已经在站点上了，请不要再次请求。",
+  "outcome_not_found": "站点没有回应，{read} 也没有显示该更改。如果仍然需要，请再次请求并审阅新的批准；itda 从不自行重发。",
+  "outcome_unknown": "站点没有回应，用于确认的读取 {read} 也失败了（{error}）。再次请求更改前请检查站点。",
+  "lost_answers": "发送后回应丢失的更改 {n} 项：",
+  "lost_landed": "{read} 显示已生效",
+  "lost_not_found": "{read} 未显示",
+  "lost_unknown": "用于确认的读取 {read} 也失败了",
+  "lost_unchecked": "没有用于确认的读取；请检查站点"
 }

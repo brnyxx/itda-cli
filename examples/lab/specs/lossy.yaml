@@ -1,0 +1,56 @@
+# The lossy portal in the lab (http://127.0.0.1:8089, intranet/lossy.py):
+# the scripted board whose POST /api/notices saves the notice and then drops
+# the connection before any answer, the way a proxy times out after the
+# application already wrote. The reviewed definition is scripted.yaml with
+# `confirm` on the write: after `action_outcome_unknown`, itda runs
+# list-notices once and reports whether the new title is there. It never
+# sends the change again.
+spec_version: 1
+site:
+  name: lossy
+  title: Lossy portal (lab)
+  base_url: http://127.0.0.1:8089
+auth:
+  - name: session
+    kind: browser
+    value_from: cookie:SCRIPTED_SESSION
+    login:
+      path: /login
+      user: username
+      password: password
+operations:
+  - name: list-notices
+    desc: List the notices, newest first, ten per page
+    method: GET
+    path: /api/notices
+    effect: read
+    evidence: the script on /board calls GET /api/notices?page=N, which answers with {items, page, pages, total}
+    query:
+      page: {type: int, default: 1}
+    pagination:
+      style: page
+      send: {query: page}
+    response:
+      format: json
+      required_pointers: [/items, /page, /pages, /total]
+  - name: post-notice
+    desc: Post a notice
+    method: POST
+    path: /api/notices
+    auth: session
+    effect: write
+    evidence: the shell posts JSON to /api/notices with the session cookie and the X-CSRF-Token from <meta name="csrf-token">; the server saves the notice and drops the connection, and GET /api/notices lists it under title
+    preflight:
+      - name: shell
+        path: /board
+        extract:
+          csrf: css:meta[name="csrf-token"]@content
+    headers:
+      X-CSRF-Token: "{{step.shell.csrf}}"
+    body:
+      json:
+        title: {type: string, required: true}
+        body: {type: string}
+    confirm:
+      read: list-notices
+      match: {pointer: /items/*/title, from: body.title}

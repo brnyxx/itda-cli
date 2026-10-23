@@ -9,6 +9,7 @@
 #   127.0.0.1:8086  framed: the board inside an iframe (intranet/framed.py)
 #   127.0.0.1:8087  scripted: a table a script draws from an XHR (intranet/scripted.py)
 #   127.0.0.1:8088  urltoken: the session carried in the URL (intranet/urltoken.py)
+#   127.0.0.1:8089  lossy: a post that is saved, then the line drops (intranet/lossy.py)
 #
 # One account everywhere: lab / labpassword. `lab.sh up` seeds it.
 name: itda-lab
@@ -163,6 +164,19 @@ services:
       - ./intranet:/app:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  lossy:
+    image: python:3.12-alpine@sha256:92abd2ba1bdfb48b1e2ac224b582dd1558d0d4bb11c903b126b5bf9c448fd656
+    command: ["python", "/app/lossy.py", "8089"]
+    ports:
+      - "127.0.0.1:8089:8089"
+    volumes:
+      - ./intranet:/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health')"]
       interval: 5s
       timeout: 5s
       retries: 12
