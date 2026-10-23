@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>itda link preview</title>
+<!--
+  Renders assets/social.png (1200x630, the link preview) from assets/logo.svg.
+  From the repository root:
+
+    sh assets/src/banner.sh
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Schibsted+Grotesk:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #0B0D12; --text: #ECEEF3; --muted: #9AA3B5; --blue-hi: #6E8BFF; }
+  html, body { margin: 0; background: var(--ink); color: var(--text); }
+  .frame { position: relative; width: 1200px; height: 630px; overflow: hidden; background: var(--ink); }
+  .glow {
+    position: absolute; width: 900px; height: 700px; left: -120px; top: -180px;
+    background: radial-gradient(closest-side, rgba(47, 91, 234, .36), rgba(110, 139, 255, .10) 55%, transparent);
+    filter: blur(24px);
+  }
+  .grid {
+    position: absolute; inset: 0; opacity: .5;
+    background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+    background-size: 48px 48px; background-position: 24px 27px;
+    mask-image: radial-gradient(closest-side at 30% 50%, #000, transparent);
+    -webkit-mask-image: radial-gradient(closest-side at 30% 50%, #000, transparent);
+  }
+  .mark { position: absolute; left: 96px; top: 50%; width: 320px; height: 320px; transform: translateY(-50%); filter: drop-shadow(0 30px 60px rgba(47,91,234,.45)); }
+  .copy { position: absolute; left: 488px; top: 50%; transform: translateY(-50%); width: 640px; }
+  .name { margin: 0 0 22px; font: 500 26px/1 "Schibsted Grotesk", sans-serif; color: var(--muted); letter-spacing: .01em; }
+  h1 {
+    margin: 0; font: 700 58px/1.08 "Bricolage Grotesque", sans-serif; letter-spacing: -.035em;
+    font-variation-settings: "opsz" 96; text-wrap: balance;
+  }
+  h1 em { font-style: normal; color: var(--blue-hi); }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="glow"></div>
+  <div class="grid"></div>
+  <img class="mark" src="logo.svg" alt="">
+  <div class="copy">
+    <p class="name">itda</p>
+    <h1>Just type an address after itda <em>and your AI can use the site.</em></h1>
+  </div>
+</div>
+</body>
+</html>
