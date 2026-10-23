@@ -16,8 +16,8 @@ change the definition format or the CLI.
   `LANG` (`ja_JP.UTF-8`, `zh-TW`, `pt` all resolve). The landing page picks the
   browser's language, has a picker in the header and remembers the choice;
   the README has one translation per language, linked from a language line at
-  the top of each. What agents read (tool descriptions, error codes and
-  remedies, site definitions) stays English. The strings live in
+  the top of each. What agents act on (tool descriptions, error codes and
+  remedies) stays English. The strings live in
   `apps/cli/text/<tag>.json`, `site/i18n/<tag>.js` and `README.<tag>.md`;
   `docs/i18n.md` has the glossary and the rules.
 - Outcome check after a lost answer: a change may name the read that shows
@@ -125,6 +125,15 @@ change the definition format or the CLI.
   The change's MCP tool description says the same in English, and
   `itda_describe` in catalog mode now returns the same description as the
   tool, the approval note included.
+- Action descriptions are drafted in the person's language, any of the
+  twelve, not only in Korean or English: a Japanese setup now writes
+  `Hacker News の一覧を読む`, not `List what Hacker News shows`. The
+  language is `ITDA_LANG` or `LANG`, else the page's `<html lang>`, else
+  English. The phrases are one table in `crates/prep/src/label.rs` with the
+  same placeholders in every language (a test checks it); the site's own
+  words (titles, field and operation names) stay as the site wrote them, and
+  outside Korean so does the kind of record (`news articles`). Agents read
+  all twelve; tool names, error codes and remedies stay English.
 
 ### Fixed
 
