@@ -94,6 +94,17 @@ change the definition format or the CLI.
   storage, never another site's, never a profile on disk, and never writes
   anything into a page; see `docs/THREAT_MODEL.md`. The definition format is
   unchanged: `spec_version` stays 1.
+- The API description a page points at is also found in the first page's
+  HTTP `Link` header (RFC 8288) and under two more relations: `api-catalog`
+  (RFC 9727) and `describedby`, in the header or on `<link>`/`<a>`.
+  Learning where costs no request. `service-desc` wins, then `api-catalog`,
+  then `describedby`. An API catalog is a linkset (RFC 9264): itda follows
+  its `service-desc` links, up to three, and takes the first OpenAPI
+  document. A `describedby` document counts only when it is one; otherwise
+  `/openapi.json` is still tried. `rel` is matched as a list of relation
+  types, case-insensitively, so `rel="not-service-desc"` no longer counts.
+  Pagination's `header:link` reads the header with the same parser, so a
+  target with a comma in it or `rel="Next"` is read right.
 - `itda spec validate <file> [--json]` checks a definition the way `itda
   add` would (`Spec::validate` and the policy checks), without installing
   it. A valid file exits 0; otherwise every problem is printed as `problem:

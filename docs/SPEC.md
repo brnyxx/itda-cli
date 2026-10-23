@@ -66,12 +66,22 @@ with a response check, so `itda check` notices when the page changes:
 | Links the page labels as attachments: a `download` attribute, the words download, attachment, 첨부 or 다운로드 in the link's text, title, label or class, or an icon named for one | A file read (`download-file`) with `response: {format: file}`. Links of one shape become one read with an input (`/files/{file_id}`, or a varying query key); `media_types` lists the kinds the link names say, or the usual document types when they say nothing. A link to a document the page does not call an attachment stays a page |
 | A sign-in form | Left out; `itda setup --user` and `itda login <site>` sign in through it, see `auth` below |
 | `<link rel="alternate">` to RSS or Atom | A read with `format: xml` |
-| A link to an OpenAPI document (`rel="service-desc"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or, when nothing is linked, `/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` makes them, under the page's address. Its changes appear as notes. See below. |
+| A link to an OpenAPI document, in the page's `Link` header or a `<link>` or `<a>` (`rel="service-desc"`, an API catalog with `rel="api-catalog"`, `rel="describedby"`, or an `href` ending in `openapi.json`, `openapi.yaml` or `swagger.json`), or, when nothing is linked, `/openapi.json` on the same origin answering with one | Its reads join the draft as `itda draft openapi` makes them, under the page's address. Its changes appear as notes. See below. |
 
 When a site also publishes an API description, itda reads it: the one the page
-links to, else `/openapi.json` on the same origin when it answers with an
+points at, else `/openapi.json` on the same origin when it answers with an
 OpenAPI 3 or Swagger 2.0 document. It makes one GET as itda, at most 4 MB. Every
-request to a site waits its turn, so no other path is tried. Its reads become
+request to a site waits its turn, so no other path is tried. Where the page
+points comes from the HTTP `Link` header the first page was answered with
+(RFC 8288) and from the `<link>` and `<a>` elements of the pages, which costs
+no request. The best wins: `service-desc` (RFC 8631) or a description file
+name, then `api-catalog` (RFC 9727), then `describedby`; on a tie the header
+comes first. A `service-desc` document is read even when it does not parse,
+so the draft can say so. An API catalog is a linkset (RFC 9264,
+`application/linkset+json`): itda follows its `service-desc` links, up to
+three, and takes the first OpenAPI document; a catalog that only points at
+further catalogs is not followed. A `describedby` document counts only when it
+is an OpenAPI document; otherwise `/openapi.json` is still tried. Its reads become
 actions as `itda draft openapi` makes them. Each path is drafted once, whether
 the page or description named it. The changes it lists are notes rather than
 actions (one each up to ten, then a count); `itda draft openapi <url>` drafts
