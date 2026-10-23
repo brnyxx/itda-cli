@@ -19,7 +19,7 @@
   "followed_frames": "프레임 {n}개를 따라가 읽었습니다: {list}.",
   "asked_schema": "{url}의 GraphQL API에 무엇을 제공하는지 물었습니다.",
   "described": "{url}의 API 설명을 읽었습니다: 읽기 {reads}개, 메모로 남긴 변경 {changes}개.",
-  "needs_record": "itda 이름으로는 이 페이지를 읽지 못했습니다({why}). 대신 브라우저를 열어 사이트를 쓰는 동안 지켜볼 수 있습니다.",
+  "needs_record": "itda 혼자서는 이 페이지를 읽지 못했습니다({why}). 대신 브라우저를 열어 사이트를 쓰는 동안 지켜볼 수 있습니다.",
   "why_blocked": "거부됨",
   "blocked_cloudflare": "{host}는 Cloudflare 뒤에 있어 itda를 거부했습니다.",
   "blocked_bot_manager": "{host}의 봇 차단이 itda를 거부했습니다.",

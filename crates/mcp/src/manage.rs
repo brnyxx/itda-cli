@@ -219,7 +219,7 @@ impl Server {
                 return failure(&coded(
                     "needs_recording",
                     422,
-                    format!("itda could not read the page as itself ({why}).{seen}"),
+                    format!("itda could not read the page on its own ({why}).{seen}"),
                     format!(
                         "Ask the user to run `itda setup {url}` in a terminal and accept the offer to open their browser and record, or run `itda record {url} --install`."
                     ),

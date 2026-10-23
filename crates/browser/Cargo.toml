@@ -1,6 +1,6 @@
 [package]
 name = "itda-browser"
-description = "Browser sign-in: open the user's own browser in a fresh profile and keep the session cookies for one site."
+description = "The user's own browser: sign-in and recording in a fresh profile, and a hidden, isolated session for reads a site answers with a challenge."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

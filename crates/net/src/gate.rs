@@ -5,9 +5,11 @@
 //! one process line up in order; the lease itself lives in SQLite, so other
 //! itda processes on the same data directory wait too. A rate limit sets a
 //! cooldown: a short one (ten seconds or less) is waited out, a longer one
-//! fails at once. A block, challenge, or a signed-in request answered with 401
-//! pauses the scope until the user resumes it, so a refused site is never
-//! retried in a loop.
+//! fails at once. A signed-in request answered with 401 pauses that account
+//! until the user resumes it, and in direct-HTTP mode a block or challenge
+//! pauses the site too, so a refused site is never retried in a loop. An
+//! adaptive read never pauses for a challenge; it cools down the way that
+//! failed instead (see `strategy`).
 //!
 //! Derived from Hycli `src/policy.rs` (`acquire`, `release`, `resume`,
 //! `resume_auth`), Apache-2.0. Changes: split out of the approval store and onto

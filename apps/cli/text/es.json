@@ -19,7 +19,7 @@
   "followed_frames": "Se siguieron {n} marcos: {list}.",
   "asked_schema": "Se preguntó a la API GraphQL en {url} qué ofrece.",
   "described": "Se leyó la descripción de su API en {url}: {reads} lecturas, {changes} cambios anotados.",
-  "needs_record": "itda no pudo leer la página como itda ({why}). En su lugar, itda puede abrir tu navegador y observar mientras usas el sitio.",
+  "needs_record": "itda no pudo leer la página por sí solo ({why}). En su lugar, itda puede abrir tu navegador y observar mientras usas el sitio.",
   "why_blocked": "lo rechazó",
   "blocked_cloudflare": "{host} está detrás de Cloudflare y rechazó a itda.",
   "blocked_bot_manager": "{host} usa un gestor de bots que rechazó a itda.",

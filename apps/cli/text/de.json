@@ -19,7 +19,7 @@
   "followed_frames": "{n} Frames gefolgt: {list}.",
   "asked_schema": "Die GraphQL-API unter {url} wurde gefragt, was sie anbietet.",
   "described": "API-Beschreibung unter {url} gelesen: {reads} Lesevorgänge, {changes} Änderungen notiert.",
-  "needs_record": "itda konnte die Seite nicht unter eigenem Namen lesen ({why}). itda kann stattdessen Ihren Browser öffnen und zusehen, während Sie die Site benutzen.",
+  "needs_record": "itda konnte die Seite nicht allein lesen ({why}). itda kann stattdessen Ihren Browser öffnen und zusehen, während Sie die Site benutzen.",
   "why_blocked": "sie hat abgelehnt",
   "blocked_cloudflare": "{host} liegt hinter Cloudflare und hat itda abgelehnt.",
   "blocked_bot_manager": "{host} betreibt einen Bot-Manager, der itda abgelehnt hat.",

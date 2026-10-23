@@ -19,7 +19,7 @@
   "followed_frames": "访问了 {n} 个嵌入框架：{list}。",
   "asked_schema": "向 {url} 的 GraphQL API 询问了它提供什么。",
   "described": "已读取 {url} 的 API 说明，记录了 {reads} 个读取操作和 {changes} 个更改操作。",
-  "needs_record": "itda 无法以自己的身份读取这个页面（{why}）。itda 可以改为打开你的浏览器，在你使用站点时观察。",
+  "needs_record": "itda 无法自行读取这个页面（{why}）。itda 可以改为打开你的浏览器，在你使用站点时观察。",
   "why_blocked": "它拒绝了",
   "blocked_cloudflare": "{host} 受 Cloudflare 保护，拒绝了 itda 的访问。",
   "blocked_bot_manager": "{host} 使用的机器人防护系统拒绝了 itda 的访问。",

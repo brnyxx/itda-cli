@@ -1,6 +1,6 @@
 [package]
 name = "itda-net"
-description = "Bounded first-party HTTP requests with pacing, block classification and SSRF guards."
+description = "Bounded first-party HTTP requests with pacing, block classification and SSRF guards, and read recovery through the installed browser."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

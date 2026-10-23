@@ -19,7 +19,7 @@
   "followed_frames": "已查看 {n} 個頁框：{list}。",
   "asked_schema": "已查詢 {url} 的 GraphQL API 提供哪些功能。",
   "described": "已讀取 {url} 的 API 說明：記錄了 {reads} 個讀取操作和 {changes} 個變更操作。",
-  "needs_record": "itda 無法以自己的身分讀取這個頁面（{why}）。itda 可以改為開啟你的瀏覽器，在你使用網站時觀察。",
+  "needs_record": "itda 無法自行讀取這個頁面（{why}）。itda 可以改為開啟你的瀏覽器，在你使用網站時觀察。",
   "why_blocked": "它拒絕了",
   "blocked_cloudflare": "{host} 使用 Cloudflare 保護，並拒絕了 itda 的存取。",
   "blocked_bot_manager": "{host} 使用的機器人流量管理程式拒絕了 itda 的存取。",
