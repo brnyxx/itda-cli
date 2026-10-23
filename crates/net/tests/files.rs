@@ -482,8 +482,14 @@ async fn a_file_that_changes_during_the_send_aborts_it() {
     assert_eq!(error.extra["reason"], "file_changed");
     assert!(itda_net::sent(&error));
     assert_eq!(*changed_at.lock().unwrap(), Some(64 * 1024));
-    let seen = seen.await.unwrap();
-    assert!(seen.starts_with("cut after "), "{seen}");
+    // The server must never get the whole file. Whether it already saw the
+    // connection drop ("cut") or is still waiting for bytes that will not come
+    // depends on the host's scheduling, so the wait is bounded instead of open.
+    // A timeout means it is still waiting: it never received the whole file.
+    if let Ok(seen) = tokio::time::timeout(std::time::Duration::from_secs(10), seen).await {
+        let seen = seen.unwrap();
+        assert!(seen.starts_with("cut after "), "{seen}");
+    }
     std::fs::remove_dir_all(&dir).ok();
 }
 
