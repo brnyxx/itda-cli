@@ -42,13 +42,17 @@ pub fn private_dir(path: &Path) -> AppResult<()> {
     }
     Ok(())
 }
-/// Make an existing file readable and writable by its owner only. On
-/// Windows the private directory's ACL covers it and nothing is done.
+/// Make a file readable and writable by its owner only. A file that is not
+/// there (or went away meanwhile) has nothing to tighten. On Windows the
+/// private directory's ACL covers it and nothing is done.
 pub fn private_file(path: &Path) -> AppResult<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        match fs::set_permissions(path, fs::Permissions::from_mode(0o600)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            result => result?,
+        }
     }
     #[cfg(not(unix))]
     let _ = path;
@@ -430,6 +434,14 @@ pub fn file_lock(path: &Path, nonblocking: bool) -> AppResult<fs::File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_that_went_away_has_nothing_to_tighten() {
+        // SQLite deletes `itda.db-wal` when another connection closes; the
+        // store may be tightening it at that moment.
+        let gone = std::env::temp_dir().join(format!("itda-gone-{}", id()));
+        private_file(&gone).unwrap();
+    }
 
     const HEADER: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
 

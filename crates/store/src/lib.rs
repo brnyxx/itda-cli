@@ -49,10 +49,10 @@ impl Store {
         let path = path.to_owned();
         Self::start(move || {
             let conn = Connection::open(&path)?;
+            // Another connection closing can delete `-wal` and `-shm` at any
+            // moment; one that is gone is simply not tightened.
             for file in [path.clone(), sibling(&path, "-wal"), sibling(&path, "-shm")] {
-                if file.exists() {
-                    util::private_file(&file)?;
-                }
+                util::private_file(&file)?;
             }
             Ok(conn)
         })

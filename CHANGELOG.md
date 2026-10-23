@@ -71,6 +71,13 @@ change the definition format or the CLI.
   per site, with `Retry-After` respected, whichever way the request goes;
   captchas are not solved.
 
+### Fixed
+
+- Opening `itda.db` could fail with `internal` ("Local file operation
+  failed") when another itda process, the browser worker or the MCP server,
+  closed its connection at that moment: SQLite removed `itda.db-wal` while
+  itda was making it private. A file that is gone is now left alone.
+
 ## [0.6.0] - 2026-10-23
 
 Files in and out, a check after a lost answer, sessions kept in browser
