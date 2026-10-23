@@ -125,5 +125,6 @@
   "lost_unchecked": "tidak ada pembacaan pengonfirmasi; periksa situs",
   "returns_file": "mengembalikan sebuah file: {types}, disimpan di {dir}",
   "sends_file": "mengirim file yang ditulis di {input}; Anda menyetujuinya berdasarkan nama, ukuran, dan hash",
+  "confirms": "jika jawaban hilang: mencari nilai {input} yang baru di {read}",
   "saved_file": "Tersimpan {path} ({bytes} byte, sha256 {sha256})"
 }

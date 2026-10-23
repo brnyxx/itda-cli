@@ -467,6 +467,38 @@ operations:
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn describe_names_the_read_that_confirms_a_change() {
+    let home = home();
+    install_confirming(&home, "http://127.0.0.1:9");
+    let text = String::from_utf8_lossy(
+        &itda(&home, &["describe", "lossy"], &[("ITDA_LANG", "en")])
+            .await
+            .stdout,
+    )
+    .into_owned();
+    assert!(
+        text.contains("after a lost answer: checks list-items for the new title"),
+        "{text}"
+    );
+    assert_eq!(text.matches("after a lost answer").count(), 1, "{text}");
+    let korean = String::from_utf8_lossy(
+        &itda(&home, &["describe", "lossy"], &[("ITDA_LANG", "ko")])
+            .await
+            .stdout,
+    )
+    .into_owned();
+    assert!(korean.contains("list-items에서 새 title 값을"), "{korean}");
+
+    let rows = stdout_json(&itda(&home, &["describe", "lossy", "--json"], &[]).await);
+    assert!(rows[0].get("confirm").is_none(), "{rows}");
+    assert_eq!(
+        rows[1]["confirm"],
+        serde_json::json!({"read": "list-items", "match": {"pointer": "/items/*/title", "from": "body.title"}})
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_lost_change_is_checked_against_the_read_it_names() {
     let home = home();
     let base = serve_lossy().await;

@@ -892,6 +892,16 @@ fn describe(home: &Path, target: &str, as_json: bool) -> AppResult<ExitCode> {
         }
         if effect != itda_policy::Effect::Read {
             println!("         {}", text::t("approve_note"));
+            if let Some(confirm) = &op.confirm {
+                let input = confirm
+                    .matching
+                    .input()
+                    .map_or(confirm.matching.from.as_str(), |(_, name)| name);
+                println!(
+                    "         {}",
+                    text::tf("confirms", &[("read", &confirm.read), ("input", input)])
+                );
+            }
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -916,6 +926,9 @@ fn describe_json(spec: &Spec, op: &Operation) -> Value {
             "file": {"path": "string", "bytes": "integer", "media_type": "string", "sha256": "string"},
             "media_types": response.media_types,
         });
+    }
+    if let Some(confirm) = &op.confirm {
+        row["confirm"] = json!(confirm);
     }
     row
 }

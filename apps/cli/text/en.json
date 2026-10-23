@@ -125,5 +125,6 @@
   "lost_unchecked": "no confirming read; check the site",
   "returns_file": "returns a file: {types}, saved under {dir}",
   "sends_file": "sends the file at {input}; you approve it by name, size and hash",
+  "confirms": "after a lost answer: checks {read} for the new {input}",
   "saved_file": "Saved {path} ({bytes} bytes, sha256 {sha256})"
 }
