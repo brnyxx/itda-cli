@@ -7,6 +7,18 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-24
+
+Reads that get past a challenge, a knowledge base per site, and an agent that
+prepares a site itself. A read a site answers with a challenge page now
+recovers in the browser installed on the computer, and every request in that
+mode carries that browser's user agent; a change is still sent once, over
+direct HTTP, after a single-use approval. itda writes down what it found and
+tried for each site, `itda fsck` lists what was never tried or keeps failing,
+and `itda_shape` shows the shape of a page or an answer without its values.
+When setup keeps one read or none, `itda_prepare` lets the agent draft the
+site from its docs, seeing shapes and evidence, never what the site holds.
+
 ### Added
 
 - `itda_prepare`, one MCP tool for an agent to prepare a site that
@@ -925,7 +937,8 @@ keys, from the command line or over MCP, and definitions drafted from OpenAPI do
   credentials bound to their origin.
 - Sandbox example site for trying everything locally.
 
-[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/brnyxx/itda-cli/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/brnyxx/itda-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/brnyxx/itda-cli/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/brnyxx/itda-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/brnyxx/itda-cli/compare/v0.3.0...v0.4.0

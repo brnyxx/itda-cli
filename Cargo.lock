@@ -1432,7 +1432,7 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "itda-browser"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1450,7 +1450,7 @@ dependencies = [
 
 [[package]]
 name = "itda-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "clap",
@@ -1476,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "itda-html"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "itda-types",
  "regex",
@@ -1488,7 +1488,7 @@ dependencies = [
 
 [[package]]
 name = "itda-kb"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "itda-store",
  "itda-types",
@@ -1500,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "itda-mcp"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "itda-html",
@@ -1521,7 +1521,7 @@ dependencies = [
 
 [[package]]
 name = "itda-net"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -1542,7 +1542,7 @@ dependencies = [
 
 [[package]]
 name = "itda-policy"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "chrono",
  "graphql-parser",
@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "itda-prep"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "graphql-parser",
  "itda-html",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "itda-runtime"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "itda-html",
@@ -1594,7 +1594,7 @@ dependencies = [
 
 [[package]]
 name = "itda-sandbox"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "serde_json",
@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "itda-setup"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "itda-browser",
@@ -1626,7 +1626,7 @@ dependencies = [
 
 [[package]]
 name = "itda-spec"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "graphql-parser",
  "itda-html",
@@ -1638,7 +1638,7 @@ dependencies = [
 
 [[package]]
 name = "itda-store"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "itda-types",
  "rusqlite",
@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "itda-types"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "chrono",
  "psl",
@@ -1661,7 +1661,7 @@ dependencies = [
 
 [[package]]
 name = "itda-vault"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "aws-lc-rs",
  "itda-store",
@@ -3767,7 +3767,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde_json",
  "zip",
