@@ -2075,24 +2075,62 @@ pub fn pagination(html: &str, page: &str) -> Option<Pagination> {
     Some(Pagination { key, default })
 }
 
-/// Does the page link to an OpenAPI description? The address, if so.
-pub fn openapi_link(html: &str, base: &str) -> Option<String> {
+/// How a page or an answer points at the description of its API, best
+/// first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DescriptionRel {
+    /// `service-desc` (RFC 8631), or an address ending in `openapi.json`,
+    /// `openapi.yaml` or `swagger.json`: the description itself.
+    ServiceDesc,
+    /// `api-catalog` (RFC 9727): a linkset (RFC 9264) whose `service-desc`
+    /// links are the descriptions.
+    ApiCatalog,
+    /// `describedby`: a document about the page, which may be a description.
+    DescribedBy,
+}
+
+impl DescriptionRel {
+    /// The best kind a list of relation types names; case does not matter.
+    pub fn of<'a>(rels: impl IntoIterator<Item = &'a str>) -> Option<Self> {
+        rels.into_iter()
+            .filter_map(|rel| match rel.to_ascii_lowercase().as_str() {
+                "service-desc" => Some(Self::ServiceDesc),
+                "api-catalog" => Some(Self::ApiCatalog),
+                "describedby" => Some(Self::DescribedBy),
+                _ => None,
+            })
+            .min()
+    }
+}
+
+/// Where the page's `<link>` and `<a>` elements say its API is described:
+/// the best kind, the first of that kind in the page.
+pub fn description_link(html: &str, base: &str) -> Option<(DescriptionRel, String)> {
     let document = Html::parse_document(html);
     let base = url::Url::parse(base).ok()?;
     let selector = Selector::parse("link[href], a[href]").ok()?;
-    document.select(&selector).take(2000).find_map(|link| {
-        let href = link.value().attr("href")?;
-        let rel = link.value().attr("rel").unwrap_or_default();
-        let lower = href.to_ascii_lowercase();
-        let described = rel.contains("service-desc")
-            || lower.ends_with("openapi.json")
-            || lower.ends_with("openapi.yaml")
-            || lower.ends_with("swagger.json");
-        described
-            .then(|| base.join(href).ok())
-            .flatten()
-            .map(|u| u.to_string())
-    })
+    document
+        .select(&selector)
+        .take(2000)
+        .filter_map(|link| {
+            let href = link.value().attr("href")?;
+            let rel = link.value().attr("rel").unwrap_or_default();
+            let lower = href.to_ascii_lowercase();
+            let named = lower.ends_with("openapi.json")
+                || lower.ends_with("openapi.yaml")
+                || lower.ends_with("swagger.json");
+            let kind = DescriptionRel::of(rel.split_whitespace())
+                .or(named.then_some(DescriptionRel::ServiceDesc))?;
+            Some((kind, base.join(href).ok()?.to_string()))
+        })
+        .min_by_key(|(kind, _)| *kind)
+}
+
+/// Does the page link to an OpenAPI description itself? The address, if so.
+pub fn openapi_link(html: &str, base: &str) -> Option<String> {
+    description_link(html, base)
+        .filter(|(kind, _)| *kind == DescriptionRel::ServiceDesc)
+        .map(|(_, url)| url)
 }
 
 /// What a page says about the software that made it: its `<meta>` tags,
@@ -2580,6 +2618,34 @@ mod tests {
         assert_eq!(
             openapi_link(html, BASE).as_deref(),
             Some("https://example.test/openapi.json")
+        );
+        let linked = r#"<link rel="describedby" href="/about.rdf"><a rel="nofollow API-Catalog" href="/.well-known/api-catalog">APIs</a><a rel="not-service-desc" href="/x"></a>"#;
+        assert_eq!(
+            description_link(linked, BASE),
+            Some((
+                DescriptionRel::ApiCatalog,
+                "https://example.test/.well-known/api-catalog".into()
+            ))
+        );
+        assert_eq!(openapi_link(linked, BASE), None);
+        assert_eq!(
+            description_link(r#"<link rel="describedby" href="/meta">"#, BASE),
+            Some((
+                DescriptionRel::DescribedBy,
+                "https://example.test/meta".into()
+            ))
+        );
+        assert_eq!(
+            description_link(
+                r#"<a rel="describedby" href="/meta"></a><link rel="service-desc" href="/spec">"#,
+                BASE
+            )
+            .map(|(kind, _)| kind),
+            Some(DescriptionRel::ServiceDesc)
+        );
+        assert_eq!(
+            description_link(r#"<a rel="not-service-desc" href="/x">"#, BASE),
+            None
         );
         assert!(script_shell(
             "<div id=root></div><script src=/app.js></script>"

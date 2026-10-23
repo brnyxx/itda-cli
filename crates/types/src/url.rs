@@ -209,9 +209,75 @@ pub fn site_id_for(url: &url::Url) -> String {
     )
 }
 
+/// The links of an HTTP `Link` header (RFC 8288, section 3): each target as
+/// written, with its relation types in lower case. A comma inside `<...>` or
+/// a quoted value does not end a link, and only the first `rel` of a link
+/// counts. Several header lines are read as one when joined with commas.
+pub fn link_header(header: &str) -> Vec<(String, Vec<String>)> {
+    let mut links = Vec::new();
+    let mut rest = header;
+    while let Some(open) = rest.find('<') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('>') else {
+            break;
+        };
+        let target = after[..close].trim().to_owned();
+        let mut params = Vec::new();
+        let mut current = String::new();
+        let mut quoted = false;
+        let mut end = after.len();
+        for (i, c) in after[close + 1..].char_indices() {
+            match c {
+                '"' => quoted = !quoted,
+                ';' if !quoted => params.push(std::mem::take(&mut current)),
+                ',' if !quoted => {
+                    end = close + 1 + i;
+                    break;
+                }
+                _ => current.push(c),
+            }
+        }
+        params.push(current);
+        let rels = params
+            .iter()
+            .filter_map(|param| param.split_once('='))
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case("rel"))
+            .map(|(_, value)| {
+                value
+                    .split_whitespace()
+                    .map(str::to_ascii_lowercase)
+                    .collect()
+            })
+            .unwrap_or_default();
+        links.push((target, rels));
+        rest = &after[end..];
+    }
+    links
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_link_header_gives_each_target_with_its_relations() {
+        let header = r#"</api/v1,openapi.json>; rel="service-desc describedby"; title="a, b; c", <https://a.test/.well-known/api-catalog>;REL=API-Catalog;rel=next"#;
+        assert_eq!(
+            link_header(header),
+            [
+                (
+                    "/api/v1,openapi.json".to_owned(),
+                    vec!["service-desc".to_owned(), "describedby".to_owned()]
+                ),
+                (
+                    "https://a.test/.well-known/api-catalog".to_owned(),
+                    vec!["api-catalog".to_owned()]
+                ),
+            ]
+        );
+        assert!(link_header("").is_empty());
+        assert_eq!(link_header("</x>").len(), 1);
+    }
 
     fn u(raw: &str) -> url::Url {
         url::Url::parse(raw).unwrap()

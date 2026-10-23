@@ -22,6 +22,9 @@ use std::collections::BTreeSet;
 pub struct Page {
     pub url: String,
     pub html: String,
+    /// The `Link` header the page was answered with, its lines joined with
+    /// commas; empty when it had none or did not come from a fetch.
+    pub link: String,
 }
 
 /// An API description the site publishes, as fetched: the one a page linked

@@ -318,6 +318,7 @@ pub fn from_recording(text: &[u8], options: &Options, source: &str) -> AppResult
         pages.push(Page {
             url,
             html: html.to_owned(),
+            link: String::new(),
         });
         if pages.len() == 20 {
             parts

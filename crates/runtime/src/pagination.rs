@@ -169,17 +169,10 @@ fn records_in(data: &Value) -> Option<usize> {
 
 /// The `rel="next"` address in a `Link` header.
 fn link_next(header: &str) -> Option<String> {
-    header.split(',').find_map(|part| {
-        let (address, rest) = part.trim().split_once('>')?;
-        let address = address.trim().strip_prefix('<')?;
-        let next = rest.split(';').map(str::trim).any(|attribute| {
-            attribute
-                .strip_prefix("rel=")
-                .map(|rel| rel.trim_matches('"'))
-                .is_some_and(|rel| rel.split_whitespace().any(|r| r == "next"))
-        });
-        next.then(|| address.to_owned())
-    })
+    itda_types::url::link_header(header)
+        .into_iter()
+        .find(|(_, rels)| rels.iter().any(|rel| rel == "next"))
+        .map(|(target, _)| target)
 }
 
 /// The marker input's value in a next-page address the site gave: a full

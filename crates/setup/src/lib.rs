@@ -872,6 +872,7 @@ pub async fn probe(
             None => response.url.clone(),
         },
         html,
+        link: response.headers_joined("link"),
     };
     let mut sign_in = None;
     // A shell with frames on its own origin is read through them before it

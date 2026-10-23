@@ -101,6 +101,17 @@ pub struct Response {
     pub file: Option<SavedFile>,
 }
 impl Response {
+    /// Every line of a header that may come more than once, such as
+    /// `Link`, joined with commas; empty when there is none.
+    pub fn headers_joined(&self, key: &str) -> String {
+        self.headers
+            .iter()
+            .filter(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     pub fn header(&self, key: &str) -> &str {
         self.headers
             .iter()

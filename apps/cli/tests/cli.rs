@@ -1919,6 +1919,87 @@ async fn a_well_known_path_answers_with_the_api_description() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn the_pages_link_header_names_the_api_description() {
+    let home = home();
+    let others = Arc::new(AtomicUsize::new(0));
+    let router = Router::new()
+        .route(
+            "/board",
+            get(|| async {
+                (
+                    [("link", r#"</spec/items.json>; rel="service-desc""#)],
+                    docs_page(false),
+                )
+            }),
+        )
+        .route(
+            "/spec/items.json",
+            get(|| async { axum::Json(description(None)) }),
+        )
+        .route(
+            "/items",
+            get(|| async { axum::Json(json!({"items": [{"title": "linked"}]})) }),
+        )
+        .fallback({
+            let others = others.clone();
+            move || async move {
+                others.fetch_add(1, Ordering::SeqCst);
+                axum::http::StatusCode::NOT_FOUND
+            }
+        });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let english = [("ITDA_LANG", "en")];
+    let drafted = itda(
+        &home,
+        &["draft", "page", &format!("{base}/board")],
+        &english,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&drafted.stderr);
+    assert!(drafted.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "Read its API description at {base}/spec/items.json"
+        )),
+        "{said}"
+    );
+    let done = itda(
+        &home,
+        &[
+            "setup",
+            &format!("{base}/board"),
+            "--name",
+            "board",
+            "--no-record",
+            "--client",
+            "none",
+            "--yes",
+        ],
+        &english,
+    )
+    .await;
+    let said = String::from_utf8_lossy(&done.stderr);
+    assert!(done.status.success(), "{said}");
+    assert!(
+        said.contains(&format!(
+            "Read its API description at {base}/spec/items.json"
+        )),
+        "{said}"
+    );
+    let called = itda(&home, &["call", "board.list-items", "--json"], &[]).await;
+    assert_eq!(stdout_json(&called)["data"]["items"][0]["title"], "linked");
+    assert_eq!(
+        others.load(Ordering::SeqCst),
+        0,
+        "/openapi.json is not probed when the header names the description"
+    );
+    std::fs::remove_dir_all(home).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_unreadable_description_leaves_the_page_draft_as_it_is() {
     let home = home();
     let router = Router::new()

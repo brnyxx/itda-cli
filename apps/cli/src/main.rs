@@ -1657,6 +1657,7 @@ async fn draft_page(
         let page = itda_prep::Page {
             url: response.url.clone(),
             html: String::from_utf8_lossy(&response.bytes).into_owned(),
+            link: response.headers_joined("link"),
         };
         // A shell whose content is in frames on its own origin is read
         // through them, each frame page under its own address.

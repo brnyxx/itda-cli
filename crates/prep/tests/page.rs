@@ -16,6 +16,7 @@ fn page(url: &str, file: &str) -> Page {
     Page {
         url: url.into(),
         html: fixture(file),
+        link: String::new(),
     }
 }
 
@@ -738,6 +739,7 @@ fn a_page_with_page_links_but_no_records_does_not_turn_pages() {
         &[Page {
             url: "https://example.org/about".into(),
             html: html.into(),
+            link: String::new(),
         }],
         &Options::default(),
     )
@@ -762,6 +764,7 @@ fn links_that_count_records_declare_an_offset() {
         &[Page {
             url: "https://forum.example/viewforum".into(),
             html: html.into(),
+            link: String::new(),
         }],
         &Options::default(),
     )

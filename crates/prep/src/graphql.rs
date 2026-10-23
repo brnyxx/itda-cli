@@ -596,6 +596,7 @@ mod tests {
                    <script>fetch('/api/graphql', {method: 'POST'}); const uri = \"https://app.example/graphql/\";
                    const other = 'https://other.example/graphql'; const cdn = '//cdn.example/graphql';</script>"
                 .into(),
+            link: String::new(),
         };
         assert_eq!(
             endpoints_in_page(&page),
