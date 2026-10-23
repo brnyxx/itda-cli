@@ -39,6 +39,28 @@ change the definition format or the CLI.
   post is saved and then the line drops, and every reviewed lab definition
   names its confirming read.
 
+- Storage sessions: a site that keeps no session cookie and instead holds a
+  token in the browser's `localStorage` (or `sessionStorage`) and sends it as
+  `Authorization: Bearer` or a custom header now signs in and works. When you
+  set the site up or record it, itda reads that one origin's storage once, over
+  the DevTools protocol, from the window you signed in to, and recognises the
+  token as the session when the recorded calls actually sent it as a header: a
+  JWT shape, or a long opaque value under a key named like `token`,
+  `access_token`, `id_token`, `auth`, `session` or `jwt`. A stored value no
+  request sent is reported and never kept. It is drafted as a `kind: header`
+  auth entry with `value_from: storage:<key>`; the token lives in the keyring,
+  never in the definition, and `itda login <site> --browser` reads it again at
+  the next sign-in. If the token is a JWT with `exp`, `itda check` reports
+  `signed_out` (not `site_changed`) once it has passed, and `itda_sites` shows
+  when the sign-in expires; itda never signs in again on its own. The token is
+  redacted from results, errors and the audit log like a cookie. `value_from`
+  on a `header` entry now accepts `storage:<key>` beside `store:<site>/<key>`,
+  and on a `browser` entry `query:<key>` beside `cookie:<name>`, with a
+  validation error for anything else. itda reads only the signed-in origin's
+  storage, never another site's, never a profile on disk, and never writes
+  anything into a page; see `docs/THREAT_MODEL.md`. The definition format is
+  unchanged: `spec_version` stays 1.
+
 ### Changed
 
 - The gate reads the request it is about to send, not only the declared

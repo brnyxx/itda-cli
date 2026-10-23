@@ -745,6 +745,37 @@ impl Runtime {
                 if scope.origin() != destination.origin() {
                     return Err(AppError::api("unsafe_target", 400));
                 }
+                // A session the site keeps in the browser's own storage and
+                // sends as this header: the value is the session in the
+                // keyring, and a JWT whose `exp` has passed is a signed-out
+                // session, so the account is asked to sign in again, never
+                // told the site changed. No automatic re-login.
+                if auth.value_from.starts_with("storage:") {
+                    let secret = self
+                        .vault
+                        .secret(&spec.site.name, account, SESSION_SECRET)
+                        .await?;
+                    let token = secret.expose().trim().to_owned();
+                    if token.is_empty() {
+                        return Err(AppError::api("auth_required", 401));
+                    }
+                    if let Some(exp) = itda_types::util::jwt_expiry(&token)
+                        && exp <= itda_types::util::unix_ms() / 1000
+                    {
+                        return Err(AppError::api("auth_required", 401));
+                    }
+                    let redact = (token.len() >= 8)
+                        .then(|| token.clone())
+                        .into_iter()
+                        .collect();
+                    return Ok(Some(Credential {
+                        header: auth.header.clone(),
+                        value: format!("{}{token}", auth.prefix),
+                        redact,
+                        secret,
+                        query: None,
+                    }));
+                }
                 let name = auth
                     .value_from
                     .strip_prefix(&format!("store:{}/", spec.site.name))

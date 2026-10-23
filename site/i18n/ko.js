@@ -45,7 +45,7 @@ window.ITDA_I18N["ko"] = {
   "scope.y2": "스크립트용 데이터를 심어 둔 페이지(<code>__NEXT_DATA__</code>, <code>ld+json</code>)",
   "scope.y3": "JSON API를 부르는 스크립트 페이지: 내 브라우저에서 불러오는 것을 itda가 지켜봄",
   "scope.y4": "CSRF 토큰이 필요한 폼, 승인된 전송 직전에 새로 읽음",
-  "scope.y5": "쿠키 세션이나 주소에 실린 세션: 사이트의 로그인 폼으로, SSO는 내 브라우저로",
+  "scope.y5": "쿠키 세션, 주소에 실린 세션, 단일 페이지 앱이 브라우저에 두는 베어러 토큰: 사이트의 로그인 폼으로, SSO는 내 브라우저로",
   "scope.y5b": "프레임으로 짜인 페이지, 프레임이 따로 로그인을 요구해도",
   "scope.y6": "사이트가 내놓은 OpenAPI 설명이나 GraphQL 엔드포인트",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",

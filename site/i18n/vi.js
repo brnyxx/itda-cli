@@ -59,7 +59,7 @@ window.ITDA_I18N["vi"] = {
   "scope.y2": "Trang nhúng dữ liệu cho script của mình (<code>__NEXT_DATA__</code>, <code>ld+json</code>)",
   "scope.y3": "Trang được hiển thị bằng script gọi API JSON: itda quan sát quá trình tải trang trong trình duyệt của bạn",
   "scope.y4": "Biểu mẫu có token CSRF được lấy lại ngay trước mỗi lần gửi đã được phê duyệt",
-  "scope.y5": "Phiên cookie hoặc phiên nằm trong địa chỉ: biểu mẫu đăng nhập của chính trang web, hoặc trình duyệt của bạn cho đăng nhập một lần",
+  "scope.y5": "Phiên cookie, phiên nằm trong địa chỉ, hoặc token bearer mà ứng dụng một trang giữ trong trình duyệt: biểu mẫu đăng nhập của chính trang web, hoặc trình duyệt của bạn cho đăng nhập một lần",
   "scope.y5b": "Trang dựng từ các frame, kể cả khi một frame đòi đăng nhập riêng",
   "scope.y6": "Mô tả OpenAPI hoặc endpoint GraphQL mà trang web công bố",
   "scope.y7": "GitLab, Jira, Confluence, Redmine, Discourse, MediaWiki, WordPress, Gitea",

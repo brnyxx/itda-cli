@@ -18,13 +18,32 @@ pub struct Offer {
 }
 
 /// The credentials the recording used that the definition's `auth` entries
-/// refer to.
-pub fn offers(spec: &Spec, har: &Value, cookies: &[itda_browser::Cookie]) -> Vec<Offer> {
+/// refer to. `storage` holds the items the signed-in page kept in the
+/// browser, for a session the site keeps there rather than in a cookie.
+pub fn offers(
+    spec: &Spec,
+    har: &Value,
+    cookies: &[itda_browser::Cookie],
+    storage: &[itda_browser::StorageItem],
+) -> Vec<Offer> {
     let site = &spec.site.name;
     let mut offers = Vec::new();
     for auth in &spec.auth {
         match auth.kind.as_str() {
             "header" => {
+                // A session the site keeps in the browser's own storage: the
+                // value is the storage item the definition's key names, kept
+                // in the keyring as the session so `itda login` refreshes it.
+                if let Some(key) = auth.value_from.strip_prefix("storage:") {
+                    if let Some(item) = storage.iter().find(|item| item.key == key) {
+                        offers.push(Offer {
+                            what: format!("the bearer token the site keeps in storage ({key})"),
+                            name: itda_runtime::SESSION_SECRET.to_owned(),
+                            secret: Secret::new(item.value.clone()),
+                        });
+                    }
+                    continue;
+                }
                 let Some(name) = auth.value_from.strip_prefix(&format!("store:{site}/")) else {
                     continue;
                 };

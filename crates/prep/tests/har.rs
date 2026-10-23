@@ -505,3 +505,73 @@ fn a_session_the_site_carries_in_the_query_becomes_a_browser_entry_on_that_key()
         None
     );
 }
+
+#[test]
+fn a_bearer_the_site_keeps_in_storage_becomes_a_refreshable_session() {
+    use itda_prep::StorageAuth;
+    const JWT: &str =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LTEiLCJleHAiOjQxMDI0NDQ4MDB9.sig";
+    let har = serde_json::json!({"log": {"entries": [
+        {"request": {"method": "GET", "url": "https://app.example/api/items",
+                     "headers": [{"name": "Authorization", "value": format!("Bearer {JWT}")}]},
+         "response": {"status": 200, "content": {"mimeType": "application/json", "text": "{\"items\": []}"}}}
+    ]}});
+    let draft = from_har(
+        &serde_json::to_vec(&har).unwrap(),
+        &Options {
+            name: Some("app".into()),
+            // The sign-in window showed the token is kept in localStorage.
+            storage: Some(StorageAuth {
+                key: "access_token".into(),
+                header: "Authorization".into(),
+                prefix: "Bearer ".into(),
+            }),
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    // The action uses the session, and the session is a header credential
+    // whose value the keyring holds under the storage key, not a static
+    // store: token. The token itself never reaches the draft.
+    assert!(
+        draft.yaml.contains("value_from: storage:access_token"),
+        "{}",
+        draft.yaml
+    );
+    assert!(draft.yaml.contains("kind: header"), "{}", draft.yaml);
+    assert!(
+        draft.yaml.contains("prefix: 'Bearer '") || draft.yaml.contains("prefix: \"Bearer \""),
+        "{}",
+        draft.yaml
+    );
+    assert!(draft.yaml.contains("auth: session"), "{}", draft.yaml);
+    assert!(!draft.yaml.contains("store:app"), "{}", draft.yaml);
+    assert!(
+        !draft.yaml.contains(JWT),
+        "the token must not be in the draft: {}",
+        draft.yaml
+    );
+    assert!(
+        draft
+            .notes
+            .iter()
+            .any(|n| n.contains("keeps in the browser") && n.contains("access_token")),
+        "{:?}",
+        draft.notes
+    );
+
+    // Without the storage evidence, the same bearer is a plain store: token.
+    let plain = from_har(
+        &serde_json::to_vec(&har).unwrap(),
+        &Options {
+            name: Some("app".into()),
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        plain.yaml.contains("value_from: store:app/token"),
+        "{}",
+        plain.yaml
+    );
+}

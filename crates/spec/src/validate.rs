@@ -83,12 +83,16 @@ impl Spec {
                                 "",
                             );
                         }
-                        if !a.value_from.starts_with("store:") {
+                        let stored = a.value_from.starts_with("store:")
+                            || a.value_from
+                                .strip_prefix("storage:")
+                                .is_some_and(|key| !key.trim().is_empty());
+                        if !stored {
                             add(
                                 &mut out,
                                 &format!("auth.{}.value_from", a.name),
-                                "must reference store:<site>/<key>".into(),
-                                "Never embed raw secrets in a SiteSpec",
+                                "must reference store:<site>/<key>, or name the browser storage key the site keeps its session under as storage:<key>".into(),
+                                "Never embed raw secrets in a SiteSpec. Example: store:intranet/api-key, or storage:access_token",
                             );
                         }
                     }

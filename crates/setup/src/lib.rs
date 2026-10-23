@@ -443,6 +443,7 @@ pub async fn run(
         lang: ctx.lang.clone(),
         schemas: Vec::new(),
         session: None,
+        storage: None,
         frames_to_sign_in: Vec::new(),
     };
 
@@ -622,6 +623,7 @@ pub async fn run(
         har = serde_json::to_vec(&rec.har)?;
         let endpoints = itda_prep::graphql::endpoints_in_recording(&har);
         options.schemas = introspect(ctx, &endpoints, report).await;
+        options.storage = record::storage_auth(&rec, &url);
         draft = Some(itda_prep::from_recording(&har, &options, "`itda setup`")?);
         recording = Some(rec);
     }
@@ -1239,7 +1241,7 @@ async fn keep_credentials(
     if !answers.can_keep_credentials() || credentials::store_is_env() {
         return Ok(false);
     }
-    let offers = credentials::offers(spec, &rec.har, &rec.cookies);
+    let offers = credentials::offers(spec, &rec.har, &rec.cookies, &rec.storage);
     if offers.is_empty() {
         return Ok(false);
     }

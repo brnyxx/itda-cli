@@ -142,7 +142,7 @@ impl Server {
             "itda_setup" => self.setup_site(ctx, arguments, caller).await,
             "itda_login" => login(ctx, arguments, caller).await,
             "itda_check" => check_sites(ctx, self.site(), arguments).await,
-            "itda_sites" => list_sites(ctx, self.site()),
+            "itda_sites" => list_sites(ctx, self.site()).await,
             "itda_manage" => self.manage_action(ctx, arguments, caller).await,
             _ => return None,
         })
@@ -549,6 +549,9 @@ async fn login(
         Confirmed::Yes | Confirmed::CannotAsk => {}
     }
     let page = text(arguments, "page").map(str::to_owned);
+    let from = itda_setup::login::session_value_from(&spec)
+        .unwrap_or_default()
+        .to_owned();
     let session = tokio::task::spawn_blocking(move || {
         itda_setup::login::browser(&spec, page.as_deref(), None, &mut |_| {})
     })
@@ -559,7 +562,7 @@ async fn login(
         Err(_) => return failure(&AppError::api("internal", 500)),
     };
     let count = session.count;
-    match itda_setup::login::keep(ctx, site, account, "", session, "").await {
+    match itda_setup::login::keep(ctx, site, account, "", session, &from).await {
         Ok(()) => structured(json!({
             "status": "ok",
             "site": site,
@@ -622,39 +625,70 @@ async fn check_sites(
     }))
 }
 
-fn list_sites(ctx: &Context, only: Option<&str>) -> CallToolResult {
-    let list: Vec<Value> = sites::list(&ctx.home)
+async fn list_sites(ctx: &Context, only: Option<&str>) -> CallToolResult {
+    let mut list: Vec<Value> = Vec::new();
+    for site in sites::list(&ctx.home)
         .into_iter()
         .filter(|site| only.is_none_or(|only| only == site.name))
-        .map(|site| {
-            let last = check::last(&ctx.home, &site.name)
-                .map(|last| json!({"at": last.at, "verdict": last.verdict, "hint": last.hint}));
-            match site.spec {
-                Ok(spec) => {
-                    let changes = spec
-                        .operations
-                        .iter()
-                        .filter(|op| operation_effect(op, &BTreeMap::new()) != Effect::Read)
-                        .count();
-                    json!({
-                        "site": site.name,
-                        "title": spec.site.title,
-                        "base_url": spec.site.base_url,
-                        "reads": spec.operations.len() - changes,
-                        "changes": changes,
-                        "last_check": last,
-                    })
-                }
-                Err(error) => json!({
+    {
+        let last = check::last(&ctx.home, &site.name)
+            .map(|last| json!({"at": last.at, "verdict": last.verdict, "hint": last.hint}));
+        list.push(match site.spec {
+            Ok(spec) => {
+                let changes = spec
+                    .operations
+                    .iter()
+                    .filter(|op| operation_effect(op, &BTreeMap::new()) != Effect::Read)
+                    .count();
+                let mut entry = json!({
                     "site": site.name,
-                    "problem": error.msg,
-                    "remedy": error.remedy,
+                    "title": spec.site.title,
+                    "base_url": spec.site.base_url,
+                    "reads": spec.operations.len() - changes,
+                    "changes": changes,
                     "last_check": last,
-                }),
+                });
+                // When the signed-in session is a JWT the site keeps in
+                // browser storage, say when it stops being accepted, so the
+                // agent asks the person to sign in again before then.
+                if let Some(expires) = session_expiry(ctx, &spec).await {
+                    entry["session_expires"] = expires.into();
+                }
+                entry
             }
-        })
-        .collect();
+            Err(error) => json!({
+                "site": site.name,
+                "problem": error.msg,
+                "remedy": error.remedy,
+                "last_check": last,
+            }),
+        });
+    }
     structured(json!({"status": "ok", "sites": list}))
+}
+
+/// When the default account's stored session stops being accepted, as a date,
+/// for a site whose session is a JSON Web Token kept in browser storage.
+/// `None` when the site has no such session, nobody is signed in, or the
+/// token carries no expiry.
+async fn session_expiry(ctx: &Context, spec: &Spec) -> Option<String> {
+    let storage = spec
+        .auth
+        .iter()
+        .any(|auth| auth.kind == "header" && auth.value_from.starts_with("storage:"));
+    if !storage {
+        return None;
+    }
+    let secret = ctx
+        .vault
+        .secret(
+            &spec.site.name,
+            itda_runtime::DEFAULT_ACCOUNT,
+            itda_runtime::SESSION_SECRET,
+        )
+        .await
+        .ok()?;
+    itda_types::util::jwt_expiry(secret.expose()).map(itda_types::util::iso_date)
 }
 
 /// The actions as the agent will see them: name, effect, description and

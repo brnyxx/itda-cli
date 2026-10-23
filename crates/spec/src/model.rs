@@ -89,7 +89,7 @@ pub struct AuthStrategy {
     #[serde(default)]
     pub prefix: String,
     #[serde(default, rename = "value_from")]
-    pub value_from: String, // store:<site>/<key> | cookie:<name> | query:<key>
+    pub value_from: String, // store:<site>/<key> | storage:<key> | cookie:<name> | query:<key>
     /// Exact credential destination; legacy definitions use the site's base origin.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub origin: String,

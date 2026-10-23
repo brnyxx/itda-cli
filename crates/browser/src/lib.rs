@@ -3,16 +3,20 @@
 //! itda never drives a browser to use a site. It only opens the user's own
 //! Chrome, Edge or Chromium in a fresh, empty profile at the site's sign-in
 //! page, lets the person sign in by hand, and then reads the cookies that
-//! sign-in left for that one site through the DevTools protocol. The profile
+//! sign-in left for that one site through the DevTools protocol, and, for a
+//! site that keeps its session in the page's own storage instead, that
+//! origin's `localStorage` and `sessionStorage` ([`storage`]). The profile
 //! is deleted afterwards, so nothing else from the user's browsing is ever
-//! visible, and cookies for other sites are dropped.
+//! visible, and cookies and storage of other sites are never read.
 //!
 //! [`record`] opens the same kind of window and watches the requests the
 //! person's own use of the site makes, so a definition can be drafted without
 //! the browser's developer tools.
 pub mod record;
+pub mod storage;
 
 pub use record::{Capture, Recorder};
+pub use storage::{StorageItem, StorageSession, bearer_session, looks_like_token};
 
 use itda_types::error::{AppError, AppResult, usage};
 use serde::Deserialize;
@@ -58,8 +62,20 @@ impl SignIn {
 
     /// Unexpired cookies the browser would send to `site`'s host.
     pub fn cookies(&mut self, site: &url::Url) -> AppResult<Vec<Cookie>> {
-        let result = self.send("Storage.getCookies", json!({}))?;
+        let result = self.send(None, "Storage.getCookies", json!({}))?;
         site_cookies(&result, site)
+    }
+
+    /// The `localStorage` and `sessionStorage` items of `site`'s origin, from
+    /// the page open there: where a single-page app keeps a session it has no
+    /// cookie for. Read once, over the protocol; empty when no page is open at
+    /// that origin.
+    pub fn storage(&mut self, site: &url::Url) -> AppResult<Vec<StorageItem>> {
+        storage::read(
+            &mut |session, method, params| self.send(session, method, params),
+            site,
+            None,
+        )
     }
 
     /// True while the person has not closed the browser.
@@ -67,14 +83,18 @@ impl SignIn {
         matches!(self.child.try_wait(), Ok(None))
     }
 
-    fn send(&mut self, method: &str, params: Value) -> AppResult<Value> {
+    /// Send one command to the browser, or to an attached page session, and
+    /// wait for its reply; events arriving meanwhile are dropped.
+    fn send(&mut self, session: Option<&str>, method: &str, params: Value) -> AppResult<Value> {
         self.next_id += 1;
         let id = self.next_id;
         let lost = |_| AppError::api("browser_unavailable", 502);
+        let mut message = json!({"id": id, "method": method, "params": params});
+        if let Some(session) = session {
+            message["sessionId"] = session.into();
+        }
         self.socket
-            .send(Message::text(
-                json!({"id": id, "method": method, "params": params}).to_string(),
-            ))
+            .send(Message::text(message.to_string()))
             .map_err(lost)?;
         loop {
             let message = self.socket.read().map_err(lost)?;
@@ -96,7 +116,7 @@ impl SignIn {
 
 impl Drop for SignIn {
     fn drop(&mut self) {
-        let _ = self.send("Browser.close", json!({}));
+        let _ = self.send(None, "Browser.close", json!({}));
         close(&mut self.child, &self.profile);
     }
 }

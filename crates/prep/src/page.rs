@@ -108,6 +108,7 @@ fn merge_description(
         lang: options.lang.clone(),
         schemas: Vec::new(),
         session: None,
+        storage: None,
         frames_to_sign_in: Vec::new(),
     };
     let mut api = match openapi_parts(&description.bytes, &api_options, Some(url)) {

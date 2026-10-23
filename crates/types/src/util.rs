@@ -237,6 +237,78 @@ pub fn redact_generated_text(text: &str) -> String {
     }
 }
 
+/// The claims of a JSON Web Token (`header.payload.signature`, each part
+/// base64url), when `token` is one. Nothing is checked: the signature is the
+/// site's business. This only reads when a sign-in ends and who it is for.
+pub fn jwt_claims(token: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let mut parts = token.trim().split('.');
+    let (header, payload, signature) = (parts.next()?, parts.next()?, parts.next()?);
+    if parts.next().is_some() || header.is_empty() || signature.is_empty() {
+        return None;
+    }
+    let header: serde_json::Value = serde_json::from_slice(&base64url(header)?).ok()?;
+    if !header.is_object() {
+        return None;
+    }
+    match serde_json::from_slice(&base64url(payload)?).ok()? {
+        serde_json::Value::Object(claims) => Some(claims),
+        _ => None,
+    }
+}
+
+/// When a JSON Web Token stops being accepted: its `exp` claim, in seconds
+/// since the epoch. `None` for a token without one, or a value that is not one.
+pub fn jwt_expiry(token: &str) -> Option<i64> {
+    let claims = jwt_claims(token)?;
+    let exp = claims.get("exp")?;
+    exp.as_i64()
+        .or_else(|| exp.as_f64().map(|f| f as i64))
+        .filter(|exp| *exp > 0)
+}
+
+/// Who a JSON Web Token says it is for, as a site would show it: the first of
+/// `email`, `preferred_username`, `name` and `sub` that is a string.
+pub fn jwt_identity(token: &str) -> Option<String> {
+    let claims = jwt_claims(token)?;
+    ["email", "preferred_username", "name", "sub"]
+        .iter()
+        .find_map(|claim| claims.get(*claim)?.as_str().map(str::to_owned))
+        .filter(|value| !value.trim().is_empty())
+}
+
+/// A base64url text (RFC 4648 section 5, with or without padding) as bytes.
+fn base64url(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() * 3 / 4);
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for byte in text.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'-' | b'+' => 62,
+            b'_' | b'/' => 63,
+            b'=' => break,
+            _ => return None,
+        };
+        buffer = (buffer << 6) | u32::from(value);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// A date and time as `2026-10-24T07:00:00Z`, from seconds since the epoch.
+pub fn iso_date(seconds: i64) -> String {
+    chrono::DateTime::from_timestamp(seconds, 0)
+        .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+        .unwrap_or_default()
+}
+
 /// The candidate closest to `wanted` by edit distance, when it is close
 /// enough to be a slip: within half the length of the longer name, or one
 /// a prefix of the other. Names are compared without case.
@@ -303,6 +375,33 @@ pub fn file_lock(path: &Path, nonblocking: bool) -> AppResult<fs::File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const HEADER: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+
+    #[test]
+    fn a_jwt_gives_up_its_expiry_and_identity_without_being_trusted() {
+        let token = format!(
+            "{HEADER}.eyJzdWIiOiJ1LTEiLCJlbWFpbCI6Im1lQGV4YW1wbGUuY29tIiwiZXhwIjoxNzAwMDAwMDAwfQ.sig"
+        );
+        assert_eq!(jwt_expiry(&token), Some(1_700_000_000));
+        assert_eq!(jwt_identity(&token).as_deref(), Some("me@example.com"));
+        assert_eq!(iso_date(1_700_000_000), "2023-11-14T22:13:20Z");
+        // No exp: unknown. A name alone still says who.
+        let named = format!("{HEADER}.eyJuYW1lIjoiS2ltIn0.sig");
+        assert_eq!(jwt_expiry(&named), None);
+        assert_eq!(jwt_identity(&named).as_deref(), Some("Kim"));
+        // Not a token: two parts, a payload that is a list, a header that is not JSON.
+        assert_eq!(jwt_claims(&format!("{HEADER}.eyJuYW1lIjoiS2ltIn0")), None);
+        assert_eq!(jwt_claims(&format!("{HEADER}.WyJ4Il0.sig")), None);
+        assert_eq!(jwt_claims("abc.def.ghi"), None);
+        assert_eq!(jwt_claims("3f9a8c7b2e1d4a6f"), None);
+        // Padding is accepted and ignored.
+        assert_eq!(
+            base64url("eyJuYW1lIjoiS2ltIn0=").as_deref(),
+            Some(br#"{"name":"Kim"}"#.as_slice())
+        );
+        assert_eq!(base64url("not base64!"), None);
+    }
 
     #[test]
     fn ids_are_lowercase_slugs() {

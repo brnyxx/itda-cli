@@ -535,6 +535,39 @@ travels in URLs, it can reach a server's or a proxy's logs; see
 [THREAT_MODEL.md](THREAT_MODEL.md). A `browser` entry carries one or the other,
 a cookie or a query key, not both.
 
+### A session a single-page app keeps in storage
+
+Some sites keep no session cookie at all. A single-page app signs you in, puts a
+token (often a JWT) in the browser's `localStorage`, and its scripts send it on
+every call as `Authorization: Bearer <token>` or a custom header. That is a
+`header` credential whose value is a session, so its `value_from` names the
+storage key instead of the site's own store:
+
+```yaml
+auth:
+  - name: session
+    kind: header
+    header: Authorization
+    prefix: "Bearer "
+    value_from: storage:access_token   # the localStorage/sessionStorage key
+```
+
+When you set the site up or record it, itda reads that one origin's
+`localStorage` and `sessionStorage` once, over the DevTools protocol, from the
+window you signed in to. It keeps a value only when the recorded calls sent it
+as a header; a stored value no request sent is reported and left alone ("the
+site keeps a value in storage that no request sent; not used"). The token goes
+to the keyring as the session, never into the definition. `itda login <site>
+--browser` reads it again from the window at the next sign-in, the way a cookie
+session is refreshed. itda reads only the signed-in origin's storage, never
+another site's and never a file on disk, and never writes anything into a page.
+
+If the token is a JWT with an `exp` claim, itda records when it expires:
+`itda check` reports `signed_out` (not `site_changed`) once it has passed, and
+`itda_sites` shows when the sign-in expires. itda never signs in again on its
+own; it asks you to. `value_from` on a `header` entry accepts `store:<site>/<key>`
+or `storage:<key>`.
+
 When the site redirects after a change (post, then redirect, then get, as older
 sites do), the change has landed. Its result carries the redirect address. A
 redirect to a sign-in page means the site no longer accepts the session. The
