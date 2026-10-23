@@ -79,6 +79,9 @@ MONO = ("ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono', "
         "'D2Coding', 'Noto Sans Mono CJK KR', monospace")
 
 
+LOGO = Path(__file__).resolve().parents[2] / "assets" / "logo.svg"
+
+
 def width(text, size):
     """Rough rendered width, enough to size bubbles around their text."""
     return sum(size * (1.0 if ord(c) >= 0x1100 else 0.56) for c in text)
@@ -131,6 +134,18 @@ class Anim:
             (t0 + 0.15, "opacity:.7;transform:scale(.95)"),
             (t0 + 0.8, "opacity:0;transform:scale(1.25)"),
         ])
+
+
+def mark_defs():
+    """The gradients and the glow of the tile mark, from assets/logo.svg."""
+    svg = LOGO.read_text(encoding="utf-8")
+    return svg[svg.index("<defs>") + len("<defs>") : svg.index("</defs>")].strip()
+
+
+def mark():
+    """The tile mark's shapes, from assets/logo.svg, in its own 96 box."""
+    svg = LOGO.read_text(encoding="utf-8")
+    return svg[svg.index("</defs>") + len("</defs>") : svg.rindex("</svg>")].strip()
 
 
 def build(s):
@@ -261,11 +276,7 @@ def build(s):
     for t0, color in ((4.3, "#6E8BFF"), (7.85, "#3DD68C"), (12.75, "#3DD68C")):
         k = a.pulse(t0)
         w(f'<circle class="{k} origin" cx="480" cy="144" r="44" fill="none" stroke="{color}" stroke-width="2"/>')
-    w('<g transform="translate(444 108) scale(.75)">'
-      '<rect x="2" y="2" width="92" height="92" rx="24" fill="url(#m-bg)"/>'
-      '<rect x="2.5" y="2.5" width="91" height="91" rx="23.5" fill="none" stroke="#fff" stroke-opacity=".1"/>'
-      '<path d="M29 31 L46 48 L29 65" fill="none" stroke="#F4F5F8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>'
-      '<circle cx="63" cy="63" r="7.5" fill="url(#m-dot)"/></g>')
+    w(f'<g transform="translate(444 108) scale(.75)">{mark()}</g>')
     k = a.add([(11.15, "opacity:0"), (11.35, "opacity:1"), (12.6, "opacity:1"), (12.8, "opacity:0")])
     w(f'<g class="{k}"><circle cx="480" cy="144" r="44" fill="#F5B041" fill-opacity=".08" stroke="#F5B041" stroke-width="2" stroke-dasharray="5 5"/>'
       '<rect x="502" y="160" width="22" height="22" rx="7" fill="#F5B041"/>'
@@ -372,8 +383,7 @@ def build(s):
     head = f"""<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-label="{esc(s['title'])}" lang="{s['lang']}">
 <title>{esc(s['title'])}</title>
 <defs>
-<linearGradient id="m-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232A3B"/><stop offset="1" stop-color="#0B0D12"/></linearGradient>
-<linearGradient id="m-dot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6E8BFF"/><stop offset="1" stop-color="#2F5BEA"/></linearGradient>
+{mark_defs()}
 <radialGradient id="bg-glow" cx=".5" cy="0" r=".7"><stop offset="0" stop-color="#2F5BEA" stop-opacity=".22"/><stop offset="1" stop-color="#2F5BEA" stop-opacity="0"/></radialGradient>
 <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 <filter id="shadow" x="-20%" y="-40%" width="140%" height="200%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".6"/></filter>

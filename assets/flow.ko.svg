@@ -2,7 +2,8 @@
 <title>itda 동작 방식: 브라우저에서 웹사이트를 한 번 녹화하면 itda가 명령을 만들고, 에이전트가 호출하며, 변경은 모두 내 승인을 기다립니다</title>
 <defs>
 <linearGradient id="m-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232A3B"/><stop offset="1" stop-color="#0B0D12"/></linearGradient>
-<linearGradient id="m-dot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6E8BFF"/><stop offset="1" stop-color="#2F5BEA"/></linearGradient>
+<linearGradient id="m-volt" x1="0" y1="1" x2=".8" y2="0"><stop offset="0" stop-color="#2F5BEA"/><stop offset=".5" stop-color="#6E8BFF"/><stop offset="1" stop-color="#C9D6FF"/></linearGradient>
+<filter id="m-glow" x="-50%" y="-40%" width="200%" height="180%"><feGaussianBlur stdDeviation="2.8"/></filter>
 <radialGradient id="bg-glow" cx=".5" cy="0" r=".7"><stop offset="0" stop-color="#2F5BEA" stop-opacity=".22"/><stop offset="1" stop-color="#2F5BEA" stop-opacity="0"/></radialGradient>
 <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 <filter id="shadow" x="-20%" y="-40%" width="140%" height="200%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".6"/></filter>
@@ -153,7 +154,13 @@ text{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono'
 <circle class="k19 origin" cx="480" cy="144" r="44" fill="none" stroke="#6E8BFF" stroke-width="2"/>
 <circle class="k20 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
 <circle class="k21 origin" cx="480" cy="144" r="44" fill="none" stroke="#3DD68C" stroke-width="2"/>
-<g transform="translate(444 108) scale(.75)"><rect x="2" y="2" width="92" height="92" rx="24" fill="url(#m-bg)"/><rect x="2.5" y="2.5" width="91" height="91" rx="23.5" fill="none" stroke="#fff" stroke-opacity=".1"/><path d="M29 31 L46 48 L29 65" fill="none" stroke="#F4F5F8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="63" cy="63" r="7.5" fill="url(#m-dot)"/></g>
+<g transform="translate(444 108) scale(.75)"><rect class="tile" x="2" y="2" width="92" height="92" rx="24" fill="url(#m-bg)" stroke="#fff" stroke-width="1" stroke-opacity=".08"/>
+<g class="window" fill="none" stroke="#F4F5F8"><rect x="40" y="14" width="42" height="44" rx="7" stroke-width="4"/><path d="M41 25H81" stroke-width="3"/></g>
+<circle cx="47" cy="19.5" r="1.7" fill="#F4F5F8"/><circle cx="53" cy="19.5" r="1.7" fill="#F4F5F8"/>
+<path class="cursor" d="M40 49L39 75L31 68L22 84L14 79L24 64L12 61Z" fill="#F4F5F8" stroke="#F4F5F8" stroke-width="1.5" stroke-linejoin="round"/>
+<path class="bolt-glow" d="M67 30L47 45H57L39 60L74 40H62Z" fill="#6E8BFF" opacity=".85" filter="url(#m-glow)"/>
+<path class="bolt" d="M67 30L47 45H57L39 60L74 40H62Z" fill="url(#m-volt)"/>
+<path class="arcs" d="M27 39L30 43M65 70L69 67" fill="none" stroke="#9DB4FF" stroke-width="2" stroke-linecap="round" opacity=".55"/></g>
 <g class="k22"><circle cx="480" cy="144" r="44" fill="#F5B041" fill-opacity=".08" stroke="#F5B041" stroke-width="2" stroke-dasharray="5 5"/><rect x="502" y="160" width="22" height="22" rx="7" fill="#F5B041"/><path d="M508.5 170v-2.5a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="#0B0D12" stroke-width="1.8"/><rect x="507" y="170" width="12" height="8" rx="2" fill="#0B0D12"/></g>
 <rect x="372" y="196" width="216" height="152" rx="12" fill="#10131A" stroke="#242A38"/>
 <text class="k23 still" x="386" y="218" font-size="10.5" fill="#9AA3B5"><tspan fill="#6E8BFF">$</tspan> itda draft har board.har</text>

@@ -124,6 +124,26 @@
               <small><span data-i18n="win.setup.done">Done</span> · 5/5</small>
             </div>
           </div>
+          <!-- The cursor from the mark flies in, strikes the prompt, the transcript
+               appears, then it strikes the About window. Outlines come from
+               assets/logo.svg via assets/src/mark.py; motion is in style.css. -->
+          <svg class="hero-cursor" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id="hc-volt" x1="0" y1="1" x2=".8" y2="0"><stop offset="0" stop-color="#2F5BEA"/><stop offset=".5" stop-color="#6E8BFF"/><stop offset="1" stop-color="#C9D6FF"/></linearGradient>
+              <filter id="hc-glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4"/></filter>
+              <path id="hc-arrow" d="M40 49L39 75L31 68L22 84L14 79L24 64L12 61Z" fill="#F4F5F8" stroke="#F4F5F8" stroke-width="1.5" stroke-linejoin="round"/>
+              <path id="hc-bolt" d="M67 30L47 45H57L39 60L74 40H62Z"/>
+            </defs>
+            <g class="hc hc-trail hc-t2"><use href="#hc-arrow" transform="scale(1.25) translate(-40 -49)" opacity=".5"/></g>
+            <g class="hc hc-trail hc-t1"><use href="#hc-arrow" transform="scale(1.25) translate(-40 -49)"/></g>
+            <g class="hc hc-cur">
+              <g class="hc-strike">
+                <use href="#hc-bolt" transform="scale(1.25) translate(-40 -49)" fill="#6E8BFF" opacity=".9" filter="url(#hc-glow)"/>
+                <use href="#hc-bolt" transform="scale(1.25) translate(-40 -49)" fill="url(#hc-volt)"/>
+              </g>
+              <use href="#hc-arrow" transform="scale(1.25) translate(-40 -49)"/>
+            </g>
+          </svg>
         </div>
       </div>
     </section>

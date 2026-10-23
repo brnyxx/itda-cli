@@ -252,24 +252,41 @@ html[lang="ko"] .action-list li { grid-template-columns: 44px 48px 1fr auto; }
   margin: 0; padding: 18px 20px 22px; font: 13px/1.75 var(--mono); color: var(--text);
   overflow-x: auto; white-space: pre;
 }
-.term-body .l { display: inline-block; min-width: 100%; opacity: 0; animation: line .35s ease forwards; }
-.term-body .l:nth-child(1) { animation-delay: 0.2s; }
-.term-body .l:nth-child(2) { animation-delay: 1.2s; }
-.term-body .l:nth-child(3) { animation-delay: 1.3s; }
-.term-body .l:nth-child(4) { animation-delay: 1.4s; }
-.term-body .l:nth-child(5) { animation-delay: 2.3s; }
-.term-body .l:nth-child(6) { animation-delay: 2.4s; }
-.term-body .l:nth-child(7) { animation-delay: 2.5s; }
-.term-body .l:nth-child(8) { animation-delay: 2.9s; }
-.term-body .l:nth-child(9) { animation-delay: 3.6s; }
-.term-body .l:nth-child(10) { animation-delay: 3.9s; }
-.term-body .l:nth-child(11) { animation-delay: 4.1s; }
-.term-body .l:nth-child(12) { animation-delay: 4.2s; }
-.term-body .l:nth-child(13) { animation-delay: 5.3s; }
-.term-body .l:nth-child(14) { animation-delay: 5.5s; }
-.term-body .l:nth-child(15) { animation-delay: 5.7s; }
-.term-body .l:nth-child(16) { animation-delay: 5.9s; }
-@keyframes line { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* The transcript's lines reveal top to bottom once the cursor has struck
+   the prompt (see the hero cursor below), hold, and clear before the loop. */
+.term-body .l { display: inline-block; min-width: 100%; opacity: 0; animation: hl-1 4.8s linear infinite; animation-delay: var(--hc-t, 0s); }
+.term-body .l:nth-child(1) { animation-name: hl-1; }
+@keyframes hl-1 { 0%, 6.5% { opacity: 0; transform: translateY(3px); } 7.7%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(2) { animation-name: hl-2; }
+@keyframes hl-2 { 0%, 7.7% { opacity: 0; transform: translateY(3px); } 8.9%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(3) { animation-name: hl-3; }
+@keyframes hl-3 { 0%, 8.9% { opacity: 0; transform: translateY(3px); } 10.1%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(4) { animation-name: hl-4; }
+@keyframes hl-4 { 0%, 10.1% { opacity: 0; transform: translateY(3px); } 11.3%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(5) { animation-name: hl-5; }
+@keyframes hl-5 { 0%, 11.3% { opacity: 0; transform: translateY(3px); } 12.5%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(6) { animation-name: hl-6; }
+@keyframes hl-6 { 0%, 12.5% { opacity: 0; transform: translateY(3px); } 13.7%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(7) { animation-name: hl-7; }
+@keyframes hl-7 { 0%, 13.7% { opacity: 0; transform: translateY(3px); } 14.9%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(8) { animation-name: hl-8; }
+@keyframes hl-8 { 0%, 14.9% { opacity: 0; transform: translateY(3px); } 16.1%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(9) { animation-name: hl-9; }
+@keyframes hl-9 { 0%, 16.1% { opacity: 0; transform: translateY(3px); } 17.3%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(10) { animation-name: hl-10; }
+@keyframes hl-10 { 0%, 17.3% { opacity: 0; transform: translateY(3px); } 18.5%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(11) { animation-name: hl-11; }
+@keyframes hl-11 { 0%, 18.5% { opacity: 0; transform: translateY(3px); } 19.7%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(12) { animation-name: hl-12; }
+@keyframes hl-12 { 0%, 19.7% { opacity: 0; transform: translateY(3px); } 20.9%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(13) { animation-name: hl-13; }
+@keyframes hl-13 { 0%, 20.9% { opacity: 0; transform: translateY(3px); } 22.1%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(14) { animation-name: hl-14; }
+@keyframes hl-14 { 0%, 22.1% { opacity: 0; transform: translateY(3px); } 23.3%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(15) { animation-name: hl-15; }
+@keyframes hl-15 { 0%, 23.3% { opacity: 0; transform: translateY(3px); } 24.5%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
+.term-body .l:nth-child(16) { animation-name: hl-16; }
+@keyframes hl-16 { 0%, 24.5% { opacity: 0; transform: translateY(3px); } 25.7%, 95% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; transform: none; } }
 .term-body b.p { color: var(--blue-hi); font-weight: 500; }
 .term-body b.you { color: var(--green); }
 .term-body i { color: var(--faint); font-style: normal; }
@@ -468,6 +485,70 @@ h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -.01em; }
   .term-body .l { animation: none; opacity: 1; }
   .progress i { animation: none; width: 100%; }
   .btn, .pack { transition: none; }
+}
+
+/* The hero cursor: the arrow from the mark flies in from the lower left,
+   strikes the prompt (the bolt flashes, the transcript appears), jumps to the
+   About window and strikes once more (its title bar lights), then holds.
+   One 4.8 s period shared by every piece; transform and opacity only.
+   --hc-t shifts every clock together (used by the frame captures). */
+.desk {
+  --hc-start: translate(-6%, 106%);
+  --hc-prompt: translate(252px, 172px);
+  --hc-about: translate(262px, 11px);
+}
+.hero-cursor { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 40; pointer-events: none; }
+.hc { transform-box: view-box; transform-origin: 0 0; filter: drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+.hc-cur, .hc-trail { opacity: 0; transform: var(--hc-start); animation-fill-mode: both; }
+.hc-cur { animation: hc-move 4.8s linear infinite both, hc-show 4.8s linear infinite both; animation-delay: var(--hc-t, 0s); }
+.hc-trail { animation: hc-move 4.8s linear infinite both, hc-trail 4.8s linear infinite both; }
+.hc-t1 { animation-delay: calc(var(--hc-t, 0s) + .05s); }
+.hc-t2 { animation-delay: calc(var(--hc-t, 0s) + .1s); }
+.hc-strike { transform-box: view-box; transform-origin: 0 0; opacity: 0; animation: hc-strike 4.8s linear infinite; animation-delay: var(--hc-t, 0s); }
+@keyframes hc-move {
+  0% { transform: var(--hc-start); animation-timing-function: cubic-bezier(.15, .85, .25, 1); }
+  5.2%, 29% { transform: var(--hc-prompt); animation-timing-function: cubic-bezier(.3, .8, .2, 1); }
+  34.2%, 97.4% { transform: var(--hc-about); }
+  97.5%, 100% { transform: var(--hc-start); }
+}
+@keyframes hc-show { 0% { opacity: 0; } 1.5%, 94% { opacity: 1; } 97%, 100% { opacity: 0; } }
+@keyframes hc-trail {
+  0%, .8% { opacity: 0; } 1.6%, 4.6% { opacity: .5; } 6.5%, 28.8% { opacity: 0; }
+  29.6%, 33.6% { opacity: .5; } 35.5%, 100% { opacity: 0; }
+}
+@keyframes hc-strike {
+  0%, 5.2% { opacity: 0; transform: scale(.5); }
+  5.8% { opacity: 1; transform: scale(1.5); }
+  8%, 34.2% { opacity: 0; transform: scale(.6); }
+  34.8% { opacity: 1; transform: scale(1.5); }
+  37.3%, 100% { opacity: 0; transform: scale(.6); }
+}
+.desk .about .bar, .desk .actions .bar { position: relative; }
+.desk .about .bar::after, .desk .actions .bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(110,139,255,.6), rgba(47,91,234,.45));
+  opacity: 0;
+}
+.desk .about .bar::after { animation: hc-light 4.8s linear infinite; animation-delay: var(--hc-t, 0s); }
+@keyframes hc-light { 0%, 34.2% { opacity: 0; } 34.6%, 36.4% { opacity: 1; } 37.5%, 100% { opacity: 0; } }
+@media (max-width: 960px) {
+  /* The desk is a stack here and About is hidden: the second strike lands on
+     the actions window instead. */
+  .desk { --hc-prompt: translate(252px, 69px); --hc-about: translate(60%, calc(100% - 250px)); }
+  .desk .about .bar::after { animation: none; }
+  .desk .actions .bar::after { animation: hc-light 4.8s linear infinite; animation-delay: var(--hc-t, 0s); }
+}
+@media (max-width: 640px) {
+  .desk { --hc-prompt: translate(218px, 64px); --hc-about: translate(60%, calc(100% - 102px)); }
+}
+.desk.off *, .desk.off *::after,
+.desk.off .about .bar::after, .desk.off .actions .bar::after { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  /* No movement: the cursor rests at the prompt with the bolt as a still. */
+  .hc-trail { display: none; }
+  .hc-cur, .hc-strike, .desk .about .bar::after, .desk .actions .bar::after { animation: none; }
+  .hc-cur { transform: var(--hc-prompt); opacity: 1; }
+  .hc-strike { opacity: 1; transform: none; }
 }
 
 /* The setup transcript has long lines: they scroll inside the window on

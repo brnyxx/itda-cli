@@ -116,6 +116,12 @@ if (clock) {
   tick();
   setInterval(tick, 1000);
 }
+const desk = document.querySelector(".desk");
+if (desk && "IntersectionObserver" in window) {
+  // The cursor, the transcript and the title-bar flash only run while the
+  // desk is on screen; the class pauses every animation in it.
+  new IntersectionObserver(([entry]) => desk.classList.toggle("off", !entry.isIntersecting)).observe(desk);
+}
 const wins = [...document.querySelectorAll("[data-win]")];
 let zTop = 10;
 const drag = window.matchMedia("(min-width: 961px) and (pointer: fine)");
