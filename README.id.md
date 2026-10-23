@@ -247,7 +247,11 @@ news.ycombinator.com untuk saya". Agen memanggil `itda_setup`. itda melihat
 situs, menyusun draf dan mencobanya dengan cara yang sama. Aksi-aksinya muncul
 sebagai alat dalam percakapan yang sama. Halaman berskrip terbuka sebentar di
 jendela browser pada layar Anda. Saat sebuah pembacaan minta masuk,
-`itda_login` membuka browser Anda sendiri; agen hanya melihat id akun.
+`itda_login` membuka browser Anda sendiri; agen hanya melihat id akun. Jika
+penyiapan menyisakan satu pembacaan atau tidak sama sekali, agen dapat
+menyusun sendiri draf situs dari dokumentasinya dengan `itda_prepare`: agen
+melihat bentuk dan bukti, tidak pernah isi situs, dan itda hanya menyimpan
+apa yang disebut bukti dan apa yang menjawab.
 
 Lewati terminal dan serahkan ini ke Claude Code, Cursor atau Codex, bersama
 alamat situs yang Anda pakai:

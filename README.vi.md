@@ -228,7 +228,11 @@ news.ycombinator.com cho tôi". Nó gọi `itda_setup`. itda xem trang web, so�
 nháp và thử theo cùng cách. Các hành động của nó xuất hiện thành công cụ trong
 cùng cuộc hội thoại. Một trang do script vẽ mở chốc lát trong cửa sổ trình duyệt
 trên màn hình của bạn. Khi một lượt đọc bảo đăng nhập, `itda_login` mở trình
-duyệt của chính bạn; agent chỉ thấy id tài khoản.
+duyệt của chính bạn; agent chỉ thấy id tài khoản. Khi thiết lập chỉ giữ lại một
+lượt đọc hoặc không giữ lượt nào, agent có thể tự soạn bản nháp cho trang web
+từ tài liệu của nó bằng `itda_prepare`: agent thấy hình dạng và bằng chứng,
+không bao giờ thấy những gì trang web chứa, và itda chỉ giữ lại những gì bằng
+chứng nêu ra và thực sự trả lời.
 
 Bỏ qua terminal và đưa đoạn này cho Claude Code, Cursor hoặc Codex, cùng địa
 chỉ một trang web bạn dùng:
