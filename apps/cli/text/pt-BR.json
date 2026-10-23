@@ -101,7 +101,7 @@
   "ask_refresh": "Gravar estas alterações em '{site}'? [y/N] ",
   "refresh_kept": "'{site}' fica como está. Rode de novo com --yes para gravar as alterações.",
   "refresh_written": "'{site}' atualizado. Verificando...",
-  "ask_sign_in": "Entrar em {host} aqui, com seu nome de usuário e senha? O itda preenche o formulário de login do próprio site, como itda, e guarda a sessão selada no diretório de dados. [Y/n] ",
+  "ask_sign_in": "Entrar em {host} aqui, com seu nome de usuário e senha? O itda preenche o formulário de login do próprio site por você e guarda a sessão selada no diretório de dados. [Y/n] ",
   "ask_user": "Nome de usuário para {site}: ",
   "ask_password": "Senha de {user} em {site} (enviada uma vez ao formulário de login do site, nunca salva): ",
   "no_user": "Nenhum nome de usuário foi informado",

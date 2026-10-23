@@ -683,3 +683,40 @@ async fn a_signed_in_401_from_the_browser_pauses_the_account_not_the_transport()
         "auth_required"
     );
 }
+
+#[tokio::test]
+async fn a_change_carries_the_same_user_agent_as_a_read() {
+    let agents = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log = agents.clone();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = Router::new().fallback(any(move |headers: axum::http::HeaderMap| {
+        let log = log.clone();
+        async move {
+            log.lock().unwrap().push(
+                headers
+                    .get("user-agent")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_owned(),
+            );
+            "ok"
+        }
+    }));
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let net = network(
+        Store::in_memory().unwrap(),
+        clock(),
+        Events::default(),
+        |_| Err(AppError::api("browser_unavailable", 502)),
+    );
+    net.fetch(Request::read(&base)).await.unwrap();
+    let mut change = Request::read(&base);
+    change.method = "POST".into();
+    change.read_only = false;
+    change.body = Some(b"title=hello".to_vec());
+    net.fetch(change).await.unwrap();
+    // The installed browser's user agent when there is one, else itda's own.
+    let expected = itda_browser::transport::user_agent().unwrap_or(USER_AGENT.to_owned());
+    assert_eq!(*agents.lock().unwrap(), [expected.clone(), expected]);
+}

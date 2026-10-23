@@ -101,7 +101,7 @@
   "ask_refresh": "Écrire ces modifications dans '{site}' ? [y/N] ",
   "refresh_kept": "'{site}' conservé tel quel. Relancez avec --yes pour écrire les modifications.",
   "refresh_written": "'{site}' mis à jour. Vérification en cours...",
-  "ask_sign_in": "Vous connecter à {host} ici, avec votre nom d'utilisateur et votre mot de passe ? itda remplit le formulaire de connexion du site, en son propre nom, et garde la session scellée dans le répertoire de données. [Y/n] ",
+  "ask_sign_in": "Vous connecter à {host} ici, avec votre nom d'utilisateur et votre mot de passe ? itda remplit le formulaire de connexion du site pour vous et garde la session scellée dans le répertoire de données. [Y/n] ",
   "ask_user": "Nom d'utilisateur pour {site} : ",
   "ask_password": "Mot de passe de {user} sur {site} (envoyé une fois au formulaire de connexion du site, jamais enregistré) : ",
   "no_user": "Aucun nom d'utilisateur n'a été donné",
