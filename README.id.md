@@ -77,7 +77,7 @@ berubah. itda memindahkan pekerjaan itu ke langkah pemasangan:
 | Perubahan di situs | Apa pun yang diputuskan model | Persetujuan sekali pakai untuk masukan yang persis, diberikan orang di terminal atau aplikasi agen |
 | Teks di halaman yang berbunyi "abaikan instruksi sebelumnya" | Masuk ke prompt | Ditandai data tak tepercaya, tidak pernah menjadi alat |
 | Kredensial | Diketik ke halaman oleh model | Di keyring OS; agen hanya melihat id akun |
-| Saat diblokir | Coba lagi, ganti IP, tiru browser | Berhenti, memberi tahu Anda, menunggu Anda melanjutkan |
+| Saat diblokir | Coba lagi, ganti IP, tiru browser | Mencoba pembacaan sekali lagi di browser yang terpasang di komputer Anda, mengingat yang berhasil, tidak menjeda apa pun |
 | Apa yang terjadi | Riwayat obrolan | Log audit berantai hash yang bisa Anda verifikasi |
 
 ## Yang bisa dan tidak bisa dilakukan
@@ -120,6 +120,14 @@ mereka tinggalkan.
   Anda menyetujuinya berdasarkan nama, ukuran, dan hash.
 - Apa pun yang Anda rekam sendiri saat memakainya, di browser Anda atau sebagai
   berkas HAR.
+- Halaman di balik halaman challenge, ketika browser di komputer Anda bisa
+  melewatinya. itda mencoba pembacaan itu sekali lagi di dalam browser tersebut,
+  tersembunyi, khusus untuk satu situs dan akun itu, dan mengingat yang
+  berhasil, sehingga panggilan berikutnya mulai dari sana. Browser tetap hangat
+  di antara panggilan CLI dan tertutup setelah lima menit menganggur; mengganti
+  kata pencarian tidak memulainya ulang. Semua yang dimuat halaman melewati
+  pemeriksaan alamat dan pembacaan yang sama seperti permintaan langsung. Lihat
+  [kebijakan transport](docs/HONEST_CLIENT.md).
 
 **Berfungsi setelah Anda rekam**
 
@@ -141,10 +149,9 @@ mereka tinggalkan.
   tidak apa yang dilakukan skrip dengannya.
 - Isi yang digambar di kanvas atau menjadi gambar. itda membaca teks dalam HTML,
   JSON dan XML; itda tidak melihat piksel.
-- Situs di balik challenge atau pengelola bot (Cloudflare, Akamai, captcha).
-  itda menyebut identitasnya dan tidak pernah meniru browser. itda menjeda situs
-  itu sampai Anda melanjutkannya. Lihat
-  [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- Challenge yang juga tidak bisa dilewati browser Anda, atau captcha. itda tidak
+  memecahkan captcha. Pembacaan itu gagal dan mengatakannya; tidak ada yang
+  dijeda. Lihat [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - Apa pun yang tidak bisa dilihat akun Anda. itda tidak punya akun sendiri; ia
   memakai akun Anda.
 
@@ -171,7 +178,10 @@ ulang; sunting secara manual.
 
 Itulah pertukarannya. Agen browser beradaptasi pada setiap jalannya, dan karena
 itu lambat dan tidak pasti. itda adalah satu permintaan dan jawaban yang sama
-setiap kali. Ia gagal dengan jelas saat situs berpindah.
+setiap kali; setelah challenge, satu percobaan lagi di browser Anda, dan jawaban
+tetap sama. Ia gagal dengan jelas saat situs berpindah.
+`docs/TRANSPORT_BENCHMARKS.md` memuat angkanya, termasuk satu yang belum
+dipenuhi itda.
 
 ## Berdampingan dengan agen browser
 
@@ -336,7 +346,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # apa yang dilakukan agen
 itda check [<site>|--all]                # apakah setiap pembacaan masih cocok dengan situs?
 itda refresh <site>                      # situs berubah: susun ulang draf, pertahankan yang Anda putuskan
-itda resume <site>                       # setelah situs menolak atau kunci kedaluwarsa
+itda resume <site>                       # setelah jeda dalam mode HTTP langsung, atau kunci yang kedaluwarsa
 itda feedback                            # laporkan masalah: membuka isu baru yang sudah terisi
 ```
 
@@ -372,7 +382,7 @@ pada kode keluar:
 | 2 | masukan buruk atau aksi tidak dikenal |
 | 10 | masuk lagi (`itda login`) |
 | 11 | halaman sudah tidak cocok dengan definisinya |
-| 12 | situs menolak; dijeda sampai `itda resume` |
+| 12 | situs menolak pembacaan ini, di browser juga; `paused: false` berarti tidak ada yang perlu dilanjutkan |
 | 13 | dibatasi lajunya |
 | 14 | situs menolak permintaan yang satu ini sebagai tidak diizinkan; masuk lagi tidak akan membantu |
 | 20 | perlu persetujuan, atau pengguna belum menjawab (atau perubahan dimatikan) |
@@ -390,8 +400,11 @@ pada kode keluar:
 - **Orang menyetujui perubahan.** Setiap persetujuan mencakup satu permintaan
   dengan masukan, akun, definisi dan kredensial yang persis. Ia berlaku sekali
   dan kedaluwarsa.
-- **Pemblokiran dilaporkan, tidak diakali.** itda menyebut identitasnya dan
-  tidak pernah meniru browser. Ia menjeda situs yang menolaknya. Lihat
+- **Challenge mendapat satu percobaan lagi, di browser Anda.** Pembacaan yang
+  dijawab situs dengan halaman challenge dijalankan sekali lagi di dalam browser
+  yang terpasang di komputer Anda; itda mengingat yang berhasil. Perubahan
+  dikirim sekali dan tidak pernah lewat browser. `ITDA_TRANSPORT=http`
+  mempertahankan HTTP langsung saja. Lihat
   [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - **Aksi terverifikasi.** Sebuah definisi menyatakan seperti apa respons yang
   benar, sehingga "sudah keluar" dan "situs berubah" adalah galat, bukan data.
@@ -407,8 +420,9 @@ menegakkannya.
 | 1 | `itda-html`, `itda-store` | Ekstraksi HTML bebas skrip; penyimpanan SQLite lokal |
 | 2 | `itda-spec` | Format definisi, pembangunan permintaan, verifikasi respons |
 | 3 | `itda-policy` | Klasifikasi baca/tulis, pemeriksaan keamanan definisi, persetujuan |
-| 4 | `itda-net` | HTTP terbatas, pengaturan laju, deteksi pemblokiran, penjaga alamat privat |
-| 5 | `itda-vault` | Akun dan rahasia di keyring OS atau lingkungan |
+| 4 | `itda-browser` | Masuk, rekaman, transport pembacaan browser terisolasi |
+| 5 | `itda-net` | Transport adaptif, cache strategi, pengaturan laju, penjaga alamat privat |
+| 6 | `itda-vault` | Akun dan rahasia di keyring OS atau lingkungan |
 | 7 | `itda-runtime` | Menjalankan aksi: kredensial, persetujuan, pembentukan, log audit |
 | 9 | `itda-setup` | Langkah penyiapan, masuk dan pemeriksaan, untuk CLI dan server MCP sekaligus |
 | 10 | `itda-mcp` | Server MCP lewat stdio |

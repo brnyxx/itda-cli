@@ -18,10 +18,12 @@ the user's approval, for example:
 - a change running without a matching single-use approval
 - a credential reaching another origin, a log, an agent or a model
 - a request reaching a private address without the user's permission
-- itda contacting a blocked or challenged site again before the user resumes it
+- itda contacting a paused site before the user resumes it
+- browser recovery leaking credentials or replaying a change
 
-Out of scope: websites that refuse itda's requests. itda reports and pauses on
-a block by design; see [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+Out of scope: websites that still refuse itda's requests after bounded read
+recovery. itda reports an unresolved read without locking the site; see
+[docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 
 ## Supported versions
 

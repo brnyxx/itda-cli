@@ -76,7 +76,7 @@ trabalho para um passo de instalação:
 | Alterações no site | O que o modelo decidir | Aprovação de uso único para entradas exatas, concedida por uma pessoa num terminal ou no app do agente |
 | Texto na página dizendo "ignore as instruções anteriores" | No prompt | Marcado como dado não confiável, nunca uma ferramenta |
 | Credenciais | Digitadas na página pelo modelo | No chaveiro do sistema; o agente só vê ids de conta |
-| Ao ser bloqueado | Tentar de novo, trocar IP, imitar um navegador | Parar, avisar você, esperar você retomar |
+| Ao ser bloqueado | Tentar de novo, trocar IP, imitar um navegador | Tentar a leitura mais uma vez no seu próprio navegador instalado, lembrar o que funcionou, não pausar nada |
 | O que aconteceu | Histórico do chat | Log de auditoria encadeado por hash que você pode verificar |
 
 ## O que ele pode e não pode fazer
@@ -116,6 +116,14 @@ se deparou; `itda draft page` ou `itda record` dizem o que deixaram de fora.
   uma alteração que envia um arquivo que você indica; você o aprova pelo nome,
   tamanho e hash.
 - Qualquer coisa que você gravou usando, no seu navegador ou como arquivo HAR.
+- Páginas atrás de uma página de desafio, quando o navegador do seu
+  computador passa por ela. O itda tenta a leitura mais uma vez dentro desse
+  navegador, oculto, reservado para esse site e essa conta, e lembra o que
+  funcionou, então a próxima chamada começa dali. O navegador fica aquecido
+  entre as chamadas da CLI e fecha depois de cinco minutos sem uso; mudar um
+  termo de busca não o reinicia. Tudo o que a página carrega passa pelas mesmas
+  verificações de endereço e de leitura que uma requisição direta. Veja [a
+  política de transporte](docs/HONEST_CLIENT.md).
 
 **Funciona depois de gravar**
 
@@ -135,9 +143,9 @@ se deparou; `itda draft page` ou `itda record` dizem o que deixaram de fora.
   que o script faz com ele.
 - Conteúdo desenhado num canvas ou numa imagem. O itda lê texto em HTML, JSON e
   XML; não olha pixels.
-- Sites atrás de um desafio ou de um gerenciador de bots (Cloudflare, Akamai,
-  um captcha). O itda se identifica e nunca imita um navegador. Pausa o site até
-  você retomá-lo. Veja [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- Um desafio pelo qual seu navegador também não passa, ou um captcha. O itda
+  não resolve captchas. A leitura falha e diz isso; nada fica pausado. Veja
+  [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - Qualquer coisa que sua conta não pode ver. O itda não tem conta própria; usa
   a sua.
 
@@ -161,8 +169,11 @@ depois. Uma definição instalada com `itda add` não tem fontes e não pode ser
 atualizada; edite-a à mão.
 
 Essa é a troca. Um agente de navegador se adapta a cada execução, e por isso é
-lento e não determinístico. O itda é uma requisição e a mesma resposta toda vez.
-Quebra em voz alta quando o site muda.
+lento e não determinístico. O itda é uma requisição e a mesma resposta toda
+vez; depois de um desafio, é mais uma tentativa no seu navegador, e ainda a
+mesma resposta. Quebra em voz alta quando o site muda.
+`docs/TRANSPORT_BENCHMARKS.md` tem os números, inclusive o que o itda ainda não
+alcança.
 
 ## Ao lado dos agentes de navegador
 
@@ -323,7 +334,7 @@ itda approvals / approve <id> / reject <id>
 itda audit [--verify]                    # o que os agentes fizeram
 itda check [<site>|--all]                # cada leitura ainda corresponde ao site?
 itda refresh <site>                      # um site mudou: rascunhe de novo, mantenha o que você decidiu
-itda resume <site>                       # depois que um site recusou ou uma chave expirou
+itda resume <site>                       # depois de uma pausa no modo HTTP direto, ou de uma chave expirada
 itda feedback                            # relate um problema: abre um issue novo, já preenchido
 ```
 
@@ -359,7 +370,7 @@ pelo código de saída:
 | 2 | entrada inválida ou ação desconhecida |
 | 10 | entre de novo (`itda login`) |
 | 11 | a página não corresponde mais à sua definição |
-| 12 | o site recusou; pausado até `itda resume` |
+| 12 | o site recusou esta leitura, no navegador também; `paused: false` quer dizer que não há nada a retomar |
 | 13 | limitado por frequência |
 | 14 | o site recusou esta requisição específica como não permitida; entrar de novo não vai ajudar |
 | 20 | precisa de aprovação, ou o usuário ainda não respondeu (ou as alterações estão desligadas) |
@@ -376,9 +387,11 @@ pelo código de saída:
   uma alteração.
 - **Pessoas aprovam alterações.** Cada aprovação cobre uma requisição com
   entradas, conta, definição e credencial exatas. Funciona uma vez e expira.
-- **Bloqueios são informados, não contornados.** O itda se identifica e nunca
-  imita um navegador. Pausa um site que o recusa. Veja
-  [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
+- **Um desafio ganha mais uma tentativa, no seu navegador.** Uma leitura que o
+  site responde com uma página de desafio roda mais uma vez dentro do navegador
+  instalado no seu computador; o itda lembra o que funcionou. Uma alteração é
+  enviada uma vez e nunca pelo navegador. `ITDA_TRANSPORT=http` mantém só o
+  HTTP direto. Veja [docs/HONEST_CLIENT.md](docs/HONEST_CLIENT.md).
 - **Ações verificadas.** Uma definição declara como é uma resposta correta,
   então "deslogado" e "o site mudou" são erros, não dados.
 
@@ -393,8 +406,9 @@ isso.
 | 1 | `itda-html`, `itda-store` | Extração de HTML sem scripts; o armazenamento SQLite local |
 | 2 | `itda-spec` | Formato de definição, construção de requisições, verificação de respostas |
 | 3 | `itda-policy` | Classificação leitura/escrita, verificações de segurança de definições, aprovações |
-| 4 | `itda-net` | HTTP limitado, cadência, detecção de bloqueio, proteção contra endereços privados |
-| 5 | `itda-vault` | Contas e segredos no chaveiro do sistema ou no ambiente |
+| 4 | `itda-browser` | Login, gravação, transporte de leitura isolado no navegador |
+| 5 | `itda-net` | Transporte adaptativo, cache de estratégias, cadência, proteção contra endereços privados |
+| 6 | `itda-vault` | Contas e segredos no chaveiro do sistema ou no ambiente |
 | 7 | `itda-runtime` | Roda ações: credenciais, aprovações, modelagem, log de auditoria |
 | 9 | `itda-setup` | Os passos de configuração, login e verificação, para a CLI e o servidor MCP igualmente |
 | 10 | `itda-mcp` | Servidor MCP sobre stdio |

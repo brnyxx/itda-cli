@@ -262,7 +262,7 @@
             <li data-i18n="scope.n2">APIs that sign every request</li>
             <li data-i18n="scope.n3">Pages assembled from HTML fragments (htmx and the like)</li>
             <li data-i18n="scope.n4">Content drawn on a canvas or into an image</li>
-            <li data-i18n="scope.n5">Sites behind a challenge or a bot manager: itda is an honest client and stops</li>
+            <li data-i18n="scope.n5">A captcha, or a challenge your own browser does not get past either</li>
             <li data-i18n="scope.n6">Anything your account cannot see</li>
           </ul>
         </div>
@@ -323,9 +323,9 @@
               <li><b data-i18n="cmp.r3">Changes on the site</b><span data-i18n="cmp.r3b">Single-use approval for exact inputs, given by a person</span></li>
               <li><b data-i18n="cmp.r4">"Ignore previous instructions" on a page</b><span data-i18n="cmp.r4b">Marked untrusted data, never a tool</span></li>
               <li><b data-i18n="cmp.r5">Passwords and keys</b><span data-i18n="cmp.r5b">In the OS keyring; agents see account ids</span></li>
-              <li><b data-i18n="cmp.r6">Being blocked</b><span data-i18n="cmp.r6b">Stop, tell you, wait for <code>itda resume</code></span></li>
+              <li><b data-i18n="cmp.r6">Being blocked</b><span data-i18n="cmp.r6b">Try once more in your own installed browser, remember what worked</span></li>
           </ol>
-          <p class="lane-note" data-i18n="cmp.ours.note">One answer per action. Every change waits for you; stops when refused.</p>
+          <p class="lane-note" data-i18n="cmp.ours.note">One answer per action. Every change waits for you; a read refused in the browser too fails and says so.</p>
         </div>
       </div>
       <p class="cmp-next" data-i18n="cmp.next">Playwright MCP, browser-use and computer use drive a browser on every task. itda does not replace them: a page you will use once, or a site itda does not cover, is theirs. itda is for the site an agent will call again and again. Record it once in a browser, review the actions, then run them over HTTP. Use both: a browser agent to explore, itda for the calls that run every day.</p>
@@ -363,8 +363,8 @@
         </article>
         <article>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
-          <h3 data-i18n="safe.6">Honest client</h3>
-          <p data-i18n="safe.6p">itda says who it is and never imitates a browser. It stops when a site refuses it. It does not solve captchas or look for another way around a block.</p>
+          <h3 data-i18n="safe.6">One more try, in your browser</h3>
+          <p data-i18n="safe.6p">A read the site answers with a challenge page runs once more inside the browser installed on your computer, and itda remembers what worked. A change is sent once and never through the browser. itda does not solve captchas; a read it cannot get past fails and pauses nothing.</p>
         </article>
       </div>
     </section>

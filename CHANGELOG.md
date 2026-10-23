@@ -7,6 +7,39 @@ change the definition format or the CLI.
 
 ## [Unreleased]
 
+### Added
+
+- Reads that a site answers with a challenge page can recover through the
+  browser installed on the computer. itda fetches the page inside a hidden
+  browser window kept for that one site and account and, for a `GET`, lets
+  the page render; a read in this mode carries the browser's user agent so
+  the direct request and the browser look the same to the site. itda
+  remembers which way worked for an hour, per site, account and action, so
+  the next call does not pay for the failed try again, and forgets a way that
+  failed after a few minutes. The browser session stays warm in a worker
+  process across CLI calls and closes after five idle minutes; changing an
+  input does not restart it. Everything the page loads passes the same
+  address and read checks as a direct request: other sites get neither the
+  account's credentials nor a referrer, private addresses stay refused, and a
+  page may send a GraphQL query, never a mutation. A challenge the browser
+  did not get past fails that one read (`blocked_by_site`, `paused: false`)
+  without pausing the site. A browser answer may be up to 16 MiB. The worker
+  keeps its files under `browser-runtime/` in the data directory, one
+  directory per itda build; a build's directory is removed a day after it
+  stopped being used. `ITDA_TRANSPORT=http` keeps direct HTTP only, with the
+  pauses it always had. `docs/HONEST_CLIENT.md` has the rules,
+  `docs/TRANSPORT_BENCHMARKS.md` the measurements.
+
+### Changed
+
+- The honest-client rule changes: itda no longer stops at a challenge. A read
+  may carry the installed browser's user agent and run inside that browser
+  after a challenge, and a challenged read no longer pauses the site. What
+  stays: a change is sent once, over direct HTTP, after a single-use approval;
+  credentials go only to their own site and account; one request at a time
+  per site, with `Retry-After` respected, whichever way the request goes;
+  captchas are not solved.
+
 ## [0.6.0] - 2026-10-23
 
 Files in and out, a check after a lost answer, sessions kept in browser

@@ -46,8 +46,8 @@ checked.
   with what to do next, never as data.
 - **Read-only by default.** Changes wait for a person to approve the exact
   request, in a terminal or in the agent app. No agent tool can approve.
-- **Honest.** itda says who it is and never imitates a browser. It stops when a
-  site refuses it.
+- **Adaptive.** Reads can recover through browser fetch and rendering.
+  Unresolved reads fail without locking the site; changes are never replayed.
 - **Accountable.** A local log records every call, approval and change. Each
   entry seals the one before it, so edits show.
 - **Local.** No server, account or telemetry. Secrets stay in your OS keyring.

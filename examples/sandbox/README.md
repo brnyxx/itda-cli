@@ -30,7 +30,7 @@ itda call sandbox.create-notice --title hi --approval <id>   # runs once
 itda call sandbox.write-notice --title hi   # a form post: approve it the same way;
                                             # itda reads a fresh CSRF token first
 itda audit                                  # everything above, hash-chained
-itda call sandbox.reports                   # exit 12: the site refused, so it is paused
+itda call sandbox.reports                   # exit 12: the site refused, in your browser too
 itda call sandbox.list-notices              # still paused, nothing is sent
 itda resume sandbox
 ```
