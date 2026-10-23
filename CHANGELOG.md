@@ -137,6 +137,14 @@ change the definition format or the CLI.
 
 ### Fixed
 
+- A site whose only reads save files ended `itda setup` as if nothing
+  worked: setup skipped every file read ("saves a file"), so no read had
+  answered and the definition was thrown away. Setup now tries a file read
+  once, through the gate, by the answer's headers and first bytes: the
+  status, media type and size the definition allows count it as working, the
+  rest of the answer is dropped and nothing is saved. A read answered with a
+  page instead of the file is left out (`wrong_media_type`). `itda check`
+  still skips file reads.
 - A same-origin redirect or a next-page address of the form
   `/graphql?query=mutation{...}` passed the read check, because only the
   path and the query keys were read. The check now parses a GraphQL document

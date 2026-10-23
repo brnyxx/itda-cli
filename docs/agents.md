@@ -77,7 +77,9 @@ bytes, sha256 …)` once. Over MCP the result carries the manifest and a
 download says why in one word, and keeps nothing: `wrong_media_type` (the site
 answered with a page or another kind of content), `partial_answer` (a 206 or a
 short body), `empty_answer`, `too_large`. `itda check` skips file reads
-("saves a file").
+("saves a file"). `itda setup` tries each one once by its headers and first
+bytes (the media type and size the definition allows) and keeps nothing, so a
+site whose only reads are files is set up like any other.
 
 A change whose body carries a file takes the path of a file on the user's
 computer in the input its definition names. The user approves that exact file:

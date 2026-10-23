@@ -542,7 +542,11 @@ bytes:
 
 Over MCP the result carries the same manifest and a `resource_link` to the
 file. A file read has no `model`, `pagination`, pointers or extraction, and
-`itda check` skips it ("saves a file") rather than fill the folder. A transfer
+`itda check` skips it ("saves a file") rather than fill the folder. `itda
+setup` tries it once, through the gate like every read: it reads the answer's
+headers and first bytes, counts the read as working when they describe a file
+the definition allows (status, media type, size), and drops the rest; nothing
+is saved. A transfer
 longer than the pace allows keeps its turn at the gate by renewing it; a turn
 lost mid-transfer stops it (`request_lease_lost`, exit 30), never retried.
 
