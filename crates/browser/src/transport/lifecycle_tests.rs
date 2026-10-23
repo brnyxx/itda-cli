@@ -29,7 +29,9 @@ async fn reused_target_is_blank_between_actions_and_reset_discards_it() {
             credential_fingerprint: Some(String::new()),
             read_only: true,
             limit: 4096,
-            timeout: Duration::from_secs(10),
+            // The first call starts the browser; on a busy CI runner that alone
+            // has taken most of ten seconds.
+            timeout: Duration::from_secs(30),
             allow_local: true,
             mode: BrowserMode::Render,
             cooldowns: Vec::new(),
