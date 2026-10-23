@@ -89,6 +89,19 @@ fn probe(mut command: Command, timeout: Duration) -> Option<String> {
     result
 }
 
+/// The platform client hints name for this system, as Chrome reports it.
+pub(super) fn hint_platform() -> Option<&'static str> {
+    if cfg!(target_os = "macos") {
+        Some("macOS")
+    } else if cfg!(target_os = "windows") {
+        Some("Windows")
+    } else if cfg!(target_os = "linux") {
+        Some("Linux")
+    } else {
+        None
+    }
+}
+
 fn from_version(output: &str) -> Option<String> {
     let version = output.split_whitespace().find_map(|word| {
         let parts = word.split('.').collect::<Vec<_>>();

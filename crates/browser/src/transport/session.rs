@@ -1,4 +1,4 @@
-use super::{BODY_LIMIT, Browser, Call, Page, credentials, protocol::field};
+use super::{BODY_LIMIT, Browser, Call, Page, credentials, identity, protocol::field};
 use itda_types::error::AppResult;
 use serde_json::json;
 use std::time::{Duration, Instant};
@@ -129,20 +129,41 @@ impl Browser {
             )?;
         }
         self.credential_cookies = cookies;
+        // The user agent direct HTTP sends, so the site sees one client
+        // whichever way a request goes; left alone, the browser says
+        // HeadlessChrome. A definition's own `User-Agent` wins.
         let agent = call
             .request
             .headers
             .iter()
             .find(|(name, _)| name.eq_ignore_ascii_case("user-agent"))
-            .map(|(_, value)| value.as_str())
-            .unwrap_or("");
-        self.command(
-            Some(&session),
-            "Network.setUserAgentOverride",
-            json!({"userAgent":agent}),
-            call,
-        )?;
+            .map(|(_, value)| value.clone())
+            .or(self.agent(call)?)
+            .unwrap_or_default();
+        let mut agent = json!({"userAgent":agent});
+        // Without metadata Chrome stops sending client hints; with only the
+        // required fields it fills in its own brands, as it would normally.
+        if let Some(platform) = identity::hint_platform() {
+            agent["userAgentMetadata"] = json!({
+                "platform":platform, "platformVersion":"", "architecture":"",
+                "model":"", "mobile":false,
+            });
+        }
+        self.command(Some(&session), "Network.setUserAgentOverride", agent, call)?;
         Ok(())
+    }
+
+    /// The user agent this browser reports, with `HeadlessChrome` read as the
+    /// `Chrome` it is, asked once over the protocol so no `--version` run is
+    /// needed. It matches what direct HTTP derives from `--version`.
+    fn agent(&mut self, call: &mut Call<'_>) -> AppResult<Option<String>> {
+        if self.agent.is_none() {
+            let version = self.command(None, "Browser.getVersion", json!({}), call)?;
+            self.agent = version["userAgent"]
+                .as_str()
+                .map(|agent| agent.replace("HeadlessChrome/", "Chrome/"));
+        }
+        Ok(self.agent.clone())
     }
 
     pub(super) fn configure(
