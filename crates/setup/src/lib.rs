@@ -1261,16 +1261,41 @@ async fn keep_credentials(
 /// Lift pauses on every origin the site's actions use.
 pub async fn resume(ctx: &Context, site: &str, account: Option<&str>) -> AppResult<()> {
     let spec = sites::load(&ctx.home, site)?;
+    for origin in browser_origins(&spec) {
+        ctx.net.resume(&origin, account.unwrap_or_default()).await?;
+    }
+    Ok(())
+}
+
+pub fn browser_origins(spec: &Spec) -> Vec<String> {
     let mut origins: Vec<String> = spec
         .operations
         .iter()
-        .filter_map(|op| url::Url::parse(spec.operation_base(op)).ok())
+        .map(|op| spec.operation_base(op))
+        .chain(std::iter::once(spec.site.base_url.as_str()))
+        .filter_map(|base| url::Url::parse(base).ok())
         .map(|url| url.origin().ascii_serialization())
         .collect();
     origins.sort();
     origins.dedup();
-    for origin in &origins {
-        ctx.net.resume(origin, account.unwrap_or_default()).await?;
+    origins
+}
+
+pub async fn reset_browser_sessions(ctx: &Context, spec: &Spec) -> AppResult<()> {
+    let mut accounts = ctx
+        .vault
+        .accounts(Some(&spec.site.name))
+        .await?
+        .into_iter()
+        .map(|account| account.id)
+        .collect::<Vec<_>>();
+    accounts.extend([String::new(), itda_runtime::DEFAULT_ACCOUNT.to_owned()]);
+    accounts.sort();
+    accounts.dedup();
+    for origin in browser_origins(spec) {
+        for account in &accounts {
+            ctx.net.reset_browser(&origin, account).await?;
+        }
     }
     Ok(())
 }

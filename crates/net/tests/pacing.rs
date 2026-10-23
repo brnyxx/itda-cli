@@ -115,6 +115,77 @@ async fn a_long_cooldown_fails_at_once() {
     assert_eq!(start.elapsed(), Duration::ZERO);
 }
 
+#[tokio::test(start_paused = true)]
+async fn origin_admission_does_not_hold_an_exclusive_network_lease() {
+    let gate = paced(0);
+    let first = gate
+        .acquire("https://example.test|first", None)
+        .await
+        .unwrap();
+    gate.admit_origin("https://example.test", None)
+        .await
+        .unwrap();
+    let second = gate
+        .acquire("https://example.test|second", None)
+        .await
+        .unwrap();
+    let started = Instant::now();
+    gate.admit_origin("https://example.test", None)
+        .await
+        .unwrap();
+    assert_eq!(started.elapsed(), Duration::ZERO);
+    second.release(Outcome::Done).await.unwrap();
+    first.release(Outcome::Done).await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn another_accounts_success_cannot_clear_an_origin_cooldown() {
+    let gate = paced(0);
+    gate.admit_origin("https://example.test", None)
+        .await
+        .unwrap();
+    gate.observe_origin(
+        "https://example.test",
+        Outcome::RateLimited(Some(Duration::from_secs(60))),
+    )
+    .await
+    .unwrap();
+    gate.observe_origin("https://example.test", Outcome::Done)
+        .await
+        .unwrap();
+    assert_eq!(
+        gate.admit_origin("https://example.test", None)
+            .await
+            .unwrap_err()
+            .public_code,
+        "rate_limited"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unknown_completion_keeps_its_lease_until_expiry() {
+    let gate = paced(0);
+    let lease = gate
+        .acquire("https://example.test|account", None)
+        .await
+        .unwrap();
+    lease.abandon();
+    assert!(
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            gate.acquire("https://example.test|account", None),
+        )
+        .await
+        .is_err()
+    );
+    tokio::time::advance(Duration::from_secs(120)).await;
+    let recovered = gate
+        .acquire("https://example.test|account", None)
+        .await
+        .unwrap();
+    recovered.release(Outcome::Done).await.unwrap();
+}
+
 // ----- against a local server, in real time, with the pace set to zero -----
 
 async fn host(router: Router) -> String {
@@ -132,6 +203,41 @@ fn network() -> Arc<Network> {
         Arc::new(Gate::with_limits(store, 0, 1000).unwrap()),
         true,
     ))
+}
+
+#[tokio::test]
+async fn adaptive_accounts_can_overlap_on_the_same_origin() {
+    let together = Arc::new(tokio::sync::Barrier::new(2));
+    let base = host(Router::new().route(
+        "/items",
+        get(move || {
+            let together = together.clone();
+            async move {
+                together.wait().await;
+                "items"
+            }
+        }),
+    ))
+    .await;
+    let net = Network::adaptive(
+        Arc::new(Gate::with_limits(Store::in_memory().unwrap(), 0, 1000).unwrap()),
+        true,
+    );
+    let first = Request {
+        account_id: "first".into(),
+        ..Request::read(format!("{base}/items"))
+    };
+    let second = Request {
+        account_id: "second".into(),
+        ..Request::read(format!("{base}/items"))
+    };
+    let (first, second) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(net.fetch(first), net.fetch(second))
+    })
+    .await
+    .unwrap();
+    assert!(first.unwrap().successful());
+    assert!(second.unwrap().successful());
 }
 
 #[tokio::test]

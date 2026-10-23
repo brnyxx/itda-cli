@@ -9,7 +9,8 @@ pub mod validate;
 
 pub use approvals::{Approval, Approvals, ExecutionRequest, ReviewInput};
 pub use classify::{
-    Rendered, dangerous_intent, operation_effect, rendered_request_effect, safe_read_url,
+    Rendered, dangerous_intent, operation_effect, rendered_request_effect, safe_graphql_read,
+    safe_read_url,
 };
 pub use cursors::Cursors;
 pub use itda_spec::Effect;

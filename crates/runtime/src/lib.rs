@@ -492,6 +492,7 @@ impl Runtime {
         request.headers = headers;
         request.body = body;
         request.account_id = account.clone().unwrap_or_default();
+        request.credential_fingerprint = Some(credential_hash.clone());
         request.interval = spec.defaults.interval();
         request.pause_on_block = !call.discovery;
         request.download = download;
@@ -712,7 +713,27 @@ impl Runtime {
         if let Some((key, value)) = &query_session {
             request.url = itda_types::url::with_query_pair(&request.url, key, value);
         }
-        let response = match self.net.fetch(request).await {
+        let contract = util::hash(&serde_json::to_vec(&(op, &spec.models))?);
+        let mut validated = None;
+        let fetched = self
+            .net
+            .fetch_validated(request, &contract, |response| {
+                if graphql && graphql_errors(response) {
+                    return itda_net::ResponseVerdict::Terminal;
+                }
+                if !op.matches_response(response) {
+                    return itda_net::ResponseVerdict::Recover;
+                }
+                match shape(spec, op, response) {
+                    Ok(data) => {
+                        validated = Some(data);
+                        itda_net::ResponseVerdict::Valid
+                    }
+                    Err(_) => itda_net::ResponseVerdict::Recover,
+                }
+            })
+            .await;
+        let response = match fetched {
             Ok(response) => response,
             // A change that failed after it may have reached the site has an
             // unknown outcome. One that never left (waiting for a turn, name
@@ -757,7 +778,12 @@ impl Runtime {
             );
         }
         if !response.successful() && !redirected {
-            return Err(refusal(&response, account.is_some()));
+            let mut error = refusal(&response, account.is_some());
+            if read && self.net.is_adaptive() && error.public_code == "blocked_by_site" {
+                error = error.with("paused", false);
+                error.remedy = "The website refused this read, in the browser too. Nothing is paused and other reads still work; check the site in your browser and try again in a few minutes.".into();
+            }
+            return Err(error);
         }
         // A GraphQL answer can carry errors behind a 2xx. For a change that
         // means the site may or may not have applied it; for a read it is
@@ -774,7 +800,12 @@ impl Runtime {
                 error
             });
         }
-        if read && !peek && response.file.is_none() && !op.matches_response(&response) {
+        if read
+            && !peek
+            && response.file.is_none()
+            && validated.is_none()
+            && !op.matches_response(&response)
+        {
             return Err(AppError::api("response_mismatch", 502));
         }
         // The change has happened, so a reply that does not match the
@@ -788,6 +819,8 @@ impl Runtime {
         } else if peek {
             let media = response.header("content-type").split(';').next();
             serde_json::json!({"media_type": media.unwrap_or_default().trim().to_ascii_lowercase()})
+        } else if let Some(data) = validated {
+            data
         } else {
             match shape(spec, op, &response) {
                 Ok(data) => data,

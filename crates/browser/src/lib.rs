@@ -1,19 +1,29 @@
-//! Browser sign-in for sites without API keys.
+//! The user's own browser: sign-in, recording, and reads that need one.
 //!
-//! itda never drives a browser to use a site. It only opens the user's own
-//! Chrome, Edge or Chromium in a fresh, empty profile at the site's sign-in
-//! page, lets the person sign in by hand, and then reads the cookies that
-//! sign-in left for that one site through the DevTools protocol, and, for a
-//! site that keeps its session in the page's own storage instead, that
-//! origin's `localStorage` and `sessionStorage` ([`storage`]). The profile
-//! is deleted afterwards, so nothing else from the user's browsing is ever
-//! visible, and cookies and storage of other sites are never read.
+//! For sign-in itda opens the user's own Chrome, Edge or Chromium in a fresh,
+//! empty profile at the site's sign-in page, lets the person sign in by hand,
+//! and then reads the cookies that sign-in left for that one site through the
+//! DevTools protocol, and, for a site that keeps its session in the page's own
+//! storage instead, that origin's `localStorage` and `sessionStorage`
+//! ([`storage`]). The profile is deleted afterwards, so nothing else from the
+//! user's browsing is ever visible, and cookies and storage of other sites are
+//! never read.
 //!
 //! [`record`] opens the same kind of window and watches the requests the
 //! person's own use of the site makes, so a definition can be drafted without
 //! the browser's developer tools.
+//!
+//! [`transport`] runs a read inside a hidden browser window when direct HTTP
+//! was answered with a challenge: one isolated session per site and account,
+//! with every request it makes checked the way a direct one is. [`broker`]
+//! keeps a few of those sessions warm across CLI calls in a worker process that
+//! exits when idle; [`supervisor`] closes a browser whose worker died.
+pub mod broker;
+mod orphans;
 pub mod record;
 pub mod storage;
+pub mod supervisor;
+pub mod transport;
 
 pub use record::{Capture, Recorder};
 pub use storage::{StorageItem, StorageSession, bearer_session, looks_like_token};
@@ -28,6 +38,10 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tungstenite::{Message, WebSocket};
+
+/// The largest DevTools message itda accepts: a 16 MiB answer as base64,
+/// with its JSON around it.
+const MESSAGE_LIMIT: usize = 24 << 20;
 
 /// One cookie as the browser reports it.
 #[derive(Clone, Debug, Deserialize)]
@@ -145,10 +159,48 @@ pub(crate) fn launch(
     url: &url::Url,
     read_timeout: Duration,
 ) -> AppResult<(Child, PathBuf, WebSocket<TcpStream>)> {
-    let profile = std::env::temp_dir().join(format!("itda-browser-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&profile)?;
-    let mut child = Command::new(browser)
+    launch_with(
+        browser,
+        url,
+        read_timeout,
+        &[],
+        Instant::now() + Duration::from_secs(30),
+    )
+}
+
+pub(crate) fn launch_with(
+    browser: &Path,
+    url: &url::Url,
+    read_timeout: Duration,
+    args: &[String],
+    deadline: Instant,
+) -> AppResult<(Child, PathBuf, WebSocket<TcpStream>)> {
+    let registry = std::env::var_os("ITDA_BROWSER_REGISTRY").map(PathBuf::from);
+    let profile = registry
+        .as_ref()
+        .map(|path| path.join("profiles"))
+        .unwrap_or_else(std::env::temp_dir)
+        .join(format!("itda-browser-{}", uuid::Uuid::new_v4()));
+    itda_types::util::private_dir(&profile)?;
+    let supervisor = registry
+        .as_ref()
+        .and_then(|_| std::env::var_os("ITDA_BROWSER_SUPERVISOR"));
+    let mut command = Command::new(supervisor.as_deref().unwrap_or(browser.as_os_str()));
+    if supervisor.is_some() {
+        command
+            .arg("__browser-process")
+            .arg("--browser")
+            .arg(browser)
+            .arg("--profile")
+            .arg(&profile)
+            .arg("--");
+    }
+    if registry.is_some() {
+        command.arg("--enable-automation");
+    }
+    let mut child = command
         .arg(format!("--user-data-dir={}", profile.display()))
+        .args(args)
         .args([
             "--remote-debugging-port=0",
             "--remote-allow-origins=http://127.0.0.1",
@@ -157,44 +209,73 @@ pub(crate) fn launch(
             "--new-window",
             url.as_str(),
         ])
-        .stdin(Stdio::null())
+        .stdin(if supervisor.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| {
+            // Nothing registered this profile yet; nobody else would remove it.
+            let _ = orphans::remove_profile(&profile);
             usage(
                 format!("Could not open {}", browser.display()),
                 "Set ITDA_BROWSER to the path of Chrome, Edge or Chromium.",
             )
         })?;
-    let connected = endpoint(&mut child, &profile).and_then(|(port, endpoint)| {
+    let connected = endpoint(&mut child, &profile, deadline).and_then(|(port, endpoint)| {
         let lost = |_| AppError::api("browser_unavailable", 502);
         let stream = TcpStream::connect(("127.0.0.1", port)).map_err(lost)?;
         stream
-            .set_read_timeout(Some(Duration::from_secs(15)))
+            .set_read_timeout(Some(
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .max(Duration::from_millis(1)),
+            ))
             .map_err(lost)?;
+        stream.set_write_timeout(Some(read_timeout)).map_err(lost)?;
         // The handshake needs whole reads; the bound applies to messages after it.
-        let (socket, _) = tungstenite::client(endpoint.as_str(), stream)
-            .map_err(|_| AppError::api("browser_unavailable", 502))?;
+        // A 16 MiB answer is one base64 protocol message of about 22 MiB, over
+        // the library's 16 MiB frame default.
+        let config = tungstenite::protocol::WebSocketConfig::default()
+            .max_message_size(Some(MESSAGE_LIMIT))
+            .max_frame_size(Some(MESSAGE_LIMIT));
+        let (socket, _) =
+            tungstenite::client::client_with_config(endpoint.as_str(), stream, Some(config))
+                .map_err(|error| match error {
+                    tungstenite::HandshakeError::Failure(tungstenite::Error::Io(error))
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) =>
+                    {
+                        AppError::api("timeout", 502)
+                    }
+                    _ => AppError::api("browser_unavailable", 502),
+                })?;
         socket
             .get_ref()
             .set_read_timeout(Some(read_timeout))
             .map_err(lost)?;
+        if let Some(registry) = &registry {
+            orphans::register(registry, &profile, &endpoint)?;
+        }
         Ok(socket)
     });
     match connected {
         Ok(socket) => Ok((child, profile, socket)),
         Err(error) => {
-            close(&mut child, &profile);
+            terminate(&mut child, &profile);
             Err(error)
         }
     }
 }
 
 /// The browser-level DevTools address the browser writes once it is ready.
-fn endpoint(child: &mut Child, profile: &Path) -> AppResult<(u16, String)> {
+fn endpoint(child: &mut Child, profile: &Path, deadline: Instant) -> AppResult<(u16, String)> {
     let file = profile.join("DevToolsActivePort");
-    let deadline = Instant::now() + Duration::from_secs(30);
     while Instant::now() < deadline {
         if let Ok(text) = std::fs::read_to_string(&file) {
             let mut lines = text.lines();
@@ -208,9 +289,18 @@ fn endpoint(child: &mut Child, profile: &Path) -> AppResult<(u16, String)> {
         if !matches!(child.try_wait(), Ok(None)) {
             break;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(
+            Duration::from_millis(100).min(deadline.saturating_duration_since(Instant::now())),
+        );
     }
-    Err(AppError::api("browser_unavailable", 502))
+    Err(AppError::api(
+        if Instant::now() >= deadline {
+            "timeout"
+        } else {
+            "browser_unavailable"
+        },
+        502,
+    ))
 }
 
 pub(crate) fn close(child: &mut Child, profile: &Path) {
@@ -218,9 +308,21 @@ pub(crate) fn close(child: &mut Child, profile: &Path) {
     while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(100));
     }
+    terminate(child, profile);
+}
+
+pub(crate) fn terminate(child: &mut Child, profile: &Path) {
+    if child.stdin.take().is_some() {
+        let _ = child.wait();
+        return;
+    }
     let _ = child.kill();
     let _ = child.wait();
-    let _ = std::fs::remove_dir_all(profile);
+    if orphans::remove_profile(profile).is_ok()
+        && let Some(registry) = std::env::var_os("ITDA_BROWSER_REGISTRY")
+    {
+        orphans::forget(Path::new(&registry), profile);
+    }
 }
 
 /// True when a cookie for `domain` is sent to `host` (RFC 6265 domain match).

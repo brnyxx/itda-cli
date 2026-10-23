@@ -97,7 +97,8 @@ what the user approved and that approval was withdrawn. \
 writes_disabled means changes are off. Never run a change the user did not ask for. \
 auth_required means the user must sign in again (itda login); api_denied means the site refused \
 this one request as not allowed (permission, scope or input), so signing in again will not help; \
-blocked_by_site means the site refused automated access and is paused until the user runs itda resume. \
+blocked_by_site means the site refused this read, in the browser too; with paused:false nothing is \
+paused and other reads still work, and only a site paused with ITDA_TRANSPORT=http needs itda resume. \
 site_rate_limited means the site asked for a wait longer than itda gives on its own: wait the \
 retry_after seconds it carries before calling that site again. \
 action_outcome_unknown means a change was sent but no answer came back: never call it again; \

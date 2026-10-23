@@ -2,8 +2,8 @@
 //! Classification only applies to blocking signals; CDN presence headers on 2xx
 //! responses are informational.
 //!
-//! Derived from Hycli `src/defend.rs` (Apache-2.0). Changes: remedies no longer
-//! suggest escalating to a browser transport or a live browser session.
+//! Derived from Hycli `src/defend.rs` (Apache-2.0). Remedies are informational;
+//! transport recovery is bounded by the network, never executed by a remedy.
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -29,16 +29,13 @@ impl Class {
         }
     }
 
-    /// What the user can do. Blocks are reported, never worked around: there is no
-    /// automatic switch to a browser or to a different client fingerprint.
+    /// What the user can do after the selected transport strategy is exhausted.
     pub fn remedy(self) -> &'static str {
         match self {
             Class::Cloudflare | Class::BotManager | Class::Captcha | Class::Unknown => {
-                "The website refused automated access. itda paused requests to it. Check in your browser if this use is allowed, then resume or use the site's official API."
+                "The website answered this read with a challenge, in the browser too. Nothing is paused; itda skips the ways that failed for a few minutes. Check the page in your browser, try again later, or use the site's official API. With ITDA_TRANSPORT=http the site is paused until itda resume."
             }
-            Class::RateLimit => {
-                "Wait for Retry-After or the reset time before a bounded read retry."
-            }
+            Class::RateLimit => "Wait as long as retry_after says, then try the read again.",
             Class::None => "",
         }
     }

@@ -130,11 +130,19 @@ async fn reads(
                         // page. Refused before sending: the site was paused
                         // already, and nothing more would go out either.
                         ("blocked_by_site", Some(_)) if discovery => {
-                            refused = true;
+                            refused = error
+                                .extra
+                                .get("paused")
+                                .and_then(serde_json::Value::as_bool)
+                                != Some(false);
                             format!("{}: the site does not give itda this page", op.path)
                         }
                         ("blocked_by_site", None) if discovery => {
-                            refused = true;
+                            refused = error
+                                .extra
+                                .get("paused")
+                                .and_then(serde_json::Value::as_bool)
+                                != Some(false);
                             error.msg.clone()
                         }
                         _ => error.msg.clone(),
@@ -257,7 +265,9 @@ impl Verdict {
                 "the site did not answer; check the connection and try later".into()
             }
             Self::Blocked => {
-                format!("the site refused; check it in your browser, then itda resume {site}")
+                format!(
+                    "the site refused a read, in the browser too, or asked for a wait; check it in your browser. Only a paused site needs itda resume {site}"
+                )
             }
             Self::SiteChanged => {
                 format!(

@@ -62,9 +62,23 @@ pub(crate) async fn run(
             &cookies,
         );
         request.account_id = action.account_id.clone();
+        request.credential_fingerprint = action.credential_fingerprint.clone();
         request.interval = spec.defaults.interval();
         request.pause_on_block = action.pause_on_block;
-        let response = net.fetch(request).await?;
+        let contract = util::hash(&serde_json::to_vec(&step.extract)?);
+        let response = net
+            .fetch_validated(request, &contract, |response| {
+                if step
+                    .extract
+                    .values()
+                    .all(|source| extract(response, source).is_some())
+                {
+                    itda_net::ResponseVerdict::Valid
+                } else {
+                    itda_net::ResponseVerdict::Recover
+                }
+            })
+            .await?;
         if !response.successful() {
             return Err(
                 AppError::api("response_mismatch", 502).with("preflight", step.name.clone())

@@ -152,6 +152,7 @@ async fn itda(home: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
         .env("ITDA_HOME", home)
         .env("ITDA_ALLOW_LOCAL", "1")
         .env("ITDA_SECRET_STORE", "env")
+        .env("ITDA_TRANSPORT", "http")
         .envs(env.iter().copied());
     tokio::task::spawn_blocking(move || command.output().unwrap())
         .await
@@ -160,6 +161,63 @@ async fn itda(home: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
 
 fn stdout_json(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rejects_an_unknown_transport_before_sending() {
+    let home = home();
+    install(&home, "http://127.0.0.1:9");
+    let result = itda(
+        &home,
+        &["call", "fixture.list-items", "--json"],
+        &[("ITDA_TRANSPORT", "unknown")],
+    )
+    .await;
+    assert_eq!(result.status.code(), Some(2));
+    assert_eq!(stdout_json(&result)["status"], "bad_request");
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unresolved_adaptive_read_does_not_lock_other_actions() {
+    let home = home();
+    let router = Router::new()
+        .route(
+            "/items",
+            get(|| async {
+                (
+                    axum::http::StatusCode::FORBIDDEN,
+                    axum::response::Html("<title>Just a moment</title>"),
+                )
+            }),
+        )
+        .route(
+            "/items/{id}",
+            get(|| async { axum::Json(json!({"id": 1})) }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    install(&home, &format!("http://{}", listener.local_addr().unwrap()));
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let missing_browser = home.join("missing-browser");
+    let env = [
+        ("ITDA_TRANSPORT", "auto"),
+        ("ITDA_BROWSER", missing_browser.to_str().unwrap()),
+    ];
+    let failed = itda(&home, &["call", "fixture.list-items", "--json"], &env).await;
+    assert_eq!(failed.status.code(), Some(12), "{failed:?}");
+    assert_eq!(stdout_json(&failed)["paused"], false);
+    let available = itda(
+        &home,
+        &["call", "fixture.get-item", "--id", "1", "--json"],
+        &env,
+    )
+    .await;
+    assert!(available.status.success(), "{available:?}");
+    assert_eq!(stdout_json(&available)["data"]["id"], 1);
+    let stopped = itda(&home, &["__browser-stop"], &env).await;
+    assert!(stopped.status.success(), "{stopped:?}");
+    server.abort();
+    std::fs::remove_dir_all(home).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2088,7 +2146,6 @@ async fn a_blocked_page_is_named_by_what_the_gate_saw() {
         err.contains("error[blocked_by_site]: 127.0.0.1 is behind Cloudflare and refused itda."),
         "{err}"
     );
-    assert!(err.contains("itda does not go around that"), "{err}");
     assert!(!err.contains("HTTP 403"), "{err}");
     std::fs::remove_dir_all(dir).ok();
 
@@ -2726,6 +2783,84 @@ fn headless_browser(dir: &Path) -> Option<PathBuf> {
     .unwrap();
     std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
     Some(wrapper)
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn adaptive_calls_recover_and_remember_browser_transport() {
+    use axum::{http::StatusCode, response::IntoResponse};
+    let home = home();
+    let Some(browser) = headless_browser(&home) else {
+        eprintln!("skipped: set ITDA_TEST_BROWSER to run");
+        return;
+    };
+    let direct = Arc::new(AtomicUsize::new(0));
+    let fetched = Arc::new(AtomicUsize::new(0));
+    let browser_identity = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let router = Router::new().route(
+        "/items",
+        get({
+            let direct = direct.clone();
+            let fetched = fetched.clone();
+            let browser_identity = browser_identity.clone();
+            move |headers: HeaderMap| {
+                let direct = direct.clone();
+                let fetched = fetched.clone();
+                let browser_identity = browser_identity.clone();
+                async move {
+                    if headers.contains_key("sec-fetch-mode") {
+                        fetched.fetch_add(1, Ordering::SeqCst);
+                        axum::Json(json!({"items":[{"title":"recovered"}]})).into_response()
+                    } else {
+                        direct.fetch_add(1, Ordering::SeqCst);
+                        browser_identity.store(
+                            headers
+                                .get("user-agent")
+                                .and_then(|v| v.to_str().ok())
+                                .is_some_and(|v| v.contains("Chrome/")),
+                            Ordering::SeqCst,
+                        );
+                        (
+                            StatusCode::FORBIDDEN,
+                            axum::response::Html("<title>Just a moment</title>"),
+                        )
+                            .into_response()
+                    }
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    install(&home, &format!("http://{}", listener.local_addr().unwrap()));
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    for _ in 0..2 {
+        let result = itda(
+            &home,
+            &["call", "fixture.list-items", "--json"],
+            &[
+                ("ITDA_TRANSPORT", "auto"),
+                ("ITDA_BROWSER", browser.to_str().unwrap()),
+            ],
+        )
+        .await;
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(
+            stdout_json(&result)["data"]["items"][0]["title"],
+            "recovered"
+        );
+    }
+    assert_eq!(direct.load(Ordering::SeqCst), 1);
+    assert_eq!(fetched.load(Ordering::SeqCst), 2);
+    assert!(browser_identity.load(Ordering::SeqCst));
+    let stopped = itda(
+        &home,
+        &["__browser-stop"],
+        &[("ITDA_BROWSER", browser.to_str().unwrap())],
+    )
+    .await;
+    assert!(stopped.status.success(), "{stopped:?}");
+    server.abort();
+    std::fs::remove_dir_all(home).unwrap();
 }
 
 #[cfg(unix)]

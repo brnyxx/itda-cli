@@ -206,8 +206,9 @@ async fn post_notice(
     Ok((StatusCode::CREATED, Json(created)))
 }
 
-/// A page that refuses automated access. itda pauses the site instead of
-/// retrying until the user runs `itda resume sandbox`.
+/// A page that refuses every request. itda reports the refusal after trying
+/// the read in the browser too; in direct-HTTP mode it pauses the site until
+/// the user runs `itda resume sandbox`.
 async fn reports() -> impl IntoResponse {
     (
         StatusCode::FORBIDDEN,

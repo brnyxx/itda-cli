@@ -1,20 +1,23 @@
 //! Bounded first-party requests. Redirects never carry a credential to another
-//! origin, private addresses are refused unless explicitly allowed, and a site
-//! that blocks or challenges a request is paused instead of retried.
+//! origin, and private addresses are refused unless explicitly allowed.
 //!
 //! Derived from Hycli `src/net.rs` (Apache-2.0). Changes:
-//! - The client identifies itself (`itda/<version>`) instead of presenting a
-//!   Chrome user agent and `sec-ch-ua`/`sec-fetch-*` headers, and states no
-//!   language preference (`Accept-Language: *`) instead of a Korean list.
-//! - The in-page browser fetch and rendered-page fallbacks used after a block
-//!   (`fetch_browser_in_page`, `fetch_rendered`) were removed, together with the
-//!   strategy records that chose them.
-//! - A block, challenge or signed-in 401 pauses the scope (see [`gate`]).
+//! - [`Network::new`] is direct HTTP only, identifying itself as
+//!   `itda/<version>`; a block or challenge pauses the site.
+//! - [`Network::adaptive`] tries a read the site answered with a challenge once
+//!   more in the installed browser, remembers per site, account and action
+//!   which way worked, and never pauses a site for a challenge. A signed-in
+//!   401 and a rate limit are handled the same either way.
 //! - Pure URL checks moved to `itda_types::url`; pacing moved from the approval
 //!   store into [`Gate`].
+mod adaptive;
 pub mod defend;
 pub mod files;
 pub mod gate;
+mod strategy;
+
+#[cfg(test)]
+mod adaptive_tests;
 
 pub use files::{Download, FileToSend, Multipart, SavedFile};
 pub use gate::{Gate, Lease, Outcome, not_sent, sent};
@@ -38,10 +41,19 @@ use std::{
 
 pub const USER_AGENT: &str = concat!("itda/", env!("CARGO_PKG_VERSION"));
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResponseVerdict {
+    Valid,
+    Recover,
+    Terminal,
+}
+
 pub struct Network {
     pub gate: Arc<Gate>,
     pub allow_local: bool,
     clients: std::sync::Mutex<std::collections::BTreeMap<String, reqwest::Client>>,
+    browser: Option<Arc<adaptive::Browser>>,
+    identity_cache: Option<std::path::PathBuf>,
 }
 pub struct Request {
     pub url: String,
@@ -50,6 +62,7 @@ pub struct Request {
     pub body: Option<Vec<u8>>,
     /// Empty for anonymous requests. Pacing and pauses are per origin and account.
     pub account_id: String,
+    pub credential_fingerprint: Option<String>,
     pub limit: usize,
     pub timeout: Duration,
     pub read_only: bool,
@@ -78,6 +91,7 @@ impl Request {
             headers: Vec::new(),
             body: None,
             account_id: String::new(),
+            credential_fingerprint: None,
             limit: 8 * 1024 * 1024,
             timeout: Duration::from_secs(45),
             read_only: true,
@@ -123,6 +137,7 @@ impl Response {
         let prefix = format!("{name}=");
         self.headers
             .iter()
+            .rev()
             .filter(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
             .find_map(|(_, v)| {
                 v.split(';')
@@ -174,13 +189,49 @@ impl Network {
             gate,
             allow_local,
             clients: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+            browser: None,
+            identity_cache: None,
         }
+    }
+
+    pub fn adaptive(gate: Arc<Gate>, allow_local: bool) -> Self {
+        let mut network = Self::new(gate, allow_local);
+        network.browser = Some(Arc::new(adaptive::Browser::Real(
+            itda_browser::broker::BrowserClient::local(),
+        )));
+        network
+    }
+
+    pub fn with_browser(mut self, browser: itda_browser::broker::BrowserClient) -> Self {
+        self.browser = Some(Arc::new(adaptive::Browser::Real(browser)));
+        self
+    }
+
+    pub fn with_identity_cache(mut self, path: std::path::PathBuf) -> Self {
+        self.identity_cache = Some(path);
+        self
+    }
+
+    pub fn is_adaptive(&self) -> bool {
+        self.browser.is_some()
     }
 
     /// Clear pauses for one account on an origin and for the origin as a whole.
     pub async fn resume(&self, origin: &str, account_id: &str) -> AppResult<()> {
         self.gate.resume(&format!("{origin}|{account_id}")).await?;
-        self.gate.resume(&format!("{origin}|*")).await
+        self.gate.resume(&format!("{origin}|*")).await?;
+        self.reset_browser(origin, account_id).await
+    }
+
+    pub async fn reset_browser(&self, origin: &str, account_id: &str) -> AppResult<()> {
+        if let Some(browser) = &self.browser {
+            let browser = browser.clone();
+            let (origin, account) = (origin.to_owned(), account_id.to_owned());
+            tokio::task::spawn_blocking(move || browser.reset(&origin, &account))
+                .await
+                .map_err(|_| AppError::api("internal", 500))??;
+        }
+        Ok(())
     }
 
     /// A client for the host. A buffered request gets a timeout for the
@@ -236,7 +287,37 @@ impl Network {
     }
 
     pub async fn fetch(&self, input: Request) -> AppResult<Response> {
+        self.fetch_validated(input, "", |_| ResponseVerdict::Valid)
+            .await
+    }
+
+    pub async fn fetch_validated(
+        &self,
+        input: Request,
+        contract: &str,
+        mut inspect: impl FnMut(&Response) -> ResponseVerdict + Send,
+    ) -> AppResult<Response> {
+        // A file read streams to disk and is checked by its headers; it stays
+        // on direct HTTP.
+        if self.browser.is_some() && input.read_only && input.download.is_none() {
+            return self.fetch_adaptive(input, contract, &mut inspect).await;
+        }
+        self.fetch_http(input, &mut None).await
+    }
+
+    async fn fetch_http(&self, input: Request, budget: &mut Option<usize>) -> AppResult<Response> {
         let initial = validate_url(&input.url)?;
+        let user_agent = if self.is_adaptive() && input.read_only {
+            let cache = self.identity_cache.clone();
+            tokio::task::spawn_blocking(move || match cache {
+                Some(path) => itda_browser::transport::user_agent_cached(&path),
+                None => itda_browser::transport::user_agent(),
+            })
+            .await
+            .map_err(|_| AppError::api("internal", 500))?
+        } else {
+            None
+        };
         let mut target = initial.clone();
         let mut redirects = 0;
         let mut retries = 0;
@@ -244,16 +325,24 @@ impl Network {
         loop {
             let addresses = resolve(&target, self.allow_local).await?;
             let origin = target.origin().ascii_serialization();
-            // One request at a time per site, then per account on it. A short
-            // cooldown the site asked for is waited out here as well.
             let host_scope = format!("{origin}|*");
-            let host_lease = self.gate.acquire(&host_scope, input.interval).await?;
             let scope = format!("{origin}|{}", input.account_id);
             let lease = self.gate.acquire(&scope, input.interval).await?;
+            // An adaptive read takes the site's turn as an admission the
+            // browser transports share; everything else holds the site lease
+            // until the answer is in.
+            let host_lease = if self.is_adaptive() && input.read_only {
+                self.gate.admit_origin(&origin, input.interval).await?;
+                None
+            } else {
+                Some(self.gate.acquire(&host_scope, input.interval).await?)
+            };
+            let leases: Vec<&Lease<'_>> =
+                std::iter::once(&lease).chain(host_lease.as_ref()).collect();
             let streaming = input.download.is_some() || input.multipart.is_some();
             let client = self.pooled_client(
                 target.host_str().expect("validated host"),
-                USER_AGENT,
+                user_agent.as_deref().unwrap_or(USER_AGENT),
                 &addresses,
                 input.timeout,
                 streaming,
@@ -276,13 +365,17 @@ impl Network {
             // A long upload keeps its turn: both leases are renewed while
             // the body is being sent.
             let sending = request.send();
-            let response = match renewing(sending, &[&lease, &host_lease]).await {
+            let response = match renewing(sending, &leases).await {
                 Ok(Ok(response)) => response,
                 Ok(Err(error)) => {
                     let is_timeout = error.is_timeout();
                     drop(lease);
                     drop(host_lease);
-                    if input.read_only && retries < 1 && (is_timeout || error.is_connect()) {
+                    if budget.is_none()
+                        && input.read_only
+                        && retries < 1
+                        && (is_timeout || error.is_connect())
+                    {
                         retries += 1;
                         tokio::time::sleep(Duration::from_secs(2)).await;
                         continue;
@@ -389,7 +482,7 @@ impl Network {
                         &disposition,
                         content_length,
                         stream,
-                        &[&lease, &host_lease],
+                        &leases,
                     )
                     .await
                     {
@@ -401,12 +494,15 @@ impl Network {
                     }
                 }
                 _ => {
-                    too_large = content_length.is_some_and(|length| length > input.limit as u64);
+                    // An adaptive read shares one byte budget across its
+                    // attempts, so a challenge page counts against it too.
+                    let limit = budget.unwrap_or(input.limit);
+                    too_large = content_length.is_some_and(|length| length > limit as u64);
                     if !too_large {
                         let mut stream = response.bytes_stream();
                         while let Some(chunk) = stream.next().await {
                             let chunk = chunk.map_err(|_| AppError::api("request_failed", 502))?;
-                            if bytes.len() + chunk.len() > input.limit {
+                            if chunk.len() > limit.saturating_sub(bytes.len()) {
                                 too_large = true;
                                 break;
                             }
@@ -417,13 +513,24 @@ impl Network {
             }
             if too_large {
                 lease.release(host_outcome).await?;
-                host_lease.release(host_outcome).await?;
+                if let Some(host) = host_lease {
+                    host.release(host_outcome).await?;
+                } else {
+                    self.gate.observe_origin(&origin, host_outcome).await?;
+                }
                 return Err(AppError::api("too_large", 413));
             }
             if let Some(error) = failed {
                 lease.release(host_outcome).await?;
-                host_lease.release(host_outcome).await?;
+                if let Some(host) = host_lease {
+                    host.release(host_outcome).await?;
+                } else {
+                    self.gate.observe_origin(&origin, host_outcome).await?;
+                }
                 return Err(error);
+            }
+            if let Some(remaining) = budget {
+                *remaining = remaining.saturating_sub(bytes.len());
             }
             let (defense, _) = defend::classify(&defend::Observation {
                 status_code: status,
@@ -447,7 +554,11 @@ impl Network {
             lease.release(outcome).await?;
             // A site that refuses automated access refuses it for every account.
             let host_outcome = if pause { outcome } else { host_outcome };
-            host_lease.release(host_outcome).await?;
+            if let Some(host) = host_lease {
+                host.release(host_outcome).await?;
+            } else {
+                self.gate.observe_origin(&origin, host_outcome).await?;
+            }
             if input.follow_redirects
                 && input.read_only
                 && matches!(status, 301 | 302 | 303 | 307 | 308)
@@ -475,7 +586,8 @@ impl Network {
             // less) gets it, once, for a read: the cooldown just recorded is
             // waited out by the gate before the request goes again. A longer
             // wait is reported instead. A change is never sent twice.
-            if input.read_only
+            if budget.is_none()
+                && input.read_only
                 && retries < 1
                 && matches!(status, 429 | 503)
                 && !blocked
@@ -485,7 +597,8 @@ impl Network {
                 continue;
             }
             // Automatic retries are bounded, read-only and never bypass a site's cooldown.
-            if input.read_only
+            if budget.is_none()
+                && input.read_only
                 && status == 503
                 && defense == defend::Class::None
                 && retries < 1
@@ -549,7 +662,7 @@ async fn renewing<T>(sending: impl Future<Output = T>, leases: &[&Lease<'_>]) ->
     }
 }
 
-/// Plain, honest request headers. The client never claims to be a browser.
+/// Request headers shared by direct HTTP and browser reads.
 fn default_headers(target: &url::Url, input: &Request, origin: &str) -> AppResult<HeaderMap> {
     let mut headers = HeaderMap::new();
     let path_lower = target.path().to_ascii_lowercase();

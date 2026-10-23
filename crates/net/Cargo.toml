@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+itda-browser.workspace = true
 itda-store.workspace = true
 itda-types = { workspace = true, features = ["sqlite"] }
 itda-spec.workspace = true
