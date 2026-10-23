@@ -110,7 +110,7 @@ async fn the_schema_opens_a_database_another_component_wrote() {
     assert_eq!(kept, 1);
     // Opening again runs no step twice.
     Kb::open(store).unwrap();
-    std::fs::remove_dir_all(dir).unwrap();
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[tokio::test]
