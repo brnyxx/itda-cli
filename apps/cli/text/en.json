@@ -19,7 +19,7 @@
   "followed_frames": "Followed {n} frames: {list}.",
   "asked_schema": "Asked the GraphQL API at {url} what it offers.",
   "described": "Read its API description at {url}: {reads} reads, {changes} changes noted.",
-  "needs_record": "itda could not read the page as itself ({why}). itda can open your browser and watch as you use the site instead.",
+  "needs_record": "itda could not read the page on its own ({why}). itda can open your browser and watch as you use the site instead.",
   "why_blocked": "it refused",
   "blocked_cloudflare": "{host} is behind Cloudflare and refused itda.",
   "blocked_bot_manager": "{host} runs a bot manager that refused itda.",

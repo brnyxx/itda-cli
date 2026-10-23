@@ -19,7 +19,7 @@
   "followed_frames": "フレームを {n} 個たどりました: {list}。",
   "asked_schema": "{url} の GraphQL API に、利用できる機能を問い合わせました。",
   "described": "{url} の API 説明を読み取りました。読み取り操作 {reads} 件、変更操作 {changes} 件を確認しました。",
-  "needs_record": "itda は itda と名乗ってアクセスしましたが、このページを読み取れませんでした ({why})。代わりにブラウザを開き、サイトを使う操作を確認できます。",
+  "needs_record": "itda だけではこのページを読み取れませんでした ({why})。代わりにブラウザを開き、サイトを使う操作を確認できます。",
   "why_blocked": "拒否されました",
   "blocked_cloudflare": "{host} は Cloudflare で保護されており、itda のアクセスを拒否しました。",
   "blocked_bot_manager": "{host} のボット対策が itda を拒否しました。",

@@ -86,7 +86,7 @@ pub fn looks_like_sign_in(url: &url::Url) -> bool {
 /// A sign-in page's address as a definition keeps it: without the fragment,
 /// the "where to go back to" parameters (`redirect_to`, `returnto`,
 /// `back_url`, `next`...) and credential-named ones (`reauth`, tokens), so
-/// the page can be fetched again later, as itself.
+/// the page can be fetched again later.
 pub fn sign_in_page(url: &url::Url) -> url::Url {
     let mut page = url.clone();
     page.set_fragment(None);

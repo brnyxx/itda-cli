@@ -304,7 +304,7 @@ pub trait Answers {
     /// the site's own sign-in form, which itda sends as itself. `None` when
     /// nobody is there to type them, or the person would rather record.
     fn sign_in(&mut self, host: &str) -> AppResult<Option<login::Credentials>>;
-    /// The page could not be read as itself: open the browser and record?
+    /// The page could not be read on its own: open the browser and record?
     /// `false` stops without a definition.
     fn record(&mut self, why: Fallback) -> AppResult<bool>;
     /// Fires when the person is done recording; `None` when nobody can say

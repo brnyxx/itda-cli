@@ -4,8 +4,8 @@
 //! server embedded for its scripts, forms, feeds and page links. Each becomes
 //! an action with a response check, so `itda check` can tell when the page
 //! changes. When the site also publishes an API description, its reads join
-//! the draft. Pages and descriptions are fetched by the caller with the honest
-//! client; nothing here reaches the network.
+//! the draft. Pages and descriptions are fetched by the caller, as reads
+//! through the gate; nothing here reaches the network.
 use crate::har::{Kind, action_name, plural, singular, site_name, template, unique};
 use crate::label::{Label, describe, language, words};
 use crate::openapi::openapi_parts;

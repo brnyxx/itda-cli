@@ -2,8 +2,8 @@
 //!
 //! A draft that sees a GraphQL endpoint (a recorded call to one, or a page
 //! naming a same-origin `/graphql` path) asks it once with the standard
-//! introspection query. The caller sends that query with the honest client
-//! and hands the answer in as a [`Schema`]; nothing here reaches the network.
+//! introspection query. The caller sends that query through the gate, as a
+//! read, and hands the answer in as a [`Schema`]; nothing here reaches the network.
 //! Each root `Query` field whose arguments are scalars, enums or ids becomes
 //! a read: the document is fixed, the arguments are typed inputs, and the
 //! selection is the field's scalars, two levels deep, under a cap. Fields

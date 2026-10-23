@@ -19,7 +19,7 @@
   "followed_frames": "Đã truy cập {n} frame: {list}.",
   "asked_schema": "Đã hỏi API GraphQL tại {url} xem nó cung cấp gì.",
   "described": "Đã đọc mô tả API tại {url}: ghi nhận {reads} thao tác đọc và {changes} thao tác thay đổi.",
-  "needs_record": "itda không đọc được trang này khi truy cập với danh tính riêng ({why}). Thay vào đó, itda có thể mở trình duyệt của bạn và quan sát khi bạn dùng trang web.",
+  "needs_record": "itda không tự đọc được trang này ({why}). Thay vào đó, itda có thể mở trình duyệt của bạn và quan sát khi bạn dùng trang web.",
   "why_blocked": "bị từ chối",
   "blocked_cloudflare": "{host} nằm sau Cloudflare và đã từ chối itda.",
   "blocked_bot_manager": "{host} chạy một bộ chặn bot và đã từ chối itda.",

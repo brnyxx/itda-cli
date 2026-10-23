@@ -19,7 +19,7 @@
   "followed_frames": "Mengikuti {n} frame: {list}.",
   "asked_schema": "Menanyakan apa yang ditawarkan API GraphQL di {url}.",
   "described": "Membaca deskripsi API-nya di {url}: {reads} pembacaan, {changes} perubahan dicatat.",
-  "needs_record": "itda tidak bisa membaca halaman ini sebagai dirinya sendiri ({why}). Sebagai gantinya itda bisa membuka browser Anda dan mengamati saat Anda memakai situs.",
+  "needs_record": "itda tidak bisa membaca halaman ini sendiri ({why}). Sebagai gantinya itda bisa membuka browser Anda dan mengamati saat Anda memakai situs.",
   "why_blocked": "ditolak",
   "blocked_cloudflare": "{host} berada di belakang Cloudflare dan menolak itda.",
   "blocked_bot_manager": "{host} menjalankan pengelola bot yang menolak itda.",
