@@ -48,7 +48,7 @@ Pronto. Peça ao seu agente algo sobre 'news-ycombinator', por exemplo "use news
 
 Peça ao seu agente: *"use news-ycombinator para listar o que o Hacker News
 mostra"*. Um site atrás de um formulário de login pede, em vez disso, seu nome de
-usuário e senha. O itda preenche o formulário do próprio site, como itda, e
+usuário e senha. O itda preenche o formulário do próprio site por você e
 guarda a sessão no seu computador. Se isso não bastar (login único, um código de
 uso único), seu próprio navegador abre. Você entra e usa o site como sempre
 enquanto o itda observa.
@@ -269,7 +269,7 @@ itda check example                                     # a página ainda corresp
 ```
 
 Para um site atrás de um formulário de login, dê ao `itda setup` a página e seu
-nome de usuário. Ele envia o formulário do próprio site uma vez, como itda, com
+nome de usuário. Ele envia o formulário do próprio site uma vez, com
 a senha que você digita. Guarda a sessão no chaveiro do sistema e rascunha a
 partir da página como você a vê logado. A definição lembra o formulário, então
 `itda login board` entra de novo quando a sessão expira:

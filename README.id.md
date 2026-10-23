@@ -49,8 +49,7 @@ Selesai. Minta agen Anda melakukan sesuatu di 'news-ycombinator', misalnya "paka
 
 Minta agen Anda: *"pakai news-ycombinator untuk menampilkan daftar Hacker
 News"*. Situs di balik formulir masuk akan meminta nama pengguna dan kata sandi
-Anda. itda mengisi formulir milik situs itu sendiri, sebagai dirinya sendiri,
-dan menyimpan sesinya di komputer Anda. Jika itu tidak cukup (single sign-on,
+Anda. itda mengisi formulir milik situs itu untuk Anda dan menyimpan sesinya di komputer Anda. Jika itu tidak cukup (single sign-on,
 kode sekali pakai), browser Anda sendiri terbuka. Anda masuk dan memakai situs
 seperti biasa sementara itda mengamati.
 
@@ -281,8 +280,7 @@ itda check example                                     # apakah halaman masih co
 ```
 
 Untuk situs di balik formulir masuk, beri `itda setup` halaman dan nama
-pengguna Anda. itda mengirim formulir milik situs itu sekali, sebagai dirinya
-sendiri, dengan kata sandi yang Anda ketik. itda menyimpan sesi di keyring
+pengguna Anda. itda mengirim formulir milik situs itu sekali, dengan kata sandi yang Anda ketik. itda menyimpan sesi di keyring
 sistem dan menyusun draf dari halaman seperti yang Anda lihat setelah masuk.
 Definisi mengingat formulirnya, sehingga `itda login board` masuk lagi saat
 sesi kedaluwarsa:

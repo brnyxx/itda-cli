@@ -48,8 +48,7 @@ Xong. Hãy hỏi agent của bạn điều gì đó trên 'news-ycombinator', v�
 
 Hỏi agent của bạn: *"dùng news-ycombinator để liệt kê những gì Hacker News
 hiện"*. Một trang web nằm sau biểu mẫu đăng nhập sẽ hỏi tên người dùng và mật
-khẩu của bạn thay vào đó. itda điền vào biểu mẫu của chính trang web, dưới tên
-của mình, và giữ phiên trên máy tính của bạn. Nếu chưa đủ (đăng nhập một lần,
+khẩu của bạn thay vào đó. itda điền vào biểu mẫu của chính trang web thay bạn, và giữ phiên trên máy tính của bạn. Nếu chưa đủ (đăng nhập một lần,
 mã dùng một lần), trình duyệt của chính bạn sẽ mở. Bạn đăng nhập và dùng trang
 web như thường trong khi itda quan sát.
 
@@ -262,8 +261,7 @@ itda check example                                     # trang còn khớp khôn
 ```
 
 Với trang web nằm sau biểu mẫu đăng nhập, đưa cho `itda setup` trang đó và tên
-người dùng của bạn. Nó gửi biểu mẫu của chính trang web một lần, dưới tên của
-mình, với mật khẩu bạn gõ. Nó giữ phiên trong keyring của hệ thống và soạn nháp
+người dùng của bạn. Nó gửi biểu mẫu của chính trang web một lần, với mật khẩu bạn gõ. Nó giữ phiên trong keyring của hệ thống và soạn nháp
 từ trang như bạn thấy khi đã đăng nhập. Định nghĩa nhớ biểu mẫu, nên
 `itda login board` đăng nhập lại khi phiên hết hạn:
 

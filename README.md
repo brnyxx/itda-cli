@@ -48,7 +48,7 @@ Done. Ask your agent for something on 'news-ycombinator', for example "use news-
 
 Ask your agent: *"use news-ycombinator to list what Hacker News shows"*. A site
 behind a sign-in form asks for your user name and password instead. itda fills
-in the site's own form as itself and keeps the session on your computer. If that
+in the site's own form for you and keeps the session on your computer. If that
 is not enough (single sign-on, a one-time code), your own browser opens. You
 sign in and use the site as usual while itda watches.
 
@@ -256,7 +256,7 @@ itda check example                                     # does the page still mat
 ```
 
 For a site behind a sign-in form, give `itda setup` the page and your user name.
-It sends the site's own form once, as itself, with the password you type. It
+It sends the site's own form once, with the password you type. It
 keeps the session in the system keyring and drafts from the page as you see it
 signed in. The definition remembers the form, so `itda login board` signs in
 again when the session expires:

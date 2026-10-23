@@ -49,8 +49,7 @@ Listo. Pide a tu agente algo sobre 'news-ycombinator', por ejemplo "usa news-yco
 
 Pídele a tu agente: *"usa news-ycombinator para listar lo que muestra Hacker
 News"*. Un sitio detrás de un formulario de inicio de sesión te pide en cambio
-tu nombre de usuario y contraseña. itda rellena el formulario del propio sitio
-como itda y guarda la sesión en tu ordenador. Si eso no basta (inicio de sesión
+tu nombre de usuario y contraseña. itda rellena el formulario del propio sitio por ti y guarda la sesión en tu ordenador. Si eso no basta (inicio de sesión
 único, un código de un solo uso), se abre tu propio navegador. Inicias sesión y
 usas el sitio como siempre mientras itda observa.
 
@@ -281,8 +280,7 @@ itda check example                                     # ¿la página sigue coin
 ```
 
 Para un sitio detrás de un formulario de inicio de sesión, dale a `itda setup`
-la página y tu nombre de usuario. Envía el formulario del propio sitio una vez,
-como itda, con la contraseña que escribes. Guarda la sesión en el llavero del
+la página y tu nombre de usuario. Envía el formulario del propio sitio una vez, con la contraseña que escribes. Guarda la sesión en el llavero del
 sistema y redacta el borrador a partir de la página tal como la ves con la
 sesión iniciada. La definición recuerda el formulario, así que `itda login board`
 inicia sesión de nuevo cuando la sesión caduca:

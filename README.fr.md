@@ -49,8 +49,7 @@ Terminé. Demandez quelque chose à votre agent sur 'news-ycombinator', par exem
 
 Demandez à votre agent : *« utilise news-ycombinator pour lister ce que montre
 Hacker News »*. Un site derrière un formulaire de connexion demande à la place
-votre nom d'utilisateur et votre mot de passe. itda remplit le formulaire du
-site en son propre nom et garde la session sur votre ordinateur. Si cela ne
+votre nom d'utilisateur et votre mot de passe. itda remplit le formulaire du site pour vous et garde la session sur votre ordinateur. Si cela ne
 suffit pas (authentification unique, code à usage unique), votre propre
 navigateur s'ouvre. Vous vous connectez et utilisez le site comme d'habitude
 pendant qu'itda regarde.
@@ -286,8 +285,7 @@ itda check example                                     # la page correspond-elle
 ```
 
 Pour un site derrière un formulaire de connexion, donnez la page et votre nom
-d'utilisateur à `itda setup`. Il envoie le formulaire du site une fois, en son
-propre nom, avec le mot de passe que vous tapez. Il garde la session dans le
+d'utilisateur à `itda setup`. Il envoie le formulaire du site une fois, avec le mot de passe que vous tapez. Il garde la session dans le
 trousseau du système et fait le brouillon à partir de la page telle que vous la
 voyez connecté. La définition se souvient du formulaire, donc `itda login board`
 se reconnecte quand la session expire :

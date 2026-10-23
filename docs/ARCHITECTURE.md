@@ -48,10 +48,10 @@ testing and reusing the format needs no network stack.
    header credential only when the destination has the credential's origin.
 6. **Send.** `itda-net` resolves DNS and refuses private addresses unless
    allowed. It waits for the site's pacing slot, then sends with size and
-   time limits. A change, and every request in direct-HTTP mode, carries the
-   `itda/<version>` user agent; a read in adaptive mode carries the installed
-   browser's, so the direct request and the browser look the same to the
-   site. When a read is answered with a challenge, or the answer lacks the
+   time limits. In direct-HTTP mode every request carries the
+   `itda/<version>` user agent; in adaptive mode every request, a change
+   included, carries the installed browser's, so the direct requests and the
+   browser look the same to the site. When a read is answered with a challenge, or the answer lacks the
    fields the definition promises, itda tries it again inside the browser (a
    fetch, then for a `GET` a rendered page) and remembers which way worked.
    Changes never retry or follow redirects. When a change's answer is lost and
