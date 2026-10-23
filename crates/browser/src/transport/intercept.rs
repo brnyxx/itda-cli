@@ -1,6 +1,7 @@
 use super::{
     Browser, BrowserMode, BrowserResponse, Call, cooldown,
     credentials::action_url,
+    encoding,
     protocol::{field, header_pairs},
 };
 use itda_policy::{safe_graphql_read, safe_read_url};
@@ -55,15 +56,20 @@ impl Browser {
             .as_str()
             .is_some_and(|id| call.action_ids.contains(&format!("{session}:{id}")));
         let action = initial || redirected_action || call.action_ids.contains(&key);
-        let graphql = method == "POST"
+        // The body itda read and found to be a GraphQL query; it is sent as
+        // read, so what the site runs is what was checked.
+        let graphql_body = (method == "POST"
             && !response_stage
             && params.get("redirectedRequestId").is_none()
-            && !call.read_posts.contains(&key)
-            && target.as_ref().is_ok_and(|url| {
-                params["request"]["postData"]
-                    .as_str()
-                    .is_some_and(|body| safe_graphql_read(url, body.as_bytes()))
-            });
+            && !call.read_posts.contains(&key))
+        .then(|| post_body(&params["request"]))
+        .flatten()
+        .filter(|body| {
+            target
+                .as_ref()
+                .is_ok_and(|url| safe_graphql_read(url, body))
+        });
+        let graphql = graphql_body.is_some();
         let preflight = method == "OPTIONS"
             && header_pairs(&params["request"]["headers"])
                 .iter()
@@ -269,10 +275,59 @@ impl Browser {
             headers.insert("cookie".into(), String::new());
             headers.insert("referer".into(), String::new());
         }
-        self.send(Some(session), "Fetch.continueRequest", json!({
+        let mut continued = json!({
             "requestId":id,
             "headers":headers.into_iter().map(|(name,value)| json!({"name":name,"value":value})).collect::<Vec<_>>(),
-        }), call.deadline)?;
+        });
+        if let Some(body) = &graphql_body {
+            continued["postData"] = encoding::encode(body).into();
+        }
+        self.send(
+            Some(session),
+            "Fetch.continueRequest",
+            continued,
+            call.deadline,
+        )?;
         Ok(())
+    }
+}
+
+/// A paused request's body. `postData` is deprecated and may be left out even
+/// when the request has a body; `postDataEntries` carries the same bytes as
+/// base64. `None` when neither is there, so the body cannot be checked.
+fn post_body(request: &Value) -> Option<Vec<u8>> {
+    if let Some(text) = request["postData"].as_str() {
+        return Some(text.as_bytes().to_vec());
+    }
+    let entries = request["postDataEntries"].as_array()?;
+    let mut body = Vec::new();
+    for entry in entries {
+        body.extend(encoding::decode(entry["bytes"].as_str()?).ok()?);
+    }
+    Some(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::post_body;
+    use serde_json::json;
+
+    #[test]
+    fn a_body_is_read_from_post_data_or_from_its_entries() {
+        let query = br#"{"query":"query { a }"}"#;
+        assert_eq!(
+            post_body(&json!({"postData": "{\"query\":\"query { a }\"}"})).unwrap(),
+            query
+        );
+        // `{"query":` and `"query { a }"}` as two base64 entries.
+        assert_eq!(
+            post_body(&json!({"hasPostData": true, "postDataEntries": [
+                {"bytes": "eyJxdWVyeSI6"}, {"bytes": "InF1ZXJ5IHsgYSB9In0="},
+            ]}))
+            .unwrap(),
+            query
+        );
+        assert!(post_body(&json!({"hasPostData": true})).is_none());
+        assert!(post_body(&json!({"postDataEntries": [{"bytes": "!!"}]})).is_none());
     }
 }

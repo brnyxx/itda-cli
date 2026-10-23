@@ -59,16 +59,23 @@ async fn page_frame_and_worker_queries_run_but_mutations_never_reach_server() {
     });
     let query_script = |name| {
         format!(
-            "fetch('/graphql',{{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{query:'query {{ {name} }}'}})}}).then(r=>r.json()).then(()=>{{NOTIFY}});fetch('/graphql',{{method:'POST',body:JSON.stringify({{query:'mutation {{ removeUser }}'}})}}).catch(()=>{{}});"
+            "fetch('/graphql',{{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{query:'query {{ {name} }}'}})}}).then(r=>r.json()).then(()=>{{NOTIFY}},e=>{{FAIL}});fetch('/graphql',{{method:'POST',body:JSON.stringify({{query:'mutation {{ removeUser }}'}})}}).catch(()=>{{}});"
         )
     };
-    let page_query = query_script("page").replace("NOTIFY", "ready('page')");
-    let frame_query = query_script("frame").replace("NOTIFY", "parent.postMessage('frame','*')");
+    // A query that fails says so in the page, so the assertion below shows
+    // which one and why instead of a page still checking the browser.
+    let page_query = query_script("page")
+        .replace("NOTIFY", "ready('page')")
+        .replace("FAIL", "ready('page failed: '+e)");
+    let frame_query = query_script("frame")
+        .replace("NOTIFY", "parent.postMessage('frame','*')")
+        .replace("FAIL", "parent.postMessage('frame failed: '+e,'*')");
     let worker_query = query_script("worker")
         .replace("NOTIFY", "postMessage('worker')")
+        .replace("FAIL", "postMessage('worker failed: '+e)")
         .replace("'/graphql'", &format!("'{remote}'"));
     let page=format!("<html><body><h1>Checking your browser</h1><script>
-        const done=new Set();function ready(v){{done.add(v);if(done.size===3)document.querySelector('h1').textContent='graphql ready'}}
+        const done=new Set();function ready(v){{if(String(v).includes('failed')){{document.querySelector('h1').textContent=v;return}}done.add(v);if(done.size===3)document.querySelector('h1').textContent='graphql ready'}}
         addEventListener('message',e=>ready(e.data));const w=new Worker('/worker.js');w.onmessage=e=>ready(e.data);
         {page_query}</script><iframe src='/frame'></iframe></body></html>");
     let router = Router::new()

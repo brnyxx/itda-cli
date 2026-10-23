@@ -50,7 +50,13 @@ fn nested_target_configuration_keeps_the_outer_reply() {
     let mut browser = Browser {
         origin: "http://example.test".into(),
         account: "account".into(),
-        child: Command::new("/usr/bin/true").spawn().unwrap(),
+        // Any process that exits at once; the test only needs a child to own.
+        child: if cfg!(windows) {
+            Command::new("cmd").args(["/C", "exit"]).spawn()
+        } else {
+            Command::new("true").spawn()
+        }
+        .unwrap(),
         profile: std::env::temp_dir().join(format!("itda-protocol-test-{}", uuid::Uuid::new_v4())),
         socket,
         proxy: GuardedProxy::new().unwrap(),
