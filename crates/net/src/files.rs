@@ -30,6 +30,10 @@ pub struct Download {
     pub media_types: Vec<String>,
     /// Whether an answer of no bytes counts as a file.
     pub allow_empty: bool,
+    /// Only look: an answer whose headers describe the file is read up to
+    /// its first bytes, for block classification, and dropped. Nothing is
+    /// saved and `dir` is not used.
+    pub peek: bool,
 }
 
 /// What a download left on disk.
@@ -655,6 +659,7 @@ mod tests {
             max_bytes: 100,
             media_types: vec!["application/pdf".into(), "text/html".into()],
             allow_empty: false,
+            peek: false,
         };
         let why = |status, kind: &str, disposition: &str, range: &str, length| {
             refusal(&download, status, kind, disposition, range, length)

@@ -40,6 +40,7 @@ fn download(dir: &Path, max_bytes: u64) -> Download {
         max_bytes,
         media_types: vec!["application/pdf".into(), "text/csv".into()],
         allow_empty: false,
+        peek: false,
     }
 }
 

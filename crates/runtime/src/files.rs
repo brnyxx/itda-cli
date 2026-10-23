@@ -91,8 +91,9 @@ pub(crate) async fn sent_file(spec: &Spec, call: &Call) -> AppResult<Option<Sent
     }))
 }
 
-/// How a file read saves its answer under `dir`.
-pub(crate) fn download(op: &Operation, dir: PathBuf) -> Download {
+/// How a file read saves its answer under `dir`, or with `peek` only looks
+/// at it.
+pub(crate) fn download(op: &Operation, dir: PathBuf, peek: bool) -> Download {
     let response = op.response.as_ref();
     Download {
         dir,
@@ -106,6 +107,7 @@ pub(crate) fn download(op: &Operation, dir: PathBuf) -> Download {
             })
             .unwrap_or_default(),
         allow_empty: response.is_some_and(|r| r.allow_empty),
+        peek,
     }
 }
 

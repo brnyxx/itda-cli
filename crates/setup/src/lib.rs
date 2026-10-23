@@ -686,23 +686,16 @@ pub async fn run(
     report(Progress::Trying(&spec));
     let outcomes = check::try_once(&ctx.runtime, &spec).await;
     let mut removed = Vec::new();
-    let mut worked = 0;
     for outcome in &outcomes {
         report(Progress::Tried {
             spec: &spec,
             outcome,
         });
-        match outcome.status.as_str() {
-            "ok" => worked += 1,
-            "skipped" => {}
-            _ => removed.push(outcome.action.clone()),
+        if outcome.failed() {
+            removed.push(outcome.action.clone());
         }
     }
-    let kept = spec.operations.len() - removed.len();
-    let all_reads = spec.operations.iter().all(|op| {
-        itda_policy::operation_effect(op, &Default::default()) == itda_policy::Effect::Read
-    });
-    if kept == 0 || (worked == 0 && all_reads) {
+    if check::nothing_worked(&spec, &outcomes) {
         let _ = std::fs::remove_file(&path);
         return Ok(Finished::Stopped(Stopped::NothingWorks));
     }
